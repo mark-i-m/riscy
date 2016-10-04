@@ -1,5 +1,28 @@
-Rocket Chip Generator [![Build Status](https://travis-ci.org/ucb-bar/rocket-chip.svg?branch=master)](https://travis-ci.org/ucb-bar/rocket-chip)
+Rocket Chip Generator [![Build Status](https://travis-ci.com/mark-i-m/rocketchip.svg?token=z7ydGWURgxF6b4fcVtfN&branch=master)](https://travis-ci.com/mark-i-m/rocketchip)
 =====================
+
+The repo for our CS 752 project! :smiley:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Rocket Chip README contents
 
 This repository contains the Rocket chip generator necessary to instantiate
 the RISC-V Rocket Core. For more information on Rocket Chip, please consult our [technical report](http://www.eecs.berkeley.edu/Pubs/TechRpts/2016/EECS-2016-17.html).
