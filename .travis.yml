@@ -53,3 +53,6 @@ script:
 
 before_cache:
   - ls -tr regression/install | tail -n+2 | sed s@^@regression/install/@ | xargs rm -rf
+
+notifications:
+  slack: cs752-rocketchip:Z5AFrgVOYg2ERuMxLZoamT3W
