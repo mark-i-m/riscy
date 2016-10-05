@@ -38,11 +38,11 @@ env:
     - SUITE=UnittestSuite
 
 # blacklist private branches
-branches:
-  except:
-    - hwacha
-    - boom
-    - hurricane
+#branches:
+#  except:
+#    - hwacha
+#    - boom
+#    - hurricane
 
 before_install:
   - export CXX=g++-4.8 CC=gcc-4.8
