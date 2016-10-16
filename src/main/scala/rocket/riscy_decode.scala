@@ -22,16 +22,20 @@ class RiscyDecode extends Module {
     val immJ = SInt(OUTPUT, 32)
   }
 
-  io.op     := ins(6, 0)
-  io.rd     := ins(11, 7)
-  io.rs1    := ins(19, 15)
-  io.rs2    := ins(24, 20)
-  io.funct3 := ins(14, 12)
-  io.funct7 := ins(31, 25)
+  io.op     := io.ins(6, 0)
+  io.rd     := io.ins(11, 7)
+  io.rs1    := io.ins(19, 15)
+  io.rs2    := io.ins(24, 20)
+  io.funct3 := io.ins(14, 12)
+  io.funct7 := io.ins(31, 25)
 
-  io.immI   := ins(31, 20)
-  io.immS   := Cat(ins(31, 25), ins(11, 7))
-  io.immB   := Cat(ins(31), ins(7), ins(30, 25), ins(11, 8))
-  io.immU   := Cat(ins(31), ins(30, 20), ins(19, 12))
-  io.immJ   := Cat(ins(31), ins(19, 12), ins(20), ins(30, 25), ins(24, 21))
+  io.immI   := io.ins(31, 20)
+  io.immS   := Cat(io.ins(31, 25), io.ins(11, 7))
+  io.immB   := Cat(io.ins(31), io.ins(7), io.ins(30, 25), io.ins(11, 8))
+  io.immU   := Cat(io.ins(31), io.ins(30, 20), io.ins(19, 12))
+  io.immJ   := Cat(io.ins(31), io.ins(19, 12), io.ins(20), io.ins(30, 25), io.ins(24, 21))
+}
+
+class RiscyDecodeTests(c: RiscyDecode) extends Tester(c) {
+
 }
