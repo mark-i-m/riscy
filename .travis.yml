@@ -37,7 +37,7 @@ env:
       #    - SUITE=RocketSuite
       #    - SUITE=GroundtestSuite
       #    - SUITE=UnittestSuite
-      - MODULE_GEN=HelloModuleGenerator
+      - MODULE_GEN=riscy.HelloModuleGenerator
 
 # blacklist private branches
 #branches:
