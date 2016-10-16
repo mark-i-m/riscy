@@ -21,6 +21,7 @@ class RiscyDecode extends Module {
     val immJ = SInt(OUTPUT, 32)
   }
 
+  // Split up wires from the instruction
   io.op     := io.ins(6, 0)
   io.rd     := io.ins(11, 7)
   io.rs1    := io.ins(19, 15)
@@ -28,6 +29,8 @@ class RiscyDecode extends Module {
   io.funct3 := io.ins(14, 12)
   io.funct7 := io.ins(31, 25)
 
+  // Construct the 5 types of immediates and let other
+  // modules choose what they want.
   io.immI   := Cat(Fill(20, io.ins(31)), io.ins(31, 20))
   io.immS   := Cat(Fill(20, io.ins(31)), io.ins(31, 25), io.ins(11, 7))
   io.immB   := Cat(Fill(19, io.ins(31)), io.ins(31), io.ins(7), io.ins(30, 25), io.ins(11, 8), UInt(0, 1))
