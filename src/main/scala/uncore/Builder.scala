@@ -11,12 +11,12 @@ object UncoreBuilder extends App {
   val topModuleName = args(0)
   val configClassName = args(1)
   val config = try {
-      Class.forName(s"uncore.$configClassName").newInstance.asInstanceOf[Config]
-    } catch {
-      case e: java.lang.ClassNotFoundException =>
-        throwException("Unable to find configClassName \"" + configClassName +
-                       "\", did you misspell it?", e)
-    }
+    Class.forName(s"uncore.$configClassName").newInstance.asInstanceOf[Config]
+  } catch {
+    case e: java.lang.ClassNotFoundException =>
+      throwException("Unable to find configClassName \"" + configClassName +
+        "\", did you misspell it?", e)
+  }
   val world = config.toInstance
   val paramsFromConfig: Parameters = Parameters.root(world)
 
@@ -31,7 +31,6 @@ object UncoreBuilder extends App {
   val pdFile = new java.io.FileWriter(s"${Driver.targetDir}/$topModuleName.prm")
   pdFile.write(ParameterDump.getDump)
   pdFile.close
-
 }
 
 class DefaultL2Config extends Config (
