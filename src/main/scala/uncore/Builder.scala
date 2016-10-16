@@ -8,61 +8,29 @@ import uncore.agents._
 import uncore.coherence._
 
 object UncoreBuilder extends App {
-  // To run RISCY unit tests, pass "Test" as the first argument, followed
-  // by the name of the module to test, followed by the name of the test
-  // class.
-  if (args(0).equals("Test")) {
-    val topModuleName = args(1)
-    val topTesterName = args(2)
-
-  
-    //chiselMainTest(args + "--test", () => Module(new Mux2())){
-    //  c => new Mux2Tests(c)
-    //}
-
-
-    val genMod = () => 
-      Class.forName(topModuleName)
-        .getConstructor(classOf[cde.Parameters])
-        .newInstance()
-        .asInstanceOf[Module]
-
-    val genTest = c =>
-      Class.forName(topTesterName)
-        .getConstructor(classOf[cde.Parameters])
-        .newInstance()
-        .asInstanceOf[Module]
-
-    chiselMainTest.run(args.drop(3), genMod, genTest)
-
-    val pdFile = new java.io.FileWriter(s"${Driver.targetDir}/$topModuleName.prm")
-    pdFile.write(ParameterDump.getDump)
-    pdFile.close
-  } else {
-    val topModuleName = args(0)
-    val configClassName = args(1)
-    val config = try {
-      Class.forName(s"uncore.$configClassName").newInstance.asInstanceOf[Config]
-    } catch {
-      case e: java.lang.ClassNotFoundException =>
-        throwException("Unable to find configClassName \"" + configClassName +
-          "\", did you misspell it?", e)
-    }
-    val world = config.toInstance
-    val paramsFromConfig: Parameters = Parameters.root(world)
-
-    val gen = () => 
-      Class.forName(s"uncore.$topModuleName")
-        .getConstructor(classOf[cde.Parameters])
-        .newInstance(paramsFromConfig)
-        .asInstanceOf[Module]
-
-    chiselMain.run(args.drop(2), gen)
-
-    val pdFile = new java.io.FileWriter(s"${Driver.targetDir}/$topModuleName.prm")
-    pdFile.write(ParameterDump.getDump)
-    pdFile.close
+  val topModuleName = args(0)
+  val configClassName = args(1)
+  val config = try {
+    Class.forName(s"uncore.$configClassName").newInstance.asInstanceOf[Config]
+  } catch {
+    case e: java.lang.ClassNotFoundException =>
+      throwException("Unable to find configClassName \"" + configClassName +
+        "\", did you misspell it?", e)
   }
+  val world = config.toInstance
+  val paramsFromConfig: Parameters = Parameters.root(world)
+
+  val gen = () => 
+    Class.forName(s"uncore.$topModuleName")
+      .getConstructor(classOf[cde.Parameters])
+      .newInstance(paramsFromConfig)
+      .asInstanceOf[Module]
+
+  chiselMain.run(args.drop(2), gen)
+
+  val pdFile = new java.io.FileWriter(s"${Driver.targetDir}/$topModuleName.prm")
+  pdFile.write(ParameterDump.getDump)
+  pdFile.close
 }
 
 class DefaultL2Config extends Config (

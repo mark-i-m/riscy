@@ -53,7 +53,7 @@ before_install:
 script:
 #  - make emulator-ndebug -C regression SUITE=$SUITE TORTURE_CONFIG=default
 #  - make emulator-regression-tests -C regression SUITE=$SUITE TORTURE_CONFIG=default
-  - make -C src/main/scala test
+  - make -C riscy test
 
 before_cache:
   - ls -tr regression/install | tail -n+2 | sed s@^@regression/install/@ | xargs rm -rf
