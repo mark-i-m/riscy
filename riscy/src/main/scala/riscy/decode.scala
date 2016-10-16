@@ -36,7 +36,13 @@ class RiscyDecode extends Module {
 }
 
 class RiscyDecodeTests(c: RiscyDecode) extends Tester(c) {
-    println("TODO")
+  val input = 0xAAAAAAAA
+  poke(c.io.ins, input)
+  
+  step(1)
+
+  // TODO
+  //expect(c.io.op, 0x2A)  
 }
 
 class DecodeGenerator extends TestGenerator {
