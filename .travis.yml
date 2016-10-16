@@ -38,6 +38,7 @@ env:
       #    - SUITE=GroundtestSuite
       #    - SUITE=UnittestSuite
       - MODULE_GEN=riscy.HelloModuleGenerator
+      - MODULE_GEN=riscy.DecodeGenerator
 
 # blacklist private branches
 #branches:
