@@ -37,8 +37,7 @@ env:
       #    - SUITE=RocketSuite
       #    - SUITE=GroundtestSuite
       #    - SUITE=UnittestSuite
-      - MODULE=RiscyDecode
-        TEST_CLASS=TestRiscyDecode
+      - MODULE_GEN=HelloModuleGenerator
 
 # blacklist private branches
 #branches:
