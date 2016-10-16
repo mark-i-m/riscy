@@ -52,7 +52,7 @@ before_install:
 script:
 #  - make emulator-ndebug -C regression SUITE=$SUITE TORTURE_CONFIG=default
 #  - make emulator-regression-tests -C regression SUITE=$SUITE TORTURE_CONFIG=default
-  - make -C riscy test
+  - make -C riscy MODULE_GEN=$MODULE_GEN test
 
 before_cache:
   - ls -tr regression/install | tail -n+2 | sed s@^@regression/install/@ | xargs rm -rf
