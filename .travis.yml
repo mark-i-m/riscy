@@ -33,9 +33,12 @@ addons:
 
 env:
   matrix:
-    - SUITE=RocketSuite
-    - SUITE=GroundtestSuite
-    - SUITE=UnittestSuite
+    include:
+      #    - SUITE=RocketSuite
+      #    - SUITE=GroundtestSuite
+      #    - SUITE=UnittestSuite
+      - MODULE=RiscyDecode
+        TEST_CLASS=TestRiscyDecode
 
 # blacklist private branches
 #branches:
@@ -48,8 +51,9 @@ before_install:
   - export CXX=g++-4.8 CC=gcc-4.8
 
 script:
-  - make emulator-ndebug -C regression SUITE=$SUITE TORTURE_CONFIG=default
-  - make emulator-regression-tests -C regression SUITE=$SUITE TORTURE_CONFIG=default
+#  - make emulator-ndebug -C regression SUITE=$SUITE TORTURE_CONFIG=default
+#  - make emulator-regression-tests -C regression SUITE=$SUITE TORTURE_CONFIG=default
+  - make -C src/main/scala test
 
 before_cache:
   - ls -tr regression/install | tail -n+2 | sed s@^@regression/install/@ | xargs rm -rf
