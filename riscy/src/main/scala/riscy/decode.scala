@@ -1,5 +1,4 @@
-
-package rocket
+package riscy
 
 import Chisel._
 
@@ -37,5 +36,11 @@ class RiscyDecode extends Module {
 }
 
 class RiscyDecodeTests(c: RiscyDecode) extends Tester(c) {
+    println("TODO")
+}
 
+class DecodeGenerator extends TestGenerator {
+  def genMod(): Module = Module(new RiscyDecode())
+  def genTest[T <: Module](c: T): Tester[T] = 
+    (new RiscyDecodeTests(c.asInstanceOf[RiscyDecode])).asInstanceOf[Tester[T]]
 }
