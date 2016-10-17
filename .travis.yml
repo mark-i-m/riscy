@@ -9,6 +9,7 @@ cache:
     $HOME/.ivy2
     regression/install
     emulator/verilator
+    riscy/target/resolution-cache
 
 # packages needed to build riscv-tools
 addons:
@@ -40,6 +41,7 @@ env:
     - MODULE_GEN=riscy.DecodeGenerator
     - MODULE_GEN=riscy.AllocGenerator
     - MODULE_GEN=riscy.ROBGenerator
+    - MODULE_GEN=riscy.RegFileGenerator
 
 # blacklist private branches
 #branches:
