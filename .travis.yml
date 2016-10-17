@@ -39,6 +39,7 @@ env:
     - MODULE_GEN=riscy.HelloModuleGenerator
     - MODULE_GEN=riscy.DecodeGenerator
     - MODULE_GEN=riscy.AllocGenerator
+    - MODULE_GEN=riscy.ROBGenerator
 
 # blacklist private branches
 #branches:
