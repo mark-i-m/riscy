@@ -9,6 +9,7 @@ cache:
     $HOME/.ivy2
     regression/install
     emulator/verilator
+    riscy/target/resolution-cache
 
 # packages needed to build riscv-tools
 addons:
