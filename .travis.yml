@@ -33,11 +33,11 @@ addons:
 
 env:
   matrix:
-    include:
       #    - SUITE=RocketSuite
       #    - SUITE=GroundtestSuite
       #    - SUITE=UnittestSuite
-      - MODULE_GEN=riscy.HelloModuleGenerator
+    - MODULE_GEN=riscy.HelloModuleGenerator
+    - MODULE_GEN=riscy.RegFileGenerator
 
 # blacklist private branches
 #branches:
