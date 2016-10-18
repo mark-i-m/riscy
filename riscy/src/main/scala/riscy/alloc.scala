@@ -129,7 +129,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   // Should map r1 to ROB2
   expect(c.io.allocRemap(0).valid, 1)
   expect(c.io.allocRemap(0).bits.reg, 1)
-  expect(c.io.allocRemap(0).bits.idxROB, 0)
+  expect(c.io.allocRemap(0).bits.idxROB, 2)
 
   expect(c.io.allocRemap(1).valid, 0)
   expect(c.io.allocRemap(2).valid, 0)
