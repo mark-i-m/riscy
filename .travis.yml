@@ -42,7 +42,8 @@ env:
     - MODULE_GEN=riscy.AllocGenerator
     - MODULE_GEN=riscy.ROBGenerator
     - MODULE_GEN=riscy.RegFileGenerator
-
+    - MODULE_GEN=riscy.OpDecodeGenerator
+	
 # blacklist private branches
 #branches:
 #  except:
