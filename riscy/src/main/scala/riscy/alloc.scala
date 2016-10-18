@@ -53,7 +53,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.inst(0).bits.rs1, 0x1)
   poke(c.io.inst(0).bits.rd, 0x1)
   poke(c.io.inst(0).bits.immI, 0xFFF)
-  
+
   poke(c.io.inst(1).valid, 1)
   poke(c.io.inst(1).bits.op, 0x33)
   poke(c.io.inst(1).bits.funct3, 0x0)
@@ -97,21 +97,21 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.inst(0).bits.rs1, 0x1)
   poke(c.io.inst(0).bits.rd, 0x1)
   poke(c.io.inst(0).bits.immI, 0xFFF)
-  
+
   poke(c.io.inst(1).valid, 1)
   poke(c.io.inst(1).bits.op, 0x33)
   poke(c.io.inst(1).bits.funct3, 0x0)
   poke(c.io.inst(1).bits.rs1, 0x1)
   poke(c.io.inst(1).bits.rd, 0x1)
   poke(c.io.inst(1).bits.immI, 0xFFF)
-  
+
   poke(c.io.inst(2).valid, 1)
   poke(c.io.inst(2).bits.op, 0x33)
   poke(c.io.inst(2).bits.funct3, 0x0)
   poke(c.io.inst(2).bits.rs1, 0x1)
   poke(c.io.inst(2).bits.rd, 0x1)
   poke(c.io.inst(2).bits.immI, 0xFFF)
-  
+
   poke(c.io.inst(2).valid, 1)
   poke(c.io.inst(2).bits.op, 0x33)
   poke(c.io.inst(2).bits.funct3, 0x0)
@@ -137,7 +137,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
 
 
   // TODO: need test with multiple renamings of the same register in the same cycle
-  
+
 
 }
 

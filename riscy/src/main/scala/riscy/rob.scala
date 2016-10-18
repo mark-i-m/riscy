@@ -13,6 +13,9 @@ class ROBEntry extends DecodeIns {
   // Available operands (with valid bits)
   val rs1Val = Valid(UInt(OUTPUT, 32))
   val rs2Val = Valid(UInt(OUTPUT, 32))
+
+  // Unique instruction tag
+  val tag = UInt(OUTPUT, 32) // TODO: How large? Can we make it the ROB entry number? 
 }
 
 class ROB extends Module {
@@ -20,6 +23,14 @@ class ROB extends Module {
     // TODO
   }
 
+  // The register remap table
+  // Bit 0 of each register denotes if that register is in the Arch register
+  // (1) or in the ROB (0).
+  //
+  // The remaining bits denote which ROB entry if the register is in the ROB
+  val remap = new RegFile(7, 32, 8, 4) // TODO: how many read/write ports?
+
+  // The ROB storage structure
   val rob = Vec.fill(64) { new ROBEntry() }
 }
 

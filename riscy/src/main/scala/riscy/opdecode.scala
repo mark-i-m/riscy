@@ -124,7 +124,6 @@ class RiscyOpDecode extends Module {
   }
 }
 
-
 class RiscyOpDecodeTests(c: RiscyOpDecode) extends Tester(c) {
   println("TODO")
 }
