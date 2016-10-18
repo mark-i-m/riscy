@@ -43,10 +43,10 @@ class RiscyAlloc extends Module {
 }
 
 class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
-  // Try some simple renaming then get more complex.
-  // TODO: add more tests
-  
+  // TEST 1
   // add r1 <- r1 + 0xFFF
+  // add r2 <- r1 + 0xFFF
+
   poke(c.io.inst(0).valid, 1)
   poke(c.io.inst(0).bits.op, 0x33)
   poke(c.io.inst(0).bits.funct3, 0x0)
@@ -54,21 +54,22 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.inst(0).bits.rd, 0x1)
   poke(c.io.inst(0).bits.immI, 0xFFF)
   
-  // add r2 <- r1 + 0xFFF
   poke(c.io.inst(1).valid, 1)
   poke(c.io.inst(1).bits.op, 0x33)
   poke(c.io.inst(1).bits.funct3, 0x0)
   poke(c.io.inst(1).bits.rs1, 0x1)
-  poke(c.io.inst(1).bits.rd, 0x1)
+  poke(c.io.inst(1).bits.rd, 0x2)
   poke(c.io.inst(1).bits.immI, 0xFFF)
 
   poke(c.io.inst(2).valid, 0)
   poke(c.io.inst(3).valid, 0)
 
-  poke(c.io.freeROB, 0)
+  poke(c.io.freeROB, 64)
   poke(c.io.firstROB, 0)
 
   step(1)
+
+  // TODO: expect output to ROB
 
   // Should map r1 to ROB0
   expect(c.io.allocRemap(0).valid, 1)
@@ -83,7 +84,60 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocRemap(2).valid, 0)
   expect(c.io.allocRemap(3).valid, 0)
 
+
+  // TEST2
+  // add r1 <- r1 + 0xFFF
+  // add r1 <- r1 + 0xFFF
+  // add r1 <- r1 + 0xFFF
+  // add r1 <- r1 + 0xFFF
+
+  poke(c.io.inst(0).valid, 1)
+  poke(c.io.inst(0).bits.op, 0x33)
+  poke(c.io.inst(0).bits.funct3, 0x0)
+  poke(c.io.inst(0).bits.rs1, 0x1)
+  poke(c.io.inst(0).bits.rd, 0x1)
+  poke(c.io.inst(0).bits.immI, 0xFFF)
+  
+  poke(c.io.inst(1).valid, 1)
+  poke(c.io.inst(1).bits.op, 0x33)
+  poke(c.io.inst(1).bits.funct3, 0x0)
+  poke(c.io.inst(1).bits.rs1, 0x1)
+  poke(c.io.inst(1).bits.rd, 0x1)
+  poke(c.io.inst(1).bits.immI, 0xFFF)
+  
+  poke(c.io.inst(2).valid, 1)
+  poke(c.io.inst(2).bits.op, 0x33)
+  poke(c.io.inst(2).bits.funct3, 0x0)
+  poke(c.io.inst(2).bits.rs1, 0x1)
+  poke(c.io.inst(2).bits.rd, 0x1)
+  poke(c.io.inst(2).bits.immI, 0xFFF)
+  
+  poke(c.io.inst(2).valid, 1)
+  poke(c.io.inst(2).bits.op, 0x33)
+  poke(c.io.inst(2).bits.funct3, 0x0)
+  poke(c.io.inst(2).bits.rs1, 0x1)
+  poke(c.io.inst(2).bits.rd, 0x1)
+  poke(c.io.inst(2).bits.immI, 0xFFF)
+
+  poke(c.io.freeROB, 62)
+  poke(c.io.firstROB, 2)
+
+  step(1)
+
+  // TODO: expect output to ROB
+
+  // Should map r1 to ROB2
+  expect(c.io.allocRemap(0).valid, 1)
+  expect(c.io.allocRemap(0).bits.reg, 1)
+  expect(c.io.allocRemap(0).bits.idxROB, 0)
+
+  expect(c.io.allocRemap(1).valid, 0)
+  expect(c.io.allocRemap(2).valid, 0)
+  expect(c.io.allocRemap(3).valid, 0)
+
+
   // TODO: need test with multiple renamings of the same register in the same cycle
+  
 
 }
 
