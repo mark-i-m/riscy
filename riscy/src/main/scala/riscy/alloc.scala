@@ -35,6 +35,15 @@ class RiscyAlloc extends Module {
     val allocROB = Vec.fill(4) { Valid(new AllocROB()) }
   }
 
+  // For each instruction, determine what resources/registers it needs.
+  val opDecodes = Array.tabulate(4) {
+    i => {
+      val od = new RiscyOpDecode()
+      od.io.op := io.inst(i).bits.op
+      od
+    }
+  }
+
   // Do a simple addition to rename the instructions. Every instruction gets
   // an ROB entry, regardless of how many registers it reads or writes. The
   // valid bits of the instructions and the number of free ROB entries determines
