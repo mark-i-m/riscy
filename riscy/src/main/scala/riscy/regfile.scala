@@ -36,11 +36,8 @@ class RegFile(width: Int, size: Int, numRPorts: Int, numWPorts: Int) extends Mod
   val regs = Array.tabulate(size) { i => UInt(i) -> Reg(UInt(width)) }
 
   // Hook up read ports with muxes to regs
-  val muxes = Array.tabulate(numRPorts) {
-    i => {
-      val mux = MuxLookup(io.rPorts(i), UInt(0), regs)
-      io.rValues(i) := mux
-    }
+  for (i <- 0 until numRPorts) {
+    io.rValues(i) := MuxLookup(io.rPorts(i), UInt(0), regs)
   }
 
   // Hook up write ports to regs
