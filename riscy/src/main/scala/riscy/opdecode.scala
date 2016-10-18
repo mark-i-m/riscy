@@ -125,7 +125,34 @@ class RiscyOpDecode extends Module {
 }
 
 class RiscyOpDecodeTests(c: RiscyOpDecode) extends Tester(c) {
-  println("TODO")
+  // R-type
+  poke(c.io.op, 0x30)
+  step(0)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, true)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  poke(c.io.op, 0x38)
+  step(0)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, true)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  // TODO test others
 }
 
 class OpDecodeGenerator extends TestGenerator {
