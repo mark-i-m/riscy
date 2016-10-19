@@ -27,7 +27,7 @@ class RiscyAlloc extends Module {
 
     // Input from the Remap table to find out what the current mappings are (so
     // we can rename)
-    val remapTable = Vec.fill(32) { UInt(OUPUT, 7) } // TODO: figure out this interface
+    val remapTable = Vec.fill(32) { UInt(INPUT, 7) } // TODO: figure out this interface
 
     // Outputs to the Remap table and the ROB with the correct values to update
     // for this cycle. Note that they might not all be valid.
@@ -45,6 +45,9 @@ class RiscyAlloc extends Module {
       od
     }
   }
+
+  // TODO: stall if ROB is full
+  // TODO: handle invalid instructions
 
   // Do a simple addition to rename the instructions. Every instruction gets
   // an ROB entry, regardless of how many registers it reads or writes. The
