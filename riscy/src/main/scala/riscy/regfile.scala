@@ -22,18 +22,18 @@ import Chisel._
  * @param numRPorts the number of read ports.
  * @param numWPorts the number of write ports.
  */
-class RegFile(width: Int, size: Int, numRPorts: Int, numWPorts: Int) extends Module {
+class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => T) extends Module {
   val io = new Bundle {
     val rPorts = Vec.fill(numRPorts) { UInt(INPUT, 5) }
-    val rValues = Vec.fill(numRPorts) { UInt(OUTPUT, 32) }
+    val rValues = Vec.tabulate(numRPorts) { i => gen(i).asOutput }
 
     val wPorts = Vec.fill(numWPorts) { UInt(INPUT, 5) }
     val wVs = Vec.fill(numWPorts) { Bool(INPUT) }
-    val wValues = Vec.fill(numWPorts) { UInt(INPUT, 32) }
+    val wValues = Vec.tabulate(numWPorts) { i => gen(i).asInput }
   }
 
   // The actual registers
-  val regs = Array.tabulate(size) { i => UInt(i) -> Reg(UInt(width)) }
+  val regs = Array.tabulate(size) { i => UInt(i) -> gen(i) }
 
   // Hook up read ports with muxes to regs
   for (i <- 0 until numRPorts) {
@@ -50,7 +50,7 @@ class RegFile(width: Int, size: Int, numRPorts: Int, numWPorts: Int) extends Mod
   }
 }
 
-class RegFileTests(c: RegFile) extends Tester(c) {
+class RegFileTests[T <: Data](c: RegFile[T]) extends Tester(c) {
   for (i <- 0 until 1000) {
     val randVal = rnd.nextInt(1 << 16)
     val randRPort = rnd.nextInt(4)
@@ -62,7 +62,7 @@ class RegFileTests(c: RegFile) extends Tester(c) {
       if (p == randWPort) {
         poke(c.io.wPorts(randWPort), randReg)
         poke(c.io.wVs(randWPort), 1)
-        poke(c.io.wValues(randWPort), randVal)
+        poke(c.io.wValues(randWPort).bits, randVal)
       } else {
         poke(c.io.wVs(p), 0)
       }
@@ -73,12 +73,12 @@ class RegFileTests(c: RegFile) extends Tester(c) {
     poke(c.io.rPorts(randRPort), randReg)
 
     step(0)
-    expect(c.io.rValues(randRPort), randVal)
+    expect(c.io.rValues(randRPort).bits, randVal)
   }
 }
 
 class RegFileGenerator extends TestGenerator {
-  def genMod(): Module = Module(new RegFile(16, 16, 4, 4))
+  def genMod(): Module = Module(new RegFile(16, 4, 4, i => UInt(OUTPUT, 16)))
   def genTest[T <: Module](c: T): Tester[T] =
-    (new RegFileTests(c.asInstanceOf[RegFile])).asInstanceOf[Tester[T]]
+    (new RegFileTests(c.asInstanceOf[RegFile[UInt]])).asInstanceOf[Tester[T]]
 }
