@@ -32,6 +32,8 @@ class ROB extends Module {
 
   // The ROB storage structure
   val rob = Vec.fill(64) { new ROBEntry() }
+
+  // TODO: should we put the Arch reg file here too?
 }
 
 class ROBTests(c: ROB) extends Tester(c) {
