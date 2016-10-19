@@ -27,13 +27,15 @@ class RiscyAlloc extends Module {
 
     // Input from the Remap table to find out what the current mappings are (so
     // we can rename)
-    // TODO
+    val remapTable = Vec.fill(32) { UInt(OUPUT, 7) } // TODO: figure out this interface
 
     // Outputs to the Remap table and the ROB with the correct values to update
     // for this cycle. Note that they might not all be valid.
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()) }
     val allocROB = Vec.fill(4) { Valid(new AllocROB()) }
   }
+
+  // TODO: will need some latches to break this into two stages
 
   // For each instruction, determine what resources/registers it needs.
   val opDecodes = Array.tabulate(4) {
@@ -49,6 +51,33 @@ class RiscyAlloc extends Module {
   // valid bits of the instructions and the number of free ROB entries determines
   // whether we should stall and how many entries we should put into the ROB.
   val renamedDest = Vec.tabulate(4) { i => io.freeROB + UInt(i, 2) }
+
+  // Compute all possible renamings... for each instruction i and register r,
+  // let p_{r,i} be the physical register name of register r as seen by
+  // instruction i. Let dest(i) denote the physical register destination of
+  // instruction i. Then, we know that
+  //
+  //      p_{r,0} = Mapping from remap table
+  //      p_{r,i} = / dest(i-1)       if i-1 renamed r
+  //                \ p_{r, i-1}      otherwise
+  //
+  // Note that this definition already accounts for renaming by i-2.
+  //    
+  val allRenamed: Array[Array[UInt]] = Array.tabulate(32) { i =>
+    Array.tabulate(32) { r =>
+      if (i == 0) {
+        // from remap table if i = 0
+        remapTable(r)
+      } else {
+        // from i - 1 else
+        when (inst(i-1).rd === r && opDecodes(i-1).hasRd) {
+          renamedDest(i-1)
+        } .otherwise {
+          allRenamed(i-1)(r)
+        }
+      }
+    }
+  }
 }
 
 class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
