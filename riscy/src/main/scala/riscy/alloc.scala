@@ -40,7 +40,7 @@ class RiscyAlloc extends Module {
   // For each instruction, determine what resources/registers it needs.
   val opDecodes = Array.tabulate(4) {
     i => {
-      val od = new RiscyOpDecode()
+      val od = Module(new RiscyOpDecode())
       od.io.op := io.inst(i).bits.op
       od
     }
@@ -65,19 +65,21 @@ class RiscyAlloc extends Module {
   //                \ p_{r, i-1}      otherwise
   //
   // Note that this definition already accounts for renaming by i-2.
-  //    
-  val allRenamed: Array[Array[UInt]] = Array.tabulate(32) { i =>
-    Array.tabulate(32) { r =>
+  var allRenamed: Array[Array[UInt]] = Array()
+  for (i <- 0 until 4) {
+     allRenamed +:= Array.tabulate(32) { r =>
       if (i == 0) {
         // from remap table if i = 0
-        remapTable(r)
+        io.remapTable(r)
       } else {
         // from i - 1 else
-        when (inst(i-1).rd === r && opDecodes(i-1).hasRd) {
-          renamedDest(i-1)
+        val renamed = Bits(width = 6)
+        when (io.inst(i-1).bits.rd === UInt(r) && opDecodes(i-1).io.opInfo.hasRd) {
+          renamed := renamedDest(i-1)
         } .otherwise {
-          allRenamed(i-1)(r)
+          renamed := allRenamed(i-1)(r)
         }
+        renamed
       }
     }
   }
