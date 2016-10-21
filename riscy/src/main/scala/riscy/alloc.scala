@@ -52,7 +52,7 @@ class RiscyAlloc extends Module {
   // an ROB entry, regardless of how many registers it reads or writes. The
   // valid bits of the instructions and the number of free ROB entries determines
   // whether we should stall and how many entries we should put into the ROB.
-  val renamedDest = Vec.tabulate(4) { i => io.freeROB + UInt(i, 2) }
+  val renamedDest = Vec.tabulate(4) { i => io.firstROB + UInt(i, 2) }
 
   // Compute all possible renamings... for each instruction i and register r,
   // let p_{r,i} be the physical register name of register r as seen by
@@ -96,8 +96,15 @@ class RiscyAlloc extends Module {
     // register and no later instruction is renaming the same arch reg
     //
     // - the value of the remap entry is the ROB entry number
-    io.allocRemap(i).valid := opDecodes(i).io.opInfo.hasRd && 
-      io.allocRemap.slice(i+1, io.allocRemap.size).map(_.valid).foldLeft(Bool(true))(_&& !_)
+    io.allocRemap(i).valid := opDecodes(i).io.opInfo.hasRd &&
+      io.inst(i).valid &&
+      io.allocRemap
+        .slice(i+1, io.allocRemap.size)
+        .foldLeft(Bool(true)) {
+          // j is the next allocRemap entry being considered
+          // i is valid if j is not or if j maps a different register
+          (total, j) => total && (!j.valid || j.bits.reg != io.allocRemap(i).bits.reg)
+        }
     io.allocRemap(i).bits.reg := io.inst(i).bits.rd
     io.allocRemap(i).bits.idxROB := renamedDest(i)
   }
@@ -173,12 +180,12 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.inst(2).bits.rd, 0x1)
   poke(c.io.inst(2).bits.immI, 0xFFF)
 
-  poke(c.io.inst(2).valid, 1)
-  poke(c.io.inst(2).bits.op, 0x33)
-  poke(c.io.inst(2).bits.funct3, 0x0)
-  poke(c.io.inst(2).bits.rs1, 0x1)
-  poke(c.io.inst(2).bits.rd, 0x1)
-  poke(c.io.inst(2).bits.immI, 0xFFF)
+  poke(c.io.inst(3).valid, 1)
+  poke(c.io.inst(3).bits.op, 0x33)
+  poke(c.io.inst(3).bits.funct3, 0x0)
+  poke(c.io.inst(3).bits.rs1, 0x1)
+  poke(c.io.inst(3).bits.rd, 0x1)
+  poke(c.io.inst(3).bits.immI, 0xFFF)
 
   poke(c.io.freeROB, 62)
   poke(c.io.firstROB, 2)
@@ -187,14 +194,14 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
 
   // TODO: expect output to ROB
 
-  // Should map r1 to ROB2
-  expect(c.io.allocRemap(0).valid, 1)
-  expect(c.io.allocRemap(0).bits.reg, 1)
-  expect(c.io.allocRemap(0).bits.idxROB, 2)
+  // Should map r1 to ROB5
+  expect(c.io.allocRemap(3).valid, 1)
+  expect(c.io.allocRemap(3).bits.reg, 1)
+  expect(c.io.allocRemap(3).bits.idxROB, 5)
 
+  expect(c.io.allocRemap(0).valid, 0)
   expect(c.io.allocRemap(1).valid, 0)
   expect(c.io.allocRemap(2).valid, 0)
-  expect(c.io.allocRemap(3).valid, 0)
 
 
   // TODO: add more registers
