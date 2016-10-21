@@ -9,9 +9,9 @@ class AllocRemap extends Bundle {
 }
 
 // Information from the Allocate/Rename stage to the ROB and IQs.
-class AllocROB extends Bundle {
-  val entry = UInt(OUTPUT, 6) // which ROB entry to latch
-  val inst = UInt(OUTPUT,118) // the renamed instruction
+class AllocROB extends ROBEntry {
+  // Which ROB entry to latch
+  val entry = UInt(OUTPUT, 6)
 }
 
 // The Control Magic to rename instructions and send signals to update the
@@ -33,12 +33,6 @@ class RiscyAlloc extends Module {
     // for this cycle. Note that they might not all be valid.
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()) }
     val allocROB = Vec.fill(4) { Valid(new AllocROB()) }
-
-    // Arch register access is needed to get reg value for ROB entry
-    val archReg = Vec.fill(32) { UInt(INPUT, 32) }
-
-    // ROB table access to populate next ROB entry
-    val ROBtable = Vec.fill(64) { UInt(INPUT, 118) }
   }
 
   // TODO: will need some latches to break this into two stages
@@ -95,14 +89,32 @@ class RiscyAlloc extends Module {
     // Valid bits for ROB: each valid instruction results in a valid ROB entry
     // TODO: finish coding for 4 issue width with a way of keeping track of renaming table in mult-issue
     io.allocROB(i).valid      := io.inst(i).valid 
-    io.allocROB(i).bits.entry := renamedDest[i]
-    val instOp                := io.inst[i].bits.op            				// 7  bits
-    val instFunct7            := io.inst[i].bits.funct7					// 7  bits
-    val instFunct3            := io.inst[i].bits.funct3					// 3  bits
+
+    val robEntry = io.allocROB(i).bits // convenience
+
+    // Which ROB entry
+    robEntry.entry := renamedDest(i)
+
+    // Bulk wire data from decoded instruction
+    robInst <> io.inst(i).bits
+
+    // Register values
+    robInst.rs1Val.valid := Bool(false)
+    robInst.rs1Val.bits := UInt(0, 32)
+
+    robInst.rs2Val.valid := Bool(false)
+    robInst.rs2Val.bits := UInt(0, 32)
+
+    robInst.rdVal.valid := Bool(false)
+    robInst.rdVal.bits := UInt(0, 32)
+    
+    // Renamed 
+
+     
+
     val instRdValue 	      := UInt("h0000",32)					// 32 bits
     when (io.remaptable[io.inst[i].bits.rs1].valid) {
     val instRs1Map            := UInt(0)						// 1  bits
-    val instRs1Number         := allRenamed[i][io.inst[i].bits.rs1]			// 6  bits
     val instRs1Value          := io.ROBtable[allRenamed[i][io.inst[i].bits.rs1]](56, 87)// 32 bits
     val instRs1Ready          := io.ROBtable[allRenamed[i][io.inst[i].bits.rs1]](130)	// 1  bits - rethink this, do we need to grep ready bit from ROB
     val instRs1Speculative    := io.ROBtable[allRenamed[i][io.inst[i].bits.rs1]](129) 	// 0  bits
