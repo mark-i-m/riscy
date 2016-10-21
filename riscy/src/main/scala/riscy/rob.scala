@@ -6,16 +6,22 @@ import Chisel._
 // signals as DecodeIns and also the renamed register names and
 // any available values.
 class ROBEntry extends DecodeIns {
-  // Renamed registers (use register 0 if reg is in arch regfile)
+  // Renamed registers (not valid if reg is in arch regfile)
   val rs1Rename = UInt(OUTPUT, 6)
   val rs2Rename = UInt(OUTPUT, 6)
 
-  // Available operands (with valid bits)
+  // Available operands with ready bits
   val rs1Val = Valid(UInt(OUTPUT, 32))
   val rs2Val = Valid(UInt(OUTPUT, 32))
 
+  // Destination register with ready bit
+  val rdVal = Valid(UInt(OUTPUT, 32))
+
   // Unique instruction tag
   val tag = UInt(OUTPUT, 32) // TODO: How large? Can we make it the ROB entry number? 
+
+  // Speculative bit
+  val spec = Bool(OUTPUT)
 }
 
 class ROB extends Module {
