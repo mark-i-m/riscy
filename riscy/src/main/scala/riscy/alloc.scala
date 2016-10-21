@@ -30,7 +30,7 @@ class RiscyAlloc extends Module {
     val remapTable = Vec.fill(32) { Valid(UInt(INPUT, 6)) }
 
     // Outputs to the Remap table and the ROB with the correct values to update
-    // for this cycle. Note that they might not all be valid.
+    // for this cycle. Note that they might not all be valid.instRs2ImmMap, instRs2ImmNumber, ininstRs2ImmMap, instRs2ImmNumber, instRs2ImmValue, instRs2ImmReady,stRs2ImmValue, instRs2ImmReady,
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()) }
     val allocROB = Vec.fill(4) { Valid(new AllocROB()) }
 
@@ -89,80 +89,82 @@ class RiscyAlloc extends Module {
       }
     }
   }
+  
+  val remaptableUpdated = remaptable
 
   // Now, hook up the ouputs
   for (i <- 0 until 4) {
     // Valid bits for ROB: each valid instruction results in a valid ROB entry
     // TODO: finish coding for 4 issue width with a way of keeping track of renaming table in mult-issue
     io.allocROB(i).valid      := io.inst(i).valid 
-    io.allocROB(i).bits.entry := renamedDest[i]
-    val instOp                := io.inst[i].bits.op            				// 7  bits
-    val instFunct7            := io.inst[i].bits.funct7					// 7  bits
-    val instFunct3            := io.inst[i].bits.funct3					// 3  bits
+    io.allocROB(i).bits.entry := renamedDest(i)
+    val instOp                := io.inst(i).bits.op            				// 7  bits
+    val instFunct7            := io.inst(i).bits.funct7					// 7  bits
+    val instFunct3            := io.inst(i).bits.funct3					// 3  bits
     val instRdValue 	      := UInt("h0000",32)					// 32 bits
-    when (io.remaptable[io.inst[i].bits.rs1].valid) {
+    when (allRenamed(i)(io.inst(i).bits.rs1).valid) {
     val instRs1Map            := UInt(0)						// 1  bits
-    val instRs1Number         := allRenamed[i][io.inst[i].bits.rs1]			// 6  bits
-    val instRs1Value          := io.ROBtable[allRenamed[i][io.inst[i].bits.rs1]](56, 87)// 32 bits
-    val instRs1Ready          := io.ROBtable[allRenamed[i][io.inst[i].bits.rs1]](130)	// 1  bits - rethink this, do we need to grep ready bit from ROB
-    val instRs1Speculative    := io.ROBtable[allRenamed[i][io.inst[i].bits.rs1]](129) 	// 0  bits
+    val instRs1Number         := allRenamed(i)(io.inst(i).bits.rs1)			// 6  bits
+    val instRs1Value          := io.ROBtable[allRenamed(i)[io.inst(i).bits.rs1]](56, 87)// 32 bits
+    val instRs1Ready          := io.ROBtable[allRenamed(i)[io.inst(i).bits.rs1]](130)	// 1  bits - rethink this, do we need to grep ready bit from ROB
+    val instRs1Speculative    := io.ROBtable[allRenamed(i)[io.inst(i).bits.rs1]](129) 	// 0  bits
     } .otherwise {
     val instRs1Map            := UInt(0)
-    val instRs1Number	      := Cat(UInt(0), io.inst[i].bits.rs1)	
-    val instRs1Value          := io.archReg[io.inst[i].bits.rs1]
+    val instRs1Number	      := Cat(UInt(0), io.inst(i).bits.rs1)	
+    val instRs1Value          := io.archReg(io.inst(i).bits.rs1)
     val instRs1Ready          := UInt(1)
     val instRs1Speculative    := UInt(0)
     }
     when (opDecodes[i].hasRs2) {
-    when (io.remaptable[io.inst[i].bits.rs2].valid) {
+    when (allRenamed(i)(io.inst(i).bits.rs2).valid) {
     val instRs2ImmMap         := UInt(1)						// 1  bits
-    val instRs2ImmNumber      := allRenamed[i][io.inst[i].bits.rs2]			// 6  bits
-    val instRs2ImmValue       := io.ROBtable[allRenamed[i][io.inst[i].bits.rs2]](56,87) // 32 bits
-    val instRs2ImmReady       := io.ROBtable[allRenamed[i][io.inst[i].bits.rs2]](130)	// 1  bits - rethink this, do we need to grep ready bit from ROB
-    val instRs2ImmSpeculative := io.ROBtable[allRenamed[i][io.inst[i].bits.rs2]](129) 	// 0  bits
+    val instRs2ImmNumber      := allRenamed(i)(io.inst(i).bits.rs2)			// 6  bits
+    val instRs2ImmValue       := io.ROBtable[allRenamed(i)[io.inst(i).bits.rs2]](56,87) // 32 bits
+    val instRs2ImmReady       := io.ROBtable[allRenamed(i)[io.inst(i).bits.rs2]](130)	// 1  bits - rethink this, do we need to grep ready bit from ROB
+    val instRs2ImmSpeculative := io.ROBtable[allRenamed(i)[io.inst(i).bits.rs2]](129) 	// 0  bits
     } .otherwise {
     val instRs2ImmMap         := UInt(0)
-    val instRs2ImmNumber      := Cat(UInt(0), io.inst[i].bits.rs2) 			// As ROB has 6 bit address to each reg, arch reg entry will be appended by a 0	
-    val instRs2ImmValue       := io.archReg[io.inst[i].bits.rs2]
+    val instRs2ImmNumber      := Cat(UInt(0), io.inst(i).bits.rs2) 			// As ROB has 6 bit address to each reg, arch reg entry will be appended by a 0	
+    val instRs2ImmValue       := io.archReg(o.inst(i).bits.rs2)
     val instRs2ImmReady       := UInt(1)
     val instRs2ImmSpeculative := UInt(0)
     } 
-    } .elsewhen (opDecodes[i].hadImmI) {
+    } .elsewhen (opDecodes(i).hadImmI) {
     val instRs2ImmMap         := UInt(0)
     val instRs2ImmNumber      := UInt("h00",6)	
-    val instRs2ImmValue       := io.archReg[io.inst[i].bits.immI]
+    val instRs2ImmValue       := io.inst(i).bits.immI
     val instRs2ImmReady       := UInt(1)
     val instRs2ImmSpeculative := UInt(0)
-    } .elsewhen (opDecodes[i].hadImmS) {
+    } .elsewhen (opDecodes(i).hadImmS) {
     val instRs2ImmMap         := UInt(0)
     val instRs2ImmNumber      := UInt("h00",6)	
-    val instRs2ImmValue       := io.archReg[io.inst[i].bits.immS]
+    val instRs2ImmValue       := io.inst(i).bits.immS
     val instRs2ImmReady       := UInt(1)
     val instRs2ImmSpeculative := UInt(0)
-    } .elsewhen (opDecodes[i].hadImmB) {
+    } .elsewhen (opDecodes(i).hadImmB) {
     val instRs2ImmMap         := UInt(0)
     val instRs2ImmNumber      := UInt("h00",6)	
-    val instRs2ImmValue       := io.archReg[io.inst[i].bits.immB]
+    val instRs2ImmValue       := io.inst(i).bits.immB
     val instRs2ImmReady       := UInt(1)
     val instRs2ImmSpeculative := UInt(0)
-    } .elsewhen (opDecodes[i].hadImmU) {
+    } .elsewhen (opDecodes(i).hadImmU) {
     val instRs2ImmMap         := UInt(0)
     val instRs2ImmNumber      := UInt("h00",6)	
-    val instRs2ImmValue       := io.archReg[io.inst[i].bits.immU]
+    val instRs2ImmValue       := io.inst(i).bits.immU
     val instRs2ImmReady       := UInt(1)
     val instRs2ImmSpeculative := UInt(0)
-    } .elsewhen (opDecodes[i].hadImmJ) {
+    } .elsewhen (opDecodes(i).hadImmJ) {
     val instRs2ImmMap         := UInt(0)
     val instRs2ImmNumber      := UInt("h00",6)	
-    val instRs2ImmValue       := io.archReg[io.inst[i].bits.immJ]
+    val instRs2ImmValue       := io.inst(i).bits.immJ
     val instRs2ImmReady       := UInt(1)
     val instRs2ImmSpeculative := UInt(0)
     }
     val instSpeculative       := instRs1Speculative || instRs2ImmSpeculative		// 1 bits
     val instReady             := UInt(0)						// 1 bits - Ready bit is set only when instruction is commited
 
-    io.allocROB(i).inst = Cat(instReady, instSpeculative, instRs2ImmMap, instRs2ImmNumber, instRs2ImmValue, instRs2ImmReady, instRs1Map, instRs1Number, instRs1Value, instRs1Ready, instRdValue, instFunct7, instFunct3, instOp)
-
+    io.allocROB(i).inst  = Cat(instReady, instSpeculative, instRs2ImmMap, instRs2ImmNumber, instRs2ImmValue, instRs2ImmReady, instRs1Map, instRs1Number, instRs1Value, instRs1Ready, instRdValue, instFunct7, instFunct3, instOp)
+    io.allocROB(i).entry = renamedDest(i) 	
     // Remap entries:
     // - a remap entry should be written if the instruction has a destination
     // register and no later instruction is renaming the same arch reg
