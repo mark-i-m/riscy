@@ -203,8 +203,67 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocRemap(1).valid, 0)
   expect(c.io.allocRemap(2).valid, 0)
 
+  // TEST 3: no valid instructions
+  poke(c.io.inst(0).valid, 0)
+  poke(c.io.inst(1).valid, 0)
+  poke(c.io.inst(2).valid, 0)
+  poke(c.io.inst(3).valid, 0)
 
-  // TODO: add more registers
+  step(1)
+
+  expect(c.io.allocRemap(0).valid, 0)
+  expect(c.io.allocRemap(1).valid, 0)
+  expect(c.io.allocRemap(2).valid, 0)
+  expect(c.io.allocRemap(3).valid, 0)
+
+  // TEST 4
+  // add r1 <- r1 + 0xFFF
+  // add r2 <- r1 + 0xFFF
+  // add r2 <- r1 + 0xFFF
+  poke(c.io.inst(0).valid, 1)
+  poke(c.io.inst(0).bits.op, 0x33)
+  poke(c.io.inst(0).bits.funct3, 0x0)
+  poke(c.io.inst(0).bits.rs1, 0x1)
+  poke(c.io.inst(0).bits.rd, 0x1)
+  poke(c.io.inst(0).bits.immI, 0xFFF)
+
+  poke(c.io.inst(1).valid, 1)
+  poke(c.io.inst(1).bits.op, 0x33)
+  poke(c.io.inst(1).bits.funct3, 0x0)
+  poke(c.io.inst(1).bits.rs1, 0x1)
+  poke(c.io.inst(1).bits.rd, 0x2)
+  poke(c.io.inst(1).bits.immI, 0xFFF)
+
+  poke(c.io.inst(2).valid, 1)
+  poke(c.io.inst(2).bits.op, 0x33)
+  poke(c.io.inst(2).bits.funct3, 0x0)
+  poke(c.io.inst(2).bits.rs1, 0x1)
+  poke(c.io.inst(2).bits.rd, 0x2)
+  poke(c.io.inst(2).bits.immI, 0xFFF)
+
+  poke(c.io.inst(3).valid, 0)
+
+  poke(c.io.freeROB, 58)
+  poke(c.io.firstROB, 6)
+
+  step(1)
+
+  // TODO: expect output to ROB
+  
+  // Should map r1 to ROB6
+  expect(c.io.allocRemap(0).valid, 1)
+  expect(c.io.allocRemap(0).bits.reg, 1)
+  expect(c.io.allocRemap(0).bits.idxROB, 6)
+
+  // Should map r2 to ROB8
+  expect(c.io.allocRemap(2).valid, 1)
+  expect(c.io.allocRemap(2).bits.reg, 2)
+  expect(c.io.allocRemap(2).bits.idxROB, 8)
+
+  expect(c.io.allocRemap(1).valid, 0)
+  expect(c.io.allocRemap(3).valid, 0)
+
+  // TODO: add more tests
 }
 
 class AllocGenerator extends TestGenerator {
