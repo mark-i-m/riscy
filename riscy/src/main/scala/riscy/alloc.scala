@@ -27,7 +27,7 @@ class RiscyAlloc extends Module {
 
     // Input from the Remap table to find out what the current mappings are (so
     // we can rename)
-    val remapTable = Vec.fill(32) { UInt(INPUT, 7) } // TODO: figure out this interface
+    val remapTable = Vec.fill(32) { Valid(UInt(INPUT, 6)) }
 
     // Outputs to the Remap table and the ROB with the correct values to update
     // for this cycle. Note that they might not all be valid.
@@ -47,7 +47,6 @@ class RiscyAlloc extends Module {
   }
 
   // TODO: stall if ROB is full
-  // TODO: handle invalid instructions
 
   // Do a simple addition to rename the instructions. Every instruction gets
   // an ROB entry, regardless of how many registers it reads or writes. The
@@ -65,7 +64,7 @@ class RiscyAlloc extends Module {
   //                \ p_{r, i-1}      otherwise
   //
   // Note that this definition already accounts for renaming by i-2.
-  var allRenamed: Array[Array[UInt]] = Array()
+  var allRenamed: Array[Array[ValidIO[UInt]]] = Array()
   for (i <- 0 until 4) {
      allRenamed +:= Array.tabulate(32) { r =>
       if (i == 0) {
@@ -73,15 +72,34 @@ class RiscyAlloc extends Module {
         io.remapTable(r)
       } else {
         // from i - 1 else
-        val renamed = Bits(width = 6)
+        val renamed = Valid(UInt(width = 6))
         when (io.inst(i-1).bits.rd === UInt(r) && opDecodes(i-1).io.opInfo.hasRd) {
-          renamed := renamedDest(i-1)
+          renamed.valid := Bool(true)
+          renamed.bits := renamedDest(i-1)
         } .otherwise {
           renamed := allRenamed(i-1)(r)
         }
         renamed
       }
     }
+  }
+
+  // Now, hook up the ouputs
+  for (i <- 0 until 4) {
+    // Valid bits for ROB: each valid instruction results in a valid ROB entry
+    io.allocROB(i).valid := io.inst(i).valid
+
+    // TODO: ROB values
+
+    // Remap entries:
+    // - a remap entry should be written if the instruction has a destination
+    // register and no later instruction is renaming the same arch reg
+    //
+    // - the value of the remap entry is the ROB entry number
+    io.allocRemap(i).valid := opDecodes(i).io.opInfo.hasRd && 
+      io.allocRemap.slice(i+1, io.allocRemap.size).map(_.valid).foldLeft(Bool(true))(_&& !_)
+    io.allocRemap(i).bits.reg := io.inst(i).bits.rd
+    io.allocRemap(i).bits.idxROB := renamedDest(i)
   }
 }
 
@@ -179,9 +197,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocRemap(3).valid, 0)
 
 
-  // TODO: need test with multiple renamings of the same register in the same cycle
-
-
+  // TODO: add more registers
 }
 
 class AllocGenerator extends TestGenerator {
