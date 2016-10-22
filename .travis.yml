@@ -34,29 +34,17 @@ addons:
 
 env:
   matrix:
-      #    - SUITE=RocketSuite
-      #    - SUITE=GroundtestSuite
-      #    - SUITE=UnittestSuite
     - MODULE_GEN=riscy.HelloModuleGenerator
     - MODULE_GEN=riscy.DecodeGenerator
     - MODULE_GEN=riscy.AllocGenerator
     - MODULE_GEN=riscy.ROBGenerator
     - MODULE_GEN=riscy.RegFileGenerator
     - MODULE_GEN=riscy.OpDecodeGenerator
-	
-# blacklist private branches
-#branches:
-#  except:
-#    - hwacha
-#    - boom
-#    - hurricane
 
 before_install:
   - export CXX=g++-4.8 CC=gcc-4.8
 
 script:
-#  - make emulator-ndebug -C regression SUITE=$SUITE TORTURE_CONFIG=default
-#  - make emulator-regression-tests -C regression SUITE=$SUITE TORTURE_CONFIG=default
   - make -C riscy MODULE_GEN=$MODULE_GEN test
 
 before_cache:
