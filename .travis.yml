@@ -34,18 +34,18 @@ addons:
 
 env:
   matrix:
-    - MODULE_GEN=riscy.HelloModuleGenerator
-    - MODULE_GEN=riscy.DecodeGenerator
-    - MODULE_GEN=riscy.AllocGenerator
-    - MODULE_GEN=riscy.ROBGenerator
-    - MODULE_GEN=riscy.RegFileGenerator
-    - MODULE_GEN=riscy.OpDecodeGenerator
+    - MODULE=HelloModule
+    - MODULE=Decode
+    - MODULE=Alloc
+    - MODULE=ROB
+    - MODULE=RegFile
+    - MODULE=OpDecode
 
 before_install:
   - export CXX=g++-4.8 CC=gcc-4.8
 
 script:
-  - make -C riscy MODULE_GEN=$MODULE_GEN test
+  - make -C riscy ${MODULE}.test
 
 before_cache:
   - ls -tr regression/install | tail -n+2 | sed s@^@regression/install/@ | xargs rm -rf
