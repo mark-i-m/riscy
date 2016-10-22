@@ -66,10 +66,13 @@ class RiscyAlloc extends Module {
   // whether we should stall and how many entries we should put into the ROB.
   val renamedDest = Vec.tabulate(4) { i => io.robFirst + UInt(i, 2) }
 
-  // Hook up instructions to remap table
+  // Hook up instructions to remap table, register file
   for (i <- 0 until 4) {
     io.remapPorts(2*i) := io.inst(i).bits.rs1
     io.remapPorts(2*i+1) := io.inst(i).bits.rs2
+
+    io.rfPorts(2*i) := io.inst(i).bits.rs1
+    io.rfPorts(2*i+1) := io.inst(i).bits.rs2
   }
 
   // Rename all src operands
@@ -109,6 +112,12 @@ class RiscyAlloc extends Module {
     }
   }
 
+  // Hook up instructions to ROB
+  for (i <- 0 until 4) {
+    io.robPorts(2*i) := renamedRs1(i).bits
+    io.robPorts(2*i+1) := renamedRs2(i).bits
+  }
+
   // Now, hook up the ouputs
   for (i <- 0 until 4) {
     // Valid bits for ROB: each valid instruction results in a valid ROB entry
@@ -129,14 +138,14 @@ class RiscyAlloc extends Module {
       // Getting from ROB
       robEntry.rs1Map := Bool(true)
       robEntry.rs1Rename := renamedRs1(i).bits
-      robEntry.rs1Val.valid := io.robDest(renamedRs1(i).bits).valid
-      robEntry.rs1Val.bits := io.robDest(renamedRs1(i).bits).bits
+      robEntry.rs1Val.valid := io.robDest(2*i).valid
+      robEntry.rs1Val.bits := io.robDest(2*i).bits
     } .otherwise {
       // Getting from Arch Reg File
       robEntry.rs1Map := Bool(false)
       robEntry.rs1Rename := io.inst(i).bits.rs1
       robEntry.rs1Val.valid := Bool(true)
-      robEntry.rs1Val.bits := io.rfValues(io.inst(i).bits.rs1)
+      robEntry.rs1Val.bits := io.rfValues(2*i)
     }
 
     // Second operand
@@ -146,14 +155,14 @@ class RiscyAlloc extends Module {
         // Getting from ROB
         robEntry.rs2Map := Bool(true)
         robEntry.rs2Rename := renamedRs2(i).bits
-        robEntry.rs2Val.valid := io.robDest(renamedRs2(i).bits).valid
-        robEntry.rs2Val.bits := io.robDest(renamedRs2(i).bits).bits
+        robEntry.rs2Val.valid := io.robDest(2*i+1).valid
+        robEntry.rs2Val.bits := io.robDest(2*i+1).bits
       } .otherwise {
         // Getting from Arch Reg File
         robEntry.rs2Map := Bool(false)
         robEntry.rs2Rename := io.inst(i).bits.rs2
         robEntry.rs2Val.valid := Bool(true)
-        robEntry.rs2Val.bits := io.rfValues(io.inst(i).bits.rs2)
+        robEntry.rs2Val.bits := io.rfValues(2*i+1)
       }
     } .otherwise {
       // Second operand is an immediate
