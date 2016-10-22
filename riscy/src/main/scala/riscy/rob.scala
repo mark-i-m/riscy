@@ -34,12 +34,13 @@ class ROB extends Module {
   // (1) or in the ROB (0).
   //
   // The remaining bits denote which ROB entry if the register is in the ROB
-  val remap = new RegFile(32, 32, 4, i => Valid(UInt(width = 6)))
+  val remap = new RegFile(32, 8, 4, i => Valid(UInt(width = 6)))
 
   // The ROB storage structure
   val rob = Vec.fill(64) { new ROBEntry() }
 
-  // TODO: should we put the Arch reg file here too?
+  // The Architectural register file
+  val rf = new RegFile(32, 8, 4, i => UInt(width = 32))
 }
 
 class ROBTests(c: ROB) extends Tester(c) {

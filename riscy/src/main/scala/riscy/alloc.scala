@@ -25,30 +25,31 @@ class RiscyAlloc extends Module {
     // Input from the rotator and decode logic with 4 decoded instructions
     val inst = Vec.fill(4) { Valid(new DecodeIns()).flip }
 
-    // Inputs with the first free entry and the number of free entries in the ROB
-    val freeROB = UInt(INPUT, 6)
-    val firstROB = UInt(INPUT, 6)
-
-    // Input from the Remap table to find out what the current mappings are (so
-    // we can rename)
-    val remapTable = Vec.fill(32) { Valid(UInt(INPUT, 6)) }
-
-    // TODO: optimize this to not use so many useless wires
+    // Access the Remap table to find out what the current mappings are (so we
+    // can rename)
+    val remapPorts = Vec.fill(8) { UInt(OUTPUT, 5) }
+    val remapMapping = Vec.fill(8) { Valid(UInt(INPUT, 6)) }
 
     // Arch register access is needed to get reg value for ROB entry
-    val archReg = Vec.fill(32) { UInt(INPUT, 32) }
+    val rfPorts = Vec.fill(8) { UInt(OUTPUT, 5) }
+    val rfValues = Vec.fill(8) { UInt(INPUT, 32) }
 
     // ROB table access to populate next ROB entry
-    val robDest = Vec.fill(64) { Valid(UInt(INPUT, 32)) }
-    val robSpec = Bool(INPUT)
+    val robPorts = Vec.fill(8) { UInt(OUTPUT, 6) }
+    val robDest = Vec.fill(8) { Valid(UInt(INPUT, 32)) }
+    val robSpec = Bool(INPUT) // Is the last inst speculative?
+    val robFree = UInt(INPUT, 6) // How many free entries
+    val robFirst = UInt(INPUT, 6) // Index of the first free entry
 
     // Outputs to the Remap table and the ROB with the correct values to update
-    // for this cycle. Note that they might not all be valid.instRs2ImmMap, instRs2ImmNumber, ininstRs2ImmMap, instRs2ImmNumber, instRs2ImmValue, instRs2ImmReady,stRs2ImmValue, instRs2ImmReady,
+    // for this cycle. 
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()) }
     val allocROB = Vec.fill(4) { Valid(new AllocROB()) }
   }
 
   // TODO: will need some latches to break this into two stages
+
+  // TODO: stall if ROB is full
 
   // For each instruction, determine what resources/registers it needs.
   val opDecodes = Array.tabulate(4) {
@@ -59,46 +60,59 @@ class RiscyAlloc extends Module {
     }
   }
 
-  // TODO: stall if ROB is full
-
   // Do a simple addition to rename the instructions. Every instruction gets
   // an ROB entry, regardless of how many registers it reads or writes. The
   // valid bits of the instructions and the number of free ROB entries determines
   // whether we should stall and how many entries we should put into the ROB.
-  val renamedDest = Vec.tabulate(4) { i => io.firstROB + UInt(i, 2) }
+  val renamedDest = Vec.tabulate(4) { i => io.robFirst + UInt(i, 2) }
 
-  // Compute all possible renamings... for each instruction i and register r,
-  // let p_{r,i} be the physical register name of register r as seen by
-  // instruction i. Let dest(i) denote the physical register destination of
-  // instruction i. Then, we know that
-  //
-  //      p_{r,0} = Mapping from remap table
-  //      p_{r,i} = / dest(i-1)       if i-1 renamed r
-  //                \ p_{r, i-1}      otherwise
-  //
-  // Note that this definition already accounts for renaming by i-2.
-  var allRenamed = Vec.fill(4) { Vec.fill(32) { Valid(UInt(width = 6)) } }
+  // Hook up instructions to remap table
   for (i <- 0 until 4) {
-    for (r <- 0 until 32) {
-      if (i == 0) {
-        // from remap table if i = 0
-        allRenamed(i)(r) := io.remapTable(r)
-      } else {
-        // from i - 1 else
-        when (io.inst(i-1).bits.rd === UInt(r) && opDecodes(i-1).io.opInfo.hasRd) {
-          allRenamed(i)(r).valid := Bool(true)
-          allRenamed(i)(r).bits := renamedDest(i-1)
+    io.remapPorts(2*i) := io.inst(i).bits.rs1
+    io.remapPorts(2*i+1) := io.inst(i).bits.rs2
+  }
+
+  // Rename all src operands
+  val renamedRs1 = Vec.fill(4) { Valid(UInt(width = 6)) }
+  val renamedRs2 = Vec.fill(4) { Valid(UInt(width = 6)) }
+  for (i <- 0 until 4) {
+    if (i == 0) {
+      // from remap table if i is 0
+      renamedRs1(i) := io.remapMapping(2*i)
+      renamedRs2(i) := io.remapMapping(2*i+1)
+    } else {
+      // Either a previous instructions renames the register or the proper
+      // renaming info can be found in the remap table.
+      for (j <- 0 until i) {
+        // rs1
+        when (io.inst(j).bits.rs1 === io.inst(i).bits.rd) {
+          // take i's mapping
+          renamedRs1(j).valid := Bool(true)
+          renamedRs1(j).bits := renamedDest(i)
         } .otherwise {
-          allRenamed(i)(r) := allRenamed(i-1)(r)
+          // remap table
+          renamedRs1(j).valid := io.remapMapping(2*j).valid
+          renamedRs1(j).bits := io.remapMapping(2*j).bits
+        }
+
+        // rs2
+        when (io.inst(j).bits.rs2 === io.inst(i).bits.rd) {
+          // take i's mapping
+          renamedRs2(j).valid := Bool(true)
+          renamedRs2(j).bits := renamedDest(i)
+        } .otherwise {
+          // remap table
+          renamedRs2(j).valid := io.remapMapping(2*j+1).valid
+          renamedRs2(j).bits := io.remapMapping(2*j+1).bits
         }
       }
     }
   }
-  
+
   // Now, hook up the ouputs
   for (i <- 0 until 4) {
     // Valid bits for ROB: each valid instruction results in a valid ROB entry
-    io.allocROB(i).valid := io.inst(i).valid 
+    io.allocROB(i).valid := io.inst(i).valid
 
     val robEntry = io.allocROB(i).bits // convenience
 
@@ -111,45 +125,43 @@ class RiscyAlloc extends Module {
     robEntry.funct7 := io.inst(i).bits.funct7
 
     // First operand
-    val rs1Renamed = allRenamed(i)(io.inst(i).bits.rs1)
-    when (rs1Renamed.valid) {
+    when (renamedRs1(i).valid) {
       // Getting from ROB
       robEntry.rs1Map := Bool(true)
-      robEntry.rs1Rename := rs1Renamed.bits
-      robEntry.rs1Val.valid := io.robDest(rs1Renamed.bits).valid
-      robEntry.rs1Val.bits := io.robDest(rs1Renamed.bits).bits
+      robEntry.rs1Rename := renamedRs1(i).bits
+      robEntry.rs1Val.valid := io.robDest(renamedRs1(i).bits).valid
+      robEntry.rs1Val.bits := io.robDest(renamedRs1(i).bits).bits
     } .otherwise {
       // Getting from Arch Reg File
       robEntry.rs1Map := Bool(false)
       robEntry.rs1Rename := io.inst(i).bits.rs1
-      robEntry.rs1Val.valid := Bool(true) 
-      robEntry.rs1Val.bits := io.archReg(io.inst(i).bits.rs1)
+      robEntry.rs1Val.valid := Bool(true)
+      robEntry.rs1Val.bits := io.rfValues(io.inst(i).bits.rs1)
     }
 
     // Second operand
     when (opDecodes(i).io.opInfo.hasRs2) {
       // Second operand is a register
-      val rs2Renamed = allRenamed(i)(io.inst(i).bits.rs2)
-      when (rs2Renamed.valid) {
+      when (renamedRs2(i).valid) {
         // Getting from ROB
         robEntry.rs2Map := Bool(true)
-        robEntry.rs2Rename := rs2Renamed.bits
-        robEntry.rs2Val.valid := io.robDest(rs2Renamed.bits).valid
-        robEntry.rs2Val.bits := io.robDest(rs2Renamed.bits).bits
+        robEntry.rs2Rename := renamedRs2(i).bits
+        robEntry.rs2Val.valid := io.robDest(renamedRs2(i).bits).valid
+        robEntry.rs2Val.bits := io.robDest(renamedRs2(i).bits).bits
       } .otherwise {
         // Getting from Arch Reg File
         robEntry.rs2Map := Bool(false)
         robEntry.rs2Rename := io.inst(i).bits.rs2
         robEntry.rs2Val.valid := Bool(true)
-        robEntry.rs2Val.bits := io.archReg(io.inst(i).bits.rs2)
-      } 
+        robEntry.rs2Val.bits := io.rfValues(io.inst(i).bits.rs2)
+      }
     } .otherwise {
-      // Second operand is an immediate  
+      // Second operand is an immediate
       robEntry.rs2Map := Bool(false)
       robEntry.rs2Rename := UInt(0)
       robEntry.rs2Val.valid := Bool(true)
       robEntry.rs2Val.bits := UInt(0) // chisel requires this for some reason :(
-      
+
       // Choose which immediate
       when (opDecodes(i).io.opInfo.hasImmI) {
         robEntry.rs2Val.bits := io.inst(i).bits.immI
@@ -211,8 +223,8 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.inst(2).valid, 0)
   poke(c.io.inst(3).valid, 0)
 
-  poke(c.io.freeROB, 64)
-  poke(c.io.firstROB, 0)
+  poke(c.io.robFree, 64)
+  poke(c.io.robFirst, 0)
 
   step(1)
 
@@ -266,8 +278,8 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.inst(3).bits.rd, 0x1)
   poke(c.io.inst(3).bits.immI, 0xFFF)
 
-  poke(c.io.freeROB, 62)
-  poke(c.io.firstROB, 2)
+  poke(c.io.robFree, 62)
+  poke(c.io.robFirst, 2)
 
   step(1)
 
@@ -322,13 +334,13 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
 
   poke(c.io.inst(3).valid, 0)
 
-  poke(c.io.freeROB, 58)
-  poke(c.io.firstROB, 6)
+  poke(c.io.robFree, 58)
+  poke(c.io.robFirst, 6)
 
   step(1)
 
   // TODO: expect output to ROB
-  
+
   // Should map r1 to ROB6
   expect(c.io.allocRemap(0).valid, 1)
   expect(c.io.allocRemap(0).bits.reg, 1)
