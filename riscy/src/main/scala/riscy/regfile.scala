@@ -25,11 +25,10 @@ import Chisel._
  */
 class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => T) extends Module {
   val io = new Bundle {
-    val rPorts = Vec.fill(numRPorts) { UInt(INPUT, 5) }
+    val rPorts = Vec.fill(numRPorts) { UInt(INPUT, log2Up(size)) }
     val rValues = Vec.tabulate(numRPorts) { i => gen(i).asOutput }
 
-    val wPorts = Vec.fill(numWPorts) { UInt(INPUT, 5) }
-    val wVs = Vec.fill(numWPorts) { Bool(INPUT) }
+    val wPorts = Vec.fill(numWPorts) { Valid(UInt(width = log2Up(size))).asInput }
     val wValues = Vec.tabulate(numWPorts) { i => gen(i).asInput }
   }
 
@@ -44,7 +43,7 @@ class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => 
   // Hook up write ports to regs
   for (p <- 0 until numWPorts) {
     for (r <- 0 until size) {
-      when (io.wVs(p) && io.wPorts(p) === UInt(r)) {
+      when (io.wPorts(p).valid && io.wPorts(p).bits === UInt(r)) {
         regs(r)._2 := io.wValues(p)
       }
     }
@@ -62,12 +61,12 @@ class RegFileTests(c: RegFile[ValidIO[UInt]]) extends Tester(c) {
     // Write to the registers
     for (p <- 0 until 4) {
       if (p == randWPort) {
-        poke(c.io.wPorts(randWPort), randReg)
-        poke(c.io.wVs(randWPort), 1)
+        poke(c.io.wPorts(randWPort).valid, true)
+        poke(c.io.wPorts(randWPort).bits, randReg)
         poke(c.io.wValues(randWPort).valid, randValid)
         poke(c.io.wValues(randWPort).bits, randVal)
       } else {
-        poke(c.io.wVs(p), 0)
+        poke(c.io.wPorts(p).valid, false)
       }
     }
 
