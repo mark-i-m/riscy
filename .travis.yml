@@ -32,9 +32,14 @@ addons:
       - flex
       - texinfo
 
+branches:
+  only:
+    - master
+
 env:
   matrix:
     - MODULE=HelloModule
+    - MODULE=Fetch
     - MODULE=Decode
     - MODULE=Alloc
     - MODULE=ROB
