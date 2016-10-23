@@ -107,6 +107,68 @@ class Fetch extends Module {
 }
 
 class FetchTests(c: Fetch) extends Tester(c) { 
+  poke(c.io.btbAddr, 0xbbbbbbbb)
+  poke(c.io.rasAddr, 0xdddddddd)
+  poke(c.io.isBranchTaken, false)
+  poke(c.io.branchMispredAddr, 0xeeeeeeee)
+  poke(c.io.isBranchMispred, false)
+  poke(c.io.isReturn, false)
+  poke(c.io.stall, false)
+  poke(c.io.icacheRespAddr, 0xcccccccc)
+  poke(c.io.icacheRespValues(0), 0x11111111)
+  poke(c.io.icacheRespValues(1), 0x22222222)
+  poke(c.io.icacheRespValues(2), 0x33333333)
+  poke(c.io.icacheRespValues(3), 0x44444444)
+  poke(c.io.hit_notmiss, 0)
+  expect(c.io.icacheReqAddr, 0x0)
+  expect(c.io.instValid(0), false)
+  expect(c.io.instValid(1), false)
+  expect(c.io.instValid(2), false)
+  expect(c.io.instValid(3), false)
+  step(1)
+
+  expect(c.io.icacheReqAddr, 0x0)
+  expect(c.io.instValid(0), false)
+  expect(c.io.instValid(1), false)
+  expect(c.io.instValid(2), false)
+  expect(c.io.instValid(3), false)
+  step(1)
+
+  expect(c.io.icacheReqAddr, 0x0)
+  expect(c.io.instValid(0), false)
+  expect(c.io.instValid(1), false)
+  expect(c.io.instValid(2), false)
+  expect(c.io.instValid(3), false)
+  poke(c.io.hit_notmiss, 1)
+  poke(c.io.icacheRespAddr, 0x0)
+  step(1)
+
+  expect(c.io.icacheReqAddr, 0x10)
+  expect(c.io.instValid(0), true)
+  expect(c.io.instValid(1), true)
+  expect(c.io.instValid(2), true)
+  expect(c.io.instValid(3), true)
+  step(1)
+
+  expect(c.io.icacheReqAddr, 0x20)
+  poke(c.io.hit_notmiss, 1)
+  poke(c.io.icacheRespAddr, 0x10)
+  step(1)
+
+  expect(c.io.icacheReqAddr, 0x30)
+  poke(c.io.hit_notmiss, 0)
+  poke(c.io.icacheRespAddr, 0x20)
+  step(1)
+
+  expect(c.io.icacheReqAddr, 0x30)
+  step(1)
+
+  expect(c.io.icacheReqAddr, 0x30)
+  poke(c.io.hit_notmiss, 1)
+  poke(c.io.icacheRespAddr, 0x20)
+  step(1)
+
+  expect(c.io.icacheReqAddr, 0x40)
 } 
 
 class FetchGenerator extends TestGenerator {
