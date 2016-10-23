@@ -1,4 +1,4 @@
-MODULES=HelloModule Decode Alloc ROB RegFile OpDecode
+MODULES=HelloModule Fetch Decode Alloc ROB RegFile OpDecode
 
 TOP = ..
 SBT ?= java -Xmx2G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
