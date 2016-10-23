@@ -10,7 +10,7 @@ class Fetch extends Module {
   val io = new Bundle {
     val btbAddr = UInt(INPUT, 32)
     val rasAddr = UInt(INPUT, 32)
-    val isBranch = Bool(INPUT)
+    val isBranchTaken = Bool(INPUT)
     val branchMispredAddr = UInt(INPUT, 32)
     val isBranchMispred = Bool(INPUT)
     val isReturn = Bool(INPUT)
@@ -18,18 +18,16 @@ class Fetch extends Module {
     val icacheRespAddr = UInt(INPUT, 32)
     val icacheRespValues = Vec.fill(4) { UInt(INPUT, 32) }
     val hit_notmiss = Bool(INPUT)
-    val dbgin = UInt(INPUT, 1)
 
-    val dbgout = UInt(OUTPUT, 1)
-    val icacheAddr = UInt(OUTPUT, 32)
+    val icacheReqAddr = UInt(OUTPUT, 32)
     val insts = Vec.fill(4) { UInt(OUTPUT, 32) }
     val instValid = Vec.fill(4) { Bool(OUTPUT) }
     val fetchBlockPC = UInt(OUTPUT, 32)
   }
 
-  val PC = Reg(init = UInt(0, width = 32)) 
+  val PC = Reg(init = UInt(16, width = 32))
 
-  val nextAddr = Mux(io.isBranch, io.btbAddr, PC)
+  val nextAddr = Mux(io.isBranchTaken, io.btbAddr, PC)
 
   val addr = UInt(width = 32)
   val addrSelect = UInt(width = 2)
@@ -46,34 +44,49 @@ class Fetch extends Module {
     addr := io.branchMispredAddr
   }
 
-  val fetchAddr = Reg(next = addr)
-  io.icacheAddr := fetchAddr
+  val fetchAddr = Reg(init = UInt(0, width = 32))
+  when (io.hit_notmiss) {
+    fetchAddr := addr
+  } .otherwise {
+    fetchAddr := fetchAddr
+  }
+
+  io.icacheReqAddr := fetchAddr
 
   val nextPC = UInt(width = 32)
   val nextPCOffset = UInt(width = 5)
   nextPCOffset := UInt(16)
-  nextPC := io.icacheAddr + Mux(io.stall, UInt(0), nextPCOffset)
+  nextPC := addr + Mux(io.stall, UInt(0), nextPCOffset)
 
-  unless (io.stall) { PC := nextPC }
+  when ((io.stall === Bool(false)) && io.hit_notmiss) {
+    PC := nextPC
+  }
 
-  when (io.hit_notmiss && (io.icacheRespAddr(4,0) === UInt(29))) {
+  when (addr(4, 0) === UInt(20)) {
+    nextPCOffset := UInt(12)
+  } .elsewhen (addr(4,0) === UInt(24)) {
+    nextPCOffset := UInt(8)
+  } .elsewhen (addr(4, 0) === UInt(28)) {
+    nextPCOffset := UInt(4)
+  } .otherwise {
+    nextPCOffset := UInt(16)
+  }
+
+  when (io.hit_notmiss && (addr(4,0) === UInt(20))) {
     io.instValid(0) := Bool(true)
     io.instValid(1) := Bool(true)
     io.instValid(2) := Bool(true)
     io.instValid(3) := Bool(false)
-    nextPCOffset := UInt(12)
-  } .elsewhen (io.hit_notmiss && (io.icacheRespAddr(4,0) === UInt(30))) {
+  } .elsewhen (io.hit_notmiss && (addr(4,0) === UInt(24))) {
     io.instValid(0) := Bool(true)
     io.instValid(1) := Bool(true)
     io.instValid(2) := Bool(false)
     io.instValid(3) := Bool(false)
-    nextPCOffset := UInt(8)
-  } .elsewhen (io.hit_notmiss && (io.icacheRespAddr(4,0) === UInt(31))) {
+  } .elsewhen (io.hit_notmiss && (addr(4,0) === UInt(28))) {
     io.instValid(0) := Bool(true)
     io.instValid(1) := Bool(false)
     io.instValid(2) := Bool(false)
     io.instValid(3) := Bool(false)
-    nextPCOffset := UInt(4)
   } .elsewhen (io.hit_notmiss) {
     io.instValid(0) := Bool(true)
     io.instValid(1) := Bool(true)
@@ -91,20 +104,9 @@ class Fetch extends Module {
   for (i <- 0 until 4) {
     io.insts(i) := io.icacheRespValues(i)
   }
-
-  io.dbgout := io.dbgin
 }
 
 class FetchTests(c: Fetch) extends Tester(c) { 
-  poke(c.io.dbgin, 1)
-  step(1) 
-  expect(c.io.dbgout, 1) 
-  poke(c.io.dbgin, 0)
-  step(1) 
-  expect(c.io.dbgout, 0) 
-  poke(c.io.dbgin, 1)
-  step(1) 
-  expect(c.io.dbgout, 1) 
 } 
 
 class FetchGenerator extends TestGenerator {
