@@ -29,87 +29,100 @@ class RiscyOpDecode extends Module {
     val opInfo = new OpDecode()
   }
 
-  when (io.op(6,2) === UInt(0x0C)  ||
-        io.op(6,2) === UInt(0x0E)) {
-    // R type - ADDW, SUBW, SLLW, SRLW, SRAW, ADD, SUB, SLL, SLT, SLTU, XOR,
-    // SRL, SRA, OR, AND
-    io.opInfo.hasRs1    := UInt(1)
-    io.opInfo.hasRs2    := UInt(1)
-    io.opInfo.hasRd     := UInt(1)
-    io.opInfo.hasFunct3 := UInt(1)
-    io.opInfo.hasFunct7 := UInt(1)
-    io.opInfo.hasImmI   := UInt(0)
-    io.opInfo.hasImmS   := UInt(0)
-    io.opInfo.hasImmB   := UInt(0)
-    io.opInfo.hasImmU   := UInt(0)
-    io.opInfo.hasImmJ   := UInt(0)
-  } .elsewhen (io.op(6,2) === UInt(0x04) ||
-               io.op(6,2) === UInt(0x00) ||
-               io.op(6,2) === UInt(0x19) ||
-               io.op(6,2) === UInt(0x06) ||
-               io.op(6,2) === UInt(0x1C)) {
-    // I type - JALR, ADDI, SLLI, SLTI, SLTIU, XORI, SRLI, SRAI, ORI, ANDI,
-    // ADDIW, SLLIW, SRLIW, SRAIW, LB, LH, LW, LD, LBU, LHU, LWU, CSRRW, CSRRS,
-    // CSRRC, CSRRWI, CSRRSI, CSRRCI
-    io.opInfo.hasRs1    := UInt(1)
-    io.opInfo.hasRs2    := UInt(0)
-    io.opInfo.hasRd     := UInt(1)
-    io.opInfo.hasFunct3 := UInt(1)
-    io.opInfo.hasFunct7 := UInt(1)
-    io.opInfo.hasImmI   := UInt(1)
-    io.opInfo.hasImmS   := UInt(0)
-    io.opInfo.hasImmB   := UInt(0)
-    io.opInfo.hasImmU   := UInt(0)
-    io.opInfo.hasImmJ   := UInt(0)
-  } .elsewhen (io.op(6,2) === UInt(0x08)) {
-    // S type - SB, SH, SW, SD
-    io.opInfo.hasRs1    := UInt(1)
-    io.opInfo.hasRs2    := UInt(1)
-    io.opInfo.hasRd     := UInt(0)
-    io.opInfo.hasFunct3 := UInt(1)
-    io.opInfo.hasFunct7 := UInt(0)
-    io.opInfo.hasImmI   := UInt(0)
-    io.opInfo.hasImmS   := UInt(1)
-    io.opInfo.hasImmB   := UInt(0)
-    io.opInfo.hasImmU   := UInt(0)
-    io.opInfo.hasImmJ   := UInt(0)
-  } .elsewhen (io.op(6,2) === UInt(0x18)) {
-    // SB type - BEQ, BNE, BLT, BGE, BLTE, BGUE
-    io.opInfo.hasRs1    := UInt(1)
-    io.opInfo.hasRs2    := UInt(1)
-    io.opInfo.hasRd     := UInt(0)
-    io.opInfo.hasFunct3 := UInt(1)
-    io.opInfo.hasFunct7 := UInt(0)
-    io.opInfo.hasImmI   := UInt(0)
-    io.opInfo.hasImmS   := UInt(0)
-    io.opInfo.hasImmB   := UInt(1)
-    io.opInfo.hasImmU   := UInt(0)
-    io.opInfo.hasImmJ   := UInt(0)
-  } .elsewhen (io.op(6,2) === UInt(0x0D) ||
-               io.op(6,2) === UInt(0x05)) {
-    // U Type - LUI, AUIPC
-    io.opInfo.hasRs1    := UInt(0)
-    io.opInfo.hasRs2    := UInt(0)
-    io.opInfo.hasRd     := UInt(1)
-    io.opInfo.hasFunct3 := UInt(0)
-    io.opInfo.hasFunct7 := UInt(0)
-    io.opInfo.hasImmI   := UInt(0)
-    io.opInfo.hasImmS   := UInt(0)
-    io.opInfo.hasImmB   := UInt(0)
-    io.opInfo.hasImmU   := UInt(1)
-    io.opInfo.hasImmJ   := UInt(0)
-  } .elsewhen (io.op(6,2) === UInt(0x1B)) {
-    // UJ Type - JAL
-    io.opInfo.hasRs1    := UInt(0)
-    io.opInfo.hasRs2    := UInt(0)
-    io.opInfo.hasRd     := UInt(1)
-    io.opInfo.hasFunct3 := UInt(0)
-    io.opInfo.hasFunct7 := UInt(0)
-    io.opInfo.hasImmI   := UInt(0)
-    io.opInfo.hasImmS   := UInt(0)
-    io.opInfo.hasImmB   := UInt(0)
-    io.opInfo.hasImmU   := UInt(0)
-    io.opInfo.hasImmJ   := UInt(1)
+  when (io.op(1,0) === UInt(0x3)) { 
+    when (io.op(6,2) === UInt(0x0C)  ||
+          io.op(6,2) === UInt(0x0E)) {
+      // R type - ADDW, SUBW, SLLW, SRLW, SRAW, ADD, SUB, SLL, SLT, SLTU, XOR,
+      // SRL, SRA, OR, AND
+      io.opInfo.hasRs1    := UInt(1)
+      io.opInfo.hasRs2    := UInt(1)
+      io.opInfo.hasRd     := UInt(1)
+      io.opInfo.hasFunct3 := UInt(1)
+      io.opInfo.hasFunct7 := UInt(1)
+      io.opInfo.hasImmI   := UInt(0)
+      io.opInfo.hasImmS   := UInt(0)
+      io.opInfo.hasImmB   := UInt(0)
+      io.opInfo.hasImmU   := UInt(0)
+      io.opInfo.hasImmJ   := UInt(0)
+    } .elsewhen (io.op(6,2) === UInt(0x04) ||
+                 io.op(6,2) === UInt(0x00) ||
+                 io.op(6,2) === UInt(0x19) ||
+                 io.op(6,2) === UInt(0x06) ||
+                 io.op(6,2) === UInt(0x1C)) {
+      // I type - JALR, ADDI, SLLI, SLTI, SLTIU, XORI, SRLI, SRAI, ORI, ANDI,
+      // ADDIW, SLLIW, SRLIW, SRAIW, LB, LH, LW, LD, LBU, LHU, LWU, CSRRW, CSRRS,
+      // CSRRC, CSRRWI, CSRRSI, CSRRCI
+      io.opInfo.hasRs1    := UInt(1)
+      io.opInfo.hasRs2    := UInt(0)
+      io.opInfo.hasRd     := UInt(1)
+      io.opInfo.hasFunct3 := UInt(1)
+      io.opInfo.hasFunct7 := UInt(1)
+      io.opInfo.hasImmI   := UInt(1)
+      io.opInfo.hasImmS   := UInt(0)
+      io.opInfo.hasImmB   := UInt(0)
+      io.opInfo.hasImmU   := UInt(0)
+      io.opInfo.hasImmJ   := UInt(0)
+    } .elsewhen (io.op(6,2) === UInt(0x08)) {
+      // S type - SB, SH, SW, SD
+      io.opInfo.hasRs1    := UInt(1)
+      io.opInfo.hasRs2    := UInt(1)
+      io.opInfo.hasRd     := UInt(0)
+      io.opInfo.hasFunct3 := UInt(1)
+      io.opInfo.hasFunct7 := UInt(0)
+      io.opInfo.hasImmI   := UInt(0)
+      io.opInfo.hasImmS   := UInt(1)
+      io.opInfo.hasImmB   := UInt(0)
+      io.opInfo.hasImmU   := UInt(0)
+      io.opInfo.hasImmJ   := UInt(0)
+    } .elsewhen (io.op(6,2) === UInt(0x18)) {
+      // SB type - BEQ, BNE, BLT, BGE, BLTE, BGUE
+      io.opInfo.hasRs1    := UInt(1)
+      io.opInfo.hasRs2    := UInt(1)
+      io.opInfo.hasRd     := UInt(0)
+      io.opInfo.hasFunct3 := UInt(1)
+      io.opInfo.hasFunct7 := UInt(0)
+      io.opInfo.hasImmI   := UInt(0)
+      io.opInfo.hasImmS   := UInt(0)
+      io.opInfo.hasImmB   := UInt(1)
+      io.opInfo.hasImmU   := UInt(0)
+      io.opInfo.hasImmJ   := UInt(0)
+    } .elsewhen (io.op(6,2) === UInt(0x0D) ||
+                 io.op(6,2) === UInt(0x05)) {
+      // U Type - LUI, AUIPC
+      io.opInfo.hasRs1    := UInt(0)
+      io.opInfo.hasRs2    := UInt(0)
+      io.opInfo.hasRd     := UInt(1)
+      io.opInfo.hasFunct3 := UInt(0)
+      io.opInfo.hasFunct7 := UInt(0)
+      io.opInfo.hasImmI   := UInt(0)
+      io.opInfo.hasImmS   := UInt(0)
+      io.opInfo.hasImmB   := UInt(0)
+      io.opInfo.hasImmU   := UInt(1)
+      io.opInfo.hasImmJ   := UInt(0)
+    } .elsewhen (io.op(6,2) === UInt(0x1B)) {
+      // UJ Type - JAL
+      io.opInfo.hasRs1    := UInt(0)
+      io.opInfo.hasRs2    := UInt(0)
+      io.opInfo.hasRd     := UInt(1)
+      io.opInfo.hasFunct3 := UInt(0)
+      io.opInfo.hasFunct7 := UInt(0)
+      io.opInfo.hasImmI   := UInt(0)
+      io.opInfo.hasImmS   := UInt(0)
+      io.opInfo.hasImmB   := UInt(0)
+      io.opInfo.hasImmU   := UInt(0)
+      io.opInfo.hasImmJ   := UInt(1)
+    } .otherwise {
+      io.opInfo.hasRs1    := UInt(0)
+      io.opInfo.hasRs2    := UInt(0)
+      io.opInfo.hasRd     := UInt(0)
+      io.opInfo.hasFunct3 := UInt(0)
+      io.opInfo.hasFunct7 := UInt(0)
+      io.opInfo.hasImmI   := UInt(0)
+      io.opInfo.hasImmS   := UInt(0)
+      io.opInfo.hasImmB   := UInt(0)
+      io.opInfo.hasImmU   := UInt(0)
+      io.opInfo.hasImmJ   := UInt(0)
+    }
   } .otherwise {
     io.opInfo.hasRs1    := UInt(0)
     io.opInfo.hasRs2    := UInt(0)
@@ -126,33 +139,195 @@ class RiscyOpDecode extends Module {
 
 class RiscyOpDecodeTests(c: RiscyOpDecode) extends Tester(c) {
   // R-type
+  poke(c.io.op, 0x33)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, true)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  poke(c.io.op, 0x3B)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, true)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  // I-type
+  poke(c.io.op, 0x13)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, true)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  poke(c.io.op, 0x03)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, true)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  poke(c.io.op, 0x67)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, true)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  poke(c.io.op, 0x1B)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, true)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  poke(c.io.op, 0x73)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, true)
+  expect(c.io.opInfo.hasImmI, true)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  // S type
+  poke(c.io.op, 0x23)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, true)
+  expect(c.io.opInfo.hasRd,  false)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, false)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, true)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  // SB type
+  poke(c.io.op, 0x63)
+  step(1)
+  expect(c.io.opInfo.hasRs1, true)
+  expect(c.io.opInfo.hasRs2, true)
+  expect(c.io.opInfo.hasRd,  false)
+  expect(c.io.opInfo.hasFunct3, true)
+  expect(c.io.opInfo.hasFunct7, false)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, true)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  // U type
+  poke(c.io.op, 0x37)
+  step(1)
+  expect(c.io.opInfo.hasRs1, false)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, false)
+  expect(c.io.opInfo.hasFunct7, false)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, true)
+  expect(c.io.opInfo.hasImmJ, false)
+  
+  poke(c.io.op, 0x17)
+  step(1)
+  expect(c.io.opInfo.hasRs1, false)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, false)
+  expect(c.io.opInfo.hasFunct7, false)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, true)
+  expect(c.io.opInfo.hasImmJ, false)
+
+  // J type
+  poke(c.io.op, 0x6F)
+  step(1)
+  expect(c.io.opInfo.hasRs1, false)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  true)
+  expect(c.io.opInfo.hasFunct3, false)
+  expect(c.io.opInfo.hasFunct7, false)
+  expect(c.io.opInfo.hasImmI, false)
+  expect(c.io.opInfo.hasImmS, false)
+  expect(c.io.opInfo.hasImmB, false)
+  expect(c.io.opInfo.hasImmU, false)
+  expect(c.io.opInfo.hasImmJ, true)
+  
+  // Unvalid instructions
   poke(c.io.op, 0x30)
-  step(0)
-  expect(c.io.opInfo.hasRs1, true)
-  expect(c.io.opInfo.hasRs2, true)
-  expect(c.io.opInfo.hasRd,  true)
-  expect(c.io.opInfo.hasFunct3, true)
-  expect(c.io.opInfo.hasFunct7, true)
+  step(1)
+  expect(c.io.opInfo.hasRs1, false)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  false)
+  expect(c.io.opInfo.hasFunct3, false)
+  expect(c.io.opInfo.hasFunct7, false)
   expect(c.io.opInfo.hasImmI, false)
   expect(c.io.opInfo.hasImmS, false)
   expect(c.io.opInfo.hasImmB, false)
   expect(c.io.opInfo.hasImmU, false)
   expect(c.io.opInfo.hasImmJ, false)
 
-  poke(c.io.op, 0x38)
-  step(0)
-  expect(c.io.opInfo.hasRs1, true)
-  expect(c.io.opInfo.hasRs2, true)
-  expect(c.io.opInfo.hasRd,  true)
-  expect(c.io.opInfo.hasFunct3, true)
-  expect(c.io.opInfo.hasFunct7, true)
+  poke(c.io.op, 0x07)
+  step(1)
+  expect(c.io.opInfo.hasRs1, false)
+  expect(c.io.opInfo.hasRs2, false)
+  expect(c.io.opInfo.hasRd,  false)
+  expect(c.io.opInfo.hasFunct3, false)
+  expect(c.io.opInfo.hasFunct7, false)
   expect(c.io.opInfo.hasImmI, false)
   expect(c.io.opInfo.hasImmS, false)
   expect(c.io.opInfo.hasImmB, false)
   expect(c.io.opInfo.hasImmU, false)
   expect(c.io.opInfo.hasImmJ, false)
 
-  // TODO test others
+
 }
 
 class OpDecodeGenerator extends TestGenerator {

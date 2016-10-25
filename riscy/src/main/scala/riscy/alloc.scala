@@ -62,11 +62,11 @@ class RiscyAlloc extends Module {
   
   // Implementing pipeline for Opdecode and inst as per pipeline stage definition
   val pipelinedOpDecode = Vec.tabulate(4) {
-    i => Reg(opDecodes(i).io.opInfo)
+    i => Reg(next = opDecodes(i).io.opInfo)
   }
 
   val pipelinedInst = Vec.tabulate(4) {
-    i => Reg(io.inst(i))
+    i => Reg(next = io.inst(i))
   }
 
   // Do a simple addition to rename the instructions. Every instruction gets
@@ -259,7 +259,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
 
   poke(c.io.inst(2).valid, 0)
   poke(c.io.inst(3).valid, 0)
-
+  
   poke(c.io.robFree, 64)
   poke(c.io.robFirst, 0)
 
@@ -314,7 +314,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.inst(3).bits.rs1, 0x1)
   poke(c.io.inst(3).bits.rd, 0x1)
   poke(c.io.inst(3).bits.immI, 0xFFF)
-
+  
   poke(c.io.robFree, 62)
   poke(c.io.robFirst, 2)
 
@@ -370,7 +370,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.inst(2).bits.immI, 0xFFF)
 
   poke(c.io.inst(3).valid, 0)
-
+  
   poke(c.io.robFree, 58)
   poke(c.io.robFirst, 6)
 
