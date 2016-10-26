@@ -28,7 +28,7 @@ class RiscyAlloc extends Module {
     // Access the Remap table to find out what the current mappings are (so we
     // can rename)
     val remapPorts = Vec.fill(8) { UInt(OUTPUT, 5) }
-    val remapMapping = Vec.fill(8) { Valid(UInt(INPUT, 6)) }
+    val remapMapping = Vec.fill(8) { Valid(UInt(INPUT, 6)).asInput }
 
     // Arch register access is needed to get reg value for ROB entry
     val rfPorts = Vec.fill(8) { UInt(OUTPUT, 5) }
@@ -36,7 +36,7 @@ class RiscyAlloc extends Module {
 
     // ROB table access to populate next ROB entry
     val robPorts = Vec.fill(8) { UInt(OUTPUT, 6) }
-    val robDest = Vec.fill(8) { Valid(UInt(INPUT, 32)) }
+    val robDest = Vec.fill(8) { Valid(UInt(INPUT, 32)).asInput }
     val robSpec = Bool(INPUT) // Is the last inst speculative?
     val robFree = UInt(INPUT, 6) // How many free entries
     val robFirst = UInt(INPUT, 6) // Index of the first free entry
@@ -95,25 +95,25 @@ class RiscyAlloc extends Module {
       // renaming info can be found in the remap table.
       for (j <- 0 until i) {
         // rs1
-        when (io.inst(j).bits.rs1 === pipelinedInst(i).bits.rd) {
+        when (io.inst(i).bits.rs1 === pipelinedInst(j).bits.rd) {
           // take i's mapping
-          renamedRs1(j).valid := Bool(true)
-          renamedRs1(j).bits := renamedDest(i)
+          renamedRs1(i).valid := Bool(true)
+          renamedRs1(i).bits := renamedDest(j)
         } .otherwise {
           // remap table
-          renamedRs1(j).valid := io.remapMapping(2*j).valid
-          renamedRs1(j).bits := io.remapMapping(2*j).bits
+          renamedRs1(i).valid := io.remapMapping(2*i).valid
+          renamedRs1(i).bits := io.remapMapping(2*i).bits
         }
 
         // rs2
-        when (io.inst(j).bits.rs2 === pipelinedInst(i).bits.rd) {
+        when (io.inst(i).bits.rs2 === pipelinedInst(j).bits.rd) {
           // take i's mapping
-          renamedRs2(j).valid := Bool(true)
-          renamedRs2(j).bits := renamedDest(i)
+          renamedRs2(i).valid := Bool(true)
+          renamedRs2(i).bits := renamedDest(i)
         } .otherwise {
           // remap table
-          renamedRs2(j).valid := io.remapMapping(2*j+1).valid
-          renamedRs2(j).bits := io.remapMapping(2*j+1).bits
+          renamedRs2(i).valid := io.remapMapping(2*i+1).valid
+          renamedRs2(i).bits := io.remapMapping(2*i+1).bits
         }
       }
     }
@@ -311,7 +311,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(1).bits.rs1Map, true)
   expect(c.io.allocROB(1).bits.rs1Rename, 0x00)
   expect(c.io.allocROB(1).bits.rs1Val.valid, false)
-  expect(c.io.allocROB(1).bits.rs1Val.bits, 0x0000)
+  expect(c.io.allocROB(1).bits.rs1Val.bits, 0x34)
   expect(c.io.allocROB(1).bits.rs2Map, false)
   expect(c.io.allocROB(1).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(1).bits.rs2Val.valid, true)
