@@ -47,8 +47,6 @@ class RiscyAlloc extends Module {
     val allocROB = Vec.fill(4) { Valid(new AllocROB()) }
   }
 
-  // TODO: will need some latches to break this into two stages
-
   // TODO: stall if ROB is full
 
   // For each instruction, determine what resources/registers it needs.
@@ -196,17 +194,19 @@ class RiscyAlloc extends Module {
       }
     }
 
-    // This instruction is speculative if either operand is speculative...
-    // TODO: If we do this, then we need to account for speculative instructions
-    // among the four we are decoding...
-    // NOTE: For now, speculative if last instruction was speculative
-    // Which instruction will first become speculative?
-    // Hence have to add jumps as source of speculation
-    // TODO: Loads can not be source of speculation as they are always after store, 
-    // so currently loads are not source of speculation - TBD
-    // also if it is i = 0, rob spec will come from ROB 
-    // otherwise spec will come from last entry
-    
+    // There are two ways we discussed to do the speculative bit:
+    // 1) An instruction is speculative if either operand is speculative. This
+    //    allows us to do optimizations with re-execution, but it is more
+    //    complicated to reason about, so for now...
+    //
+    // 2) An instruction is speculative if last instruction was speculative or
+    //    if this instruction is a jump. NOTE: A jump instruction is itself
+    //    marked with a `speculative` bit, so when squashing instructions, we
+    //    need to be careful not to squash the jump too.  If i = 0, speculative
+    //    bit will come from ROB otherwise spec will come from last entry.
+    //
+    // NOTE: Loads can not be source of speculation as they are always after store, 
+    // so currently loads are not source of speculation - TODO!
     if (i == 0) {
       when (pipelinedInst(i).bits.op === UInt(0x63)) {
         robEntry.spec := UInt(1) 
