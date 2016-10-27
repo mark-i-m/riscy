@@ -100,20 +100,24 @@ class RiscyAlloc extends Module {
     // instruction g, k < g < i that also renames i's operand.
     val rs1Possible = Array.tabulate(4) { k => 
       (prevRs1IsRenamed(k) && 
-      Vec.tabulate(4) { g => (
+      Vec.tabulate(4) { g => 
+        Bool(g <= k) ||
+        Bool(g >= i) ||
         Bool(k < g) && 
         Bool(g < i) && 
         !prevRs1IsRenamed(g)
-      )}.forall(identity _)) -> UInt(k)
+      }.forall(identity _)) -> UInt(k)
     }
     val prevRs1 = MuxCase(UInt(0), rs1Possible)
     val rs2Possible = Array.tabulate(4) { k => 
       (prevRs2IsRenamed(k) && 
-      Vec.tabulate(4) { g => (
+      Vec.tabulate(4) { g =>
+        Bool(g <= k) ||
+        Bool(g >= i) ||
         Bool(k < g) && 
         Bool(g < i) && 
         !prevRs2IsRenamed(g)
-      )}.forall(identity _)) -> UInt(k)
+      }.forall(identity _)) -> UInt(k)
     }
     val prevRs2 = MuxCase(UInt(0), rs2Possible)
 
@@ -121,14 +125,14 @@ class RiscyAlloc extends Module {
     // that is currently also being renamed if any entry in prevRs1IsRenamed is
     // true. If this is the case, prevRs1 specifies which previous instruction
     // renames i's operand. Otherwise, take the entry from the remap table.
-    when (prevRs1IsRenamed.forall(identity _)) {
+    when (prevRs1IsRenamed.exists(identity _)) {
       renamedRs1(i).valid := Bool(true)
       renamedRs1(i).bits := renamedDest(prevRs1)
     } .otherwise {
       renamedRs1(i).valid := io.remapMapping(2*i).valid
       renamedRs1(i).bits := io.remapMapping(2*i).bits
     }
-    when (prevRs2IsRenamed.forall(identity _)) {
+    when (prevRs2IsRenamed.exists(identity _)) {
       renamedRs2(i).valid := Bool(true)
       renamedRs2(i).bits := renamedDest(prevRs2)
     } .otherwise {
