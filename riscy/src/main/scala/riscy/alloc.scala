@@ -396,9 +396,9 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.robSpec, false)
   poke(c.io.remapMapping(0).bits, 0)
   poke(c.io.remapMapping(0).valid, 1)
-  poke(c.io.remapMapping(1).valid, 1)
   poke(c.io.remapMapping(2).valid, 1)
-  poke(c.io.remapMapping(3).valid, 1)
+  poke(c.io.remapMapping(4).valid, 1)
+  poke(c.io.remapMapping(6).valid, 1)
  
   step(1)
 
@@ -526,8 +526,8 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.robSpec, false)
   poke(c.io.remapMapping(0).bits, 5)
   poke(c.io.remapMapping(0).valid, 1)
-  poke(c.io.remapMapping(1).valid, 1)
   poke(c.io.remapMapping(2).valid, 1)
+  poke(c.io.remapMapping(4).valid, 1)
 
   step(1)
 
@@ -621,7 +621,21 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
 
   poke(c.io.robFree, 55)
   poke(c.io.robFirst, 9)
+  
+  poke(c.io.robSpec, false)
+  poke(c.io.remapMapping(0).valid, 0)
+  poke(c.io.remapMapping(1).valid, 0)
+  poke(c.io.remapMapping(2).valid, 0)
+  poke(c.io.remapMapping(3).valid, 0)
+  poke(c.io.remapMapping(4).valid, 0)
+  poke(c.io.remapMapping(5).valid, 0)
 
+  poke(c.io.rfValues(0), 0x1111)
+  poke(c.io.rfValues(1), 0x2222)
+  poke(c.io.rfValues(2), 0x3333)
+  poke(c.io.rfValues(3), 0x4444)
+  poke(c.io.rfValues(4), 0x5555)
+  poke(c.io.rfValues(5), 0x6666)
   step(1)
 
 
