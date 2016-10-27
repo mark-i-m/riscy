@@ -39,9 +39,12 @@ branches:
 env:
   matrix:
     - MODULE=HelloModule
-    - MODULE=RegFile
     - MODULE=Fetch
-
+    - MODULE=Decode
+    - MODULE=Alloc
+    - MODULE=ROB
+    - MODULE=RegFile
+    - MODULE=OpDecode
 
 before_install:
   - export CXX=g++-4.8 CC=gcc-4.8
