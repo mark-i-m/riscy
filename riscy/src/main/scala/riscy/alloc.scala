@@ -96,7 +96,7 @@ class RiscyAlloc extends Module {
       for (j <- 0 until i) {
         // rs1
         when (io.inst(i).bits.rs1 === pipelinedInst(j).bits.rd) {
-          // take i's mapping
+          // take j's mapping
           renamedRs1(i).valid := Bool(true)
           renamedRs1(i).bits := renamedDest(j)
         } .otherwise {
@@ -107,9 +107,9 @@ class RiscyAlloc extends Module {
 
         // rs2
         when (io.inst(i).bits.rs2 === pipelinedInst(j).bits.rd) {
-          // take i's mapping
+          // take j's mapping
           renamedRs2(i).valid := Bool(true)
-          renamedRs2(i).bits := renamedDest(i)
+          renamedRs2(i).bits := renamedDest(j)
         } .otherwise {
           // remap table
           renamedRs2(i).valid := io.remapMapping(2*i+1).valid
