@@ -6,7 +6,8 @@ object IcParams {
   val nSets = 64
   val nWays = 2
   val addr_width = 32
-  val insts_per_cache_line = 8
+  val fetch_width = 4
+  val insts_per_cache_line = fetch_width * 2
   val cache_line_width = addr_width * insts_per_cache_line
 
   val tag_bits = 21
@@ -29,15 +30,25 @@ class ICacheReq extends Bundle {
 
 // Emits out a cache line.
 class ICacheResp extends Bundle {
-  //val ready = Bool(INPUT)
-  //val valid = Bool(OUTPUT)
-  val datablock = Bits(width = IcParams.cache_line_width/2)
+  // This ready signal can be used by the next stage to stall Icache
+  val ready = Bool(INPUT)
+  // Indicates whether Icache encountered a hit.
+  val valid = Bool(OUTPUT)
+  // Indicates whether the Icache is available for accepting requests
+  val idle = Bool(OUTPUT)
+  // An array of four 32b instructions emitted out to the Decode stage
+  val inst = Vec(IcParams.fetch_width, Bits(OUTPUT, width = IcParams.addr_width))
+
+  // Debug signals
+  // The original request addr for which the above 4 instructions were
+  // generated. This is only needed for unit testing
+  val addr = Bits(OUTPUT, width = IcParams.addr_width)
 }
 
 class ICache extends Module {
   val io = new Bundle {
     val req = new ICacheReq
-    val resp = Decoupled(new ICacheResp)
+    val resp = new ICacheResp
     val mem = new DummyMem
   }
   require(isPow2(IcParams.nSets) && isPow2(IcParams.nWays))
@@ -67,16 +78,27 @@ class ICache extends Module {
   // output signals - Two cycle latency
   val s2_valid = Reg(init=Bool(false))
   val s2_hit = Reg(init=Bool(false))
+  val s2_miss = Reg(init=Bool(false))
   val s2_tag_hit = Vec(IcParams.nWays, Reg(init=Bool(false)))
   val s2_dout = Vec(IcParams.nWays, Reg(UInt(width = IcParams.cache_line_width/2)))
+  val s2_vaddr = Reg(UInt(0, width = IcParams.addr_width))
 
   // Time starts now!
   s1_hit := s1_valid && s1_any_tag_hit
   s1_miss := s1_valid && !s1_any_tag_hit
   rdy := state === s_ready && !s1_miss
 
-  io.resp.bits.datablock := Mux1H(s2_tag_hit, s2_dout)
+  val dout = Mux1H(s2_tag_hit, s2_dout)
+  for (i <- 0 until IcParams.fetch_width) {
+    io.resp.inst(i) := dout(32*i+31, 32*i)
+  }
+  // 
   io.resp.valid := s2_hit
+  // The Icache is deemed idle if it saw a hit or didn't see a miss.
+  // This is basically useful for the first few cycles where we will have
+  // neither a hit nor a miss.
+  io.resp.idle := (s2_hit) || (!s2_miss && state === s_ready)
+  io.resp.addr := s2_vaddr
 
   val s0_valid = Mux(io.req.valid && rdy, io.req.valid, s1_valid)
   val s0_vaddr = Mux(io.req.valid && rdy, io.req.addr, s1_vaddr)
@@ -127,7 +149,10 @@ class ICache extends Module {
   //s2_valid := s1_valid && rdy
   s2_valid := s1_valid
   s2_hit := s1_hit
+  s2_miss := s1_miss
   s2_tag_hit := s1_tag_hit
+  s2_vaddr := s1_vaddr
+
   // Need to rotate data out here
   for (i <- 0 until IcParams.nWays) {
     switch (s1_offset) {
@@ -191,37 +216,58 @@ class ICacheTests(c: ICache) extends Tester(c) {
   // cycles for determining hit/miss, 2 cycles for refilling the cache by
   // DummyMem and 1 more cycle for accessing cache after refill. 
   //
-  // Verify that from cycle #5 onwards, we get a hit every cycle
-  poke(c.io.req.addr, 0)
+  // Verify that from cycle #5 onwards, we get a hit every cycle.
+ 
+  // We expect the Icache to be ready to receive requests at this point
+  expect(c.io.resp.idle, true)
+  poke(c.io.req.addr, 0x0)
   step(1)
-  expect(c.io.resp.valid, false)
 
+  // Cycle 1
+  peek(c.s2_miss)
+  peek(c.state)
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, true)
   step(1)
-  expect(c.io.resp.valid, false)
 
+  // Cycle 2
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
   step(1)
-  expect(c.io.resp.valid, false)
-  // Before cycle #4 begins, put in a new request
-  poke(c.io.req.addr, 4)
 
+  // Cycle 3
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
   step(1)
-  expect(c.io.resp.valid, false)
-  poke(c.io.req.addr, 8)
 
-  for (i <- 3 until 8) {
-    step(1)
+  // Cycle 4
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
+  // Before cycle #5 begins, put in a new request
+  poke(c.io.req.addr, 0x4)
+  step(1)
+
+  for (i <- 2 until 8) {
     expect(c.io.resp.valid, true)
-    peek(c.io.resp.bits.datablock)
+    expect(c.io.resp.idle, true)
+    expect(c.io.resp.addr, (i-2)*4)
+    peek(c.io.resp.inst)
     // Send new request
     poke(c.io.req.addr, i*4)
+    step(1)
   }
-  step(1)
+  // Cycle 11
   expect(c.io.resp.valid, true)
-  peek(c.io.resp.bits.datablock)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 24)
+  peek(c.io.resp.inst)
   step(1)
-  expect(c.io.resp.valid, true)
-  peek(c.io.resp.bits.datablock)
 
+  // Cycle 12
+  expect(c.io.resp.valid, true)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 28)
+  peek(c.io.resp.inst)
 
   /*
    * Testcases to be added:
