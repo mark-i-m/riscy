@@ -32,11 +32,11 @@ class RiscyAlloc extends Module {
 
     // Arch register access is needed to get reg value for ROB entry
     val rfPorts = Vec.fill(8) { UInt(OUTPUT, 5) }
-    val rfValues = Vec.fill(8) { UInt(INPUT, 32) }
+    val rfValues = Vec.fill(8) { UInt(INPUT, 64) }
 
     // ROB table access to populate next ROB entry
     val robPorts = Vec.fill(8) { UInt(OUTPUT, 6) }
-    val robDest = Vec.fill(8) { Valid(UInt(INPUT, 32)).asInput }
+    val robDest = Vec.fill(8) { Valid(UInt(INPUT, 64)).asInput }
     val robSpec = Bool(INPUT) // Is the last inst speculative?
     val robFree = UInt(INPUT, 6) // How many free entries
     val robFirst = UInt(INPUT, 6) // Index of the first free entry
