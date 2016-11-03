@@ -9,4 +9,4 @@ $(TESTS) : %.test :
 	$(SBT) "run Test riscy.$*Generator --backend --genHarness --compile --test --vcd"
 
 clean: 
-	rm -f *.h *.cpp *.o
+	rm -f *.h *.cpp *.o *.vcd
