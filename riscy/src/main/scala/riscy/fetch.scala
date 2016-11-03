@@ -3,28 +3,48 @@ package riscy
 import Chisel._
 
 /**
- * Implementation of fetch stage
+ * 4-wide instruction fetch block for RISCY
  */
 
+// The output signals for Decode stage are:
+// 1. Four 32b instructions: Fetch.icache.io.resp.inst(i)
+// 2. Four instruction valid bits: Fetch.io.instValid(i)
+//
 class Fetch extends Module {
   val io = new Bundle {
+    /* INPUTS */
     val btbAddr = UInt(INPUT, 32)
     val rasAddr = UInt(INPUT, 32)
     val isBranchTaken = Bool(INPUT)
     val branchMispredAddr = UInt(INPUT, 32)
     val isBranchMispred = Bool(INPUT)
+    // Is this instruction a return from a subroutine call?
     val isReturn = Bool(INPUT)
     val stall = Bool(INPUT)
+
+    // Address corresponding to the instructions received from Icache
     val icacheRespAddr = UInt(INPUT, 32)
     val icacheRespValues = Vec.fill(4) { UInt(INPUT, 32) }
+    // Did we get a hit in Icache?
     val hit_notmiss = Bool(INPUT)
+    // Is the Icache ready to fetch at a new address?
+    val icacheReady = Bool(INPUT)
 
+    /* OUTPUTS */
+    // What address should we request the Icache to fetch?
     val icacheReqAddr = UInt(OUTPUT, 32)
+    // Instructions to be passed to the decode stage
     val insts = Vec.fill(4) { UInt(OUTPUT, 32) }
+    // Are the instructions to be passed over to the decode valid?
     val instValid = Vec.fill(4) { Bool(OUTPUT) }
+    // PC to be passed down the pipeline
     val fetchBlockPC = UInt(OUTPUT, 32)
   }
+  val icache = Module(new ICache())
 
+  /* PC value takes a cycle to reach Icache. We start it at 0x10 so that we
+   * don't lose the first cycle. The pipeline register which PC feeds starts at
+   * 0x0 */
   val PC = Reg(init = UInt(16, width = 32))
 
   val nextAddr = Mux(io.isBranchTaken, io.btbAddr, PC)
@@ -34,6 +54,7 @@ class Fetch extends Module {
   addrSelect := Cat(io.isBranchMispred, io.isReturn).toBits().toUInt()
   addr := nextAddr
 
+  /* 4-way multiplexer to choose fetch address */
   when (addrSelect === UInt(0)) {
     addr := nextAddr
   } .elsewhen (addrSelect === UInt(1)) {
@@ -44,24 +65,41 @@ class Fetch extends Module {
     addr := io.branchMispredAddr
   }
 
+  /* Register which holds the address to be sent to Icache. PC value appears here
+   * after one cycle delay */
   val fetchAddr = Reg(init = UInt(0, width = 32))
-  when (io.hit_notmiss) {
+  // Used to correct requested PC incase Icache tells us that it is not ready
+  val prevFetchAddr = Reg(init = UInt(0, width = 32))
+  val icache_ready = icache.io.resp.idle || icache.io.resp.valid
+
+  // Shift in a new address only is the cache is ready to accept the old address
+  when (icache_ready) {
     fetchAddr := addr
-  } .otherwise {
-    fetchAddr := fetchAddr
+    prevFetchAddr := fetchAddr
   }
 
-  io.icacheReqAddr := fetchAddr
+  // Send out the address to Icache.
+  // NOTE - We need to reuse the previously issued request if Icache is not
+  // ready. This is because Icache only keeps a hold of the addr which
+  // generated a miss 2 cycles ago and drops the one which was issued 1 cycle
+  // ago.
+  icache.io.req.addr := Mux(icache_ready, fetchAddr, prevFetchAddr)
+  icache.io.req.valid := Bool(true)
 
   val nextPC = UInt(width = 32)
   val nextPCOffset = UInt(width = 5)
   nextPCOffset := UInt(16)
+
+  // Calculate next sequential fetch address. Don't increment if stalled
   nextPC := addr + Mux(io.stall, UInt(0), nextPCOffset)
 
-  when ((io.stall === Bool(false)) && io.hit_notmiss) {
+  // Increment PC
+  when ((io.stall === Bool(false)) && icache_ready) {
     PC := nextPC
   }
 
+  /* Assuming a 32B cache block, calculate the next sequential fetch address
+   * when we get close to a cache line boundary */
   when (addr(4, 0) === UInt(20)) {
     nextPCOffset := UInt(12)
   } .elsewhen (addr(4,0) === UInt(24)) {
@@ -72,22 +110,24 @@ class Fetch extends Module {
     nextPCOffset := UInt(16)
   }
 
-  when (io.hit_notmiss && (addr(4,0) === UInt(20))) {
+  /* Figure out which instructions are valid if we fetched close to a cache
+   * line boundary */
+  when (icache.io.resp.valid && (addr(4,0) === UInt(20))) {
     io.instValid(0) := Bool(true)
     io.instValid(1) := Bool(true)
     io.instValid(2) := Bool(true)
     io.instValid(3) := Bool(false)
-  } .elsewhen (io.hit_notmiss && (addr(4,0) === UInt(24))) {
+  } .elsewhen (icache.io.resp.valid && (addr(4,0) === UInt(24))) {
     io.instValid(0) := Bool(true)
     io.instValid(1) := Bool(true)
     io.instValid(2) := Bool(false)
     io.instValid(3) := Bool(false)
-  } .elsewhen (io.hit_notmiss && (addr(4,0) === UInt(28))) {
+  } .elsewhen (icache.io.resp.valid && (addr(4,0) === UInt(28))) {
     io.instValid(0) := Bool(true)
     io.instValid(1) := Bool(false)
     io.instValid(2) := Bool(false)
     io.instValid(3) := Bool(false)
-  } .elsewhen (io.hit_notmiss) {
+  } .elsewhen (icache.io.resp.valid) {
     io.instValid(0) := Bool(true)
     io.instValid(1) := Bool(true)
     io.instValid(2) := Bool(true)
@@ -99,14 +139,31 @@ class Fetch extends Module {
     io.instValid(3) := Bool(false)
   }
 
+  // Pass the PC value down the pipeline
   io.fetchBlockPC := io.icacheRespAddr
 
   for (i <- 0 until 4) {
-    io.insts(i) := io.icacheRespValues(i)
+    io.insts(i) := icache.io.resp.inst(i)
   }
 }
 
 class FetchTests(c: Fetch) extends Tester(c) { 
+  // Utility functions
+  def expect_all_inst_validity(c : Fetch, value : Boolean) = {
+    expect(c.io.instValid(0), value)
+    expect(c.io.instValid(1), value)
+    expect(c.io.instValid(2), value)
+    expect(c.io.instValid(3), value)
+  }
+  def peek_regs(c : Fetch) = {
+    // Peek important registers. Feel free to comment out anything unimportant
+    // to you
+    peek(c.PC)
+    peek(c.fetchAddr)
+    peek(c.prevFetchAddr)
+  }
+
+  // Setup necessary stuff for testcase
   poke(c.io.btbAddr, 0xbbbbbbbb)
   poke(c.io.rasAddr, 0xdddddddd)
   poke(c.io.isBranchTaken, false)
@@ -114,61 +171,81 @@ class FetchTests(c: Fetch) extends Tester(c) {
   poke(c.io.isBranchMispred, false)
   poke(c.io.isReturn, false)
   poke(c.io.stall, false)
-  poke(c.io.icacheRespAddr, 0xcccccccc)
-  poke(c.io.icacheRespValues(0), 0x11111111)
-  poke(c.io.icacheRespValues(1), 0x22222222)
-  poke(c.io.icacheRespValues(2), 0x33333333)
-  poke(c.io.icacheRespValues(3), 0x44444444)
-  poke(c.io.hit_notmiss, 0)
-  expect(c.io.icacheReqAddr, 0x0)
-  expect(c.io.instValid(0), false)
-  expect(c.io.instValid(1), false)
-  expect(c.io.instValid(2), false)
-  expect(c.io.instValid(3), false)
+
+  // We expect the Icache to be ready for taking responses ie. idle should be
+  // true. 
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.req.addr, 0x0)
+  expect_all_inst_validity(c, false)
+  // It will take us 5 cycles to load the first block into the cache
   step(1)
 
-  expect(c.io.icacheReqAddr, 0x0)
-  expect(c.io.instValid(0), false)
-  expect(c.io.instValid(1), false)
-  expect(c.io.instValid(2), false)
-  expect(c.io.instValid(3), false)
+  // Cycle 1 - Icache has taken in 0x0. It can take in another request
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.req.addr, 0x10)
+  expect_all_inst_validity(c, false)
+  peek_regs(c)
   step(1)
 
-  expect(c.io.icacheReqAddr, 0x0)
-  expect(c.io.instValid(0), false)
-  expect(c.io.instValid(1), false)
-  expect(c.io.instValid(2), false)
-  expect(c.io.instValid(3), false)
-  poke(c.io.hit_notmiss, 1)
-  poke(c.io.icacheRespAddr, 0x0)
+  // Cycle 2 - Icache will have seen a miss. It will now proceed to refill.
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x10)
+  expect_all_inst_validity(c, false)
+  peek_regs(c)
   step(1)
 
-  expect(c.io.icacheReqAddr, 0x10)
-  expect(c.io.instValid(0), true)
-  expect(c.io.instValid(1), true)
-  expect(c.io.instValid(2), true)
-  expect(c.io.instValid(3), true)
+  // Cycle 3 - Icache busy refilling
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x10)
+  expect_all_inst_validity(c, false)
+  peek_regs(c)
   step(1)
 
-  expect(c.io.icacheReqAddr, 0x20)
-  poke(c.io.hit_notmiss, 1)
-  poke(c.io.icacheRespAddr, 0x10)
+  // Cycle 4 - Icache busy refilling
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x10)
+  expect_all_inst_validity(c, false)
+  peek_regs(c)
   step(1)
 
-  expect(c.io.icacheReqAddr, 0x30)
-  poke(c.io.hit_notmiss, 0)
-  poke(c.io.icacheRespAddr, 0x20)
+  // Cycle 5 - We should have gotten a hit now for 0x0
+  expect(c.icache.io.resp.valid, true)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.resp.addr, 0x0)
+  expect(c.icache.io.req.addr, 0x20)
+  expect_all_inst_validity(c, true)
+  peek_regs(c)
   step(1)
 
-  expect(c.io.icacheReqAddr, 0x30)
+  // Cycle 6 - Another hit
+  expect(c.icache.io.resp.valid, true)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.resp.addr, 0x10)
+  expect(c.icache.io.req.addr, 0x30)
+  expect_all_inst_validity(c, true)
+  peek_regs(c)
   step(1)
 
-  expect(c.io.icacheReqAddr, 0x30)
-  poke(c.io.hit_notmiss, 1)
-  poke(c.io.icacheRespAddr, 0x20)
+  // Cycle 7 - This should be a miss since the 0x20 requested 2 cycles ago
+  // doesn't exist in cache
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x30)
+  expect_all_inst_validity(c, false)
+  peek_regs(c)
   step(1)
 
-  expect(c.io.icacheReqAddr, 0x40)
+  // Cycle 8 - Icache busy filling response
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x30)
+  expect_all_inst_validity(c, false)
+  peek_regs(c)
 } 
 
 class FetchGenerator extends TestGenerator {
