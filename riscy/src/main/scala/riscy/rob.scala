@@ -11,14 +11,15 @@ class ROBEntry extends DecodeIns {
   val rs2Rename = UInt(OUTPUT, 6)
 
   // Available operands with ready bits
-  val rs1Val = Valid(UInt(OUTPUT, 32))
-  val rs2Val = Valid(UInt(OUTPUT, 32))
+  val rs1Val = Valid(UInt(OUTPUT, 64))
+  val rs2Val = Valid(UInt(OUTPUT, 64))
 
   // Destination register with ready bit
-  val rdVal = Valid(UInt(OUTPUT, 32))
+  val rdVal = Valid(UInt(OUTPUT, 64))
 
   // Unique instruction tag
-  val tag = UInt(OUTPUT, 32) // TODO: How large? Can we make it the ROB entry number? 
+  // TODO: for now, it is just the ROB entry number...
+  val tag = UInt(OUTPUT, 6)
 
   // Speculative bit
   val spec = Bool(OUTPUT)
@@ -39,8 +40,8 @@ class ROB extends Module {
     // valid if there was a misprediction and invalid otherwise.
     //
     // mispredTarget is the correct target of the mispredicted branch.
-    val mispredPC = Valid(UInt(OUTPUT, 32))
-    val mispredTarget = UInt(OUTPUT, 32)
+    val mispredPC = Valid(UInt(OUTPUT, 64))
+    val mispredTarget = UInt(OUTPUT, 64)
   }
 
   // The register remap table
@@ -54,7 +55,7 @@ class ROB extends Module {
   val rob = Vec.fill(64) { new ROBEntry() }
 
   // The Architectural register file
-  val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 32)))
+  val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64)))
 
 
 
