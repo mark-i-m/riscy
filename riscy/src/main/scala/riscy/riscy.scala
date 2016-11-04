@@ -4,13 +4,13 @@ import Chisel._
 
 // The whole processor!
 class Riscy extends Module {
-  val io = new Bundle {
-    // TODO
-  }
+  val io = new Bundle { }
+
+  var memory = Module(new BigMemory(64, 1 << 26)); // 1 gB memory
 
   // TODO: wire things up
-  var fetch = new Fetch();
-  var icache = new ICache();
-  val alloc = new Alloc();
-  val rob = new ROB();
+  var fetch = Module(new Fetch());
+  var icache = Module(new ICache());
+  val alloc = Module(new RiscyAlloc());
+  val rob = Module(new ROB());
 }
