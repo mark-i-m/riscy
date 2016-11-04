@@ -21,7 +21,7 @@ $(TESTS) : %.test :
 
 # Run benchmarks with `make <Bench name>.bench`
 $(BENCHES) : %.bench :
-	./riscy_emu $*
+	./riscy_emu $* $*.log $*.vcd
 
 # Build the emulator
 emulator.h Riscy.h Riscy.cpp: $(SCALA_FILES)
