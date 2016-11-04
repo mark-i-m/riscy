@@ -11,7 +11,7 @@ class BigMemory(lineBytes: Int, numLines: Int) extends Module {
 
   // TODO: make it have 100 cyc delay
 
-  println("Creating BigMemory of size" + ((lineBytes * numLines) >> 10) + " kB")
+  println("Creating BigMemory of size " + ((lineBytes * numLines) >> 10) + " kB")
 
   val memBank = Mem(Bits(width = 8 * lineBytes), numLines)
 

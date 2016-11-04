@@ -6,7 +6,7 @@ import Chisel._
 class Riscy extends Module {
   val io = new Bundle { }
 
-  var memory = Module(new BigMemory(64, 1 << 26)); // 1 gB memory
+  var memory = Module(new BigMemory(64, 1 << 24)); // 1 gB memory
 
   // TODO: wire things up
   var fetch = Module(new Fetch());
