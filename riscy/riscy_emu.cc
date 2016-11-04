@@ -59,11 +59,11 @@ int main(int argc, char** argv) {
     fprintf(vcdfile, "$upscope $end\n");
 
     // The Riscy generated code
-    Riscy_t riscy;
+    Riscy_t* riscy = new Riscy_t;
 
     // Set random seed
     srand(random_seed);
-    riscy.init(random_seed != 0);
+    riscy->init(random_seed != 0);
 
     // TODO: What about Tracer_t in example?
     //  https://github.com/ucb-bar/riscv-sodor/blob/master/emulator/common/tracer.h/cpp
@@ -93,10 +93,10 @@ int main(int argc, char** argv) {
         // Copy words into the Riscy memory.
         // Make sure we don't copy too much memory
         if (mem_idx < (memory_size/4)) {
-            riscy.Riscy_memory__memBank.put(mem_idx  , LIT<32>(m[0]));
-            riscy.Riscy_memory__memBank.put(mem_idx+1, LIT<32>(m[1]));
-            riscy.Riscy_memory__memBank.put(mem_idx+2, LIT<32>(m[2]));
-            riscy.Riscy_memory__memBank.put(mem_idx+3, LIT<32>(m[3]));
+            riscy->Riscy_memory__memBank.put(mem_idx  , LIT<32>(m[0]));
+            riscy->Riscy_memory__memBank.put(mem_idx+1, LIT<32>(m[1]));
+            riscy->Riscy_memory__memBank.put(mem_idx+2, LIT<32>(m[2]));
+            riscy->Riscy_memory__memBank.put(mem_idx+3, LIT<32>(m[3]));
         }
         mem_idx += 4;
     }
@@ -109,12 +109,12 @@ int main(int argc, char** argv) {
     // TODO: Might need the "HTIF" stuff here to discover end of workload.
     //   https://github.com/ucb-bar/riscv-sodor/blob/master/emulator/common/htif_emulator.h
     while(trace_count == max_cycles) {
-        riscy.clock_lo(LIT<1>(0));
+        riscy->clock_lo(LIT<1>(0));
 
-        riscy.print(logfile);
-        riscy.dump(vcdfile, trace_count);
+        riscy->print(logfile);
+        riscy->dump(vcdfile, trace_count);
 
-        riscy.clock_hi(LIT<1>(0));
+        riscy->clock_hi(LIT<1>(0));
 
         trace_count++;
     }
@@ -122,6 +122,8 @@ int main(int argc, char** argv) {
     // Clean up
     fclose(vcdfile);
     fclose(logfile);
+    
+    delete riscy;
 
     return 0;
 }

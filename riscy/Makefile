@@ -2,7 +2,7 @@
 MODULES=HelloModule Fetch Decode Alloc ROB RegFile OpDecode ICache
 
 # List of BENCHES for integration testing
-BENCHES=
+BENCHES=Hello.hex.bench
 
 ###############################################################################
 # Some configurations
@@ -21,14 +21,14 @@ $(TESTS) : %.test :
 
 # Run benchmarks with `make <Bench name>.bench`
 $(BENCHES) : %.bench :
-	./riscy_emu $* $*.log $*.vcd
+	./riscy_emu bench/$* $*.log $*.vcd
 
 # Build the emulator
 emulator.h Riscy.h Riscy.cpp: $(SCALA_FILES)
 	$(SBT) run
 
 riscy_emu: riscy_emu.cc emulator.h Riscy.h Riscy.cpp
-	g++ -o riscy_emu $^
+	g++ -o riscy_emu -ggdb -O0 $^
 
 # Clean up!
 clean: 
