@@ -68,6 +68,7 @@ class ROB extends Module {
   // - Instructions with an rd should actually write the Arch reg file
   // - Branches that were mispredicted should trigger cleanup at this point
   //   (TODO: possibly can be done earlier?)
+  // - TODO: move the head pointer
   
   // For convenience, create label wires for the four instructions at the head
   // of ROB.
