@@ -31,6 +31,10 @@ int main(int argc, char** argv) {
     const unsigned random_seed = (unsigned)time(NULL) ^ (unsigned)getpid();
     const int memory_size = (1 << 30); // 1GB
     const int disasm_len = 24;
+    const uint64_t max_cycles = 1 << 30; // 1G cycles
+
+    // Counter for emulation
+    uint64_t trace_count = 0;
 
     // Check args
     if(argc < 4) {
@@ -42,7 +46,9 @@ int main(int argc, char** argv) {
     log = argv[2];
     vcd = argv[3];
 
-    // TODO: open other files
+    // Open log file
+    logfile = fopen(log, "w");
+    assert(logfile);
 
     // Open vcd file
     vcdfile = fopen(vcd, "w");
@@ -95,16 +101,27 @@ int main(int argc, char** argv) {
         mem_idx += 4;
     }
 
+    in.close();
+
     std::cerr << "Loaded memory" << std::endl;
 
-    // TODO: start the simulation
-    // Might need the "HTIF" stuff here:
+    // Run the emulation
+    // TODO: Might need the "HTIF" stuff here to discover end of workload.
     //   https://github.com/ucb-bar/riscv-sodor/blob/master/emulator/common/htif_emulator.h
+    while(trace_count == max_cycles) {
+        riscy.clock_lo(LIT<1>(0));
+
+        riscy.print(logfile);
+        riscy.dump(vcdfile, trace_count);
+
+        riscy.clock_hi(LIT<1>(0));
+
+        trace_count++;
+    }
 
     // Clean up
     fclose(vcdfile);
-
-    // TODO: close other files
+    fclose(logfile);
 
     return 0;
 }
