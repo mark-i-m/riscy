@@ -20,7 +20,7 @@ $(TESTS) : %.test :
 	$(SBT) "run riscy.$*Generator"
 
 # Run benchmarks with `make <Bench name>.bench`
-$(BENCHES) : %.bench :
+$(BENCHES) : %.bench : ./riscy_emu
 	./riscy_emu bench/$* $*.log $*.vcd
 
 # Build the emulator

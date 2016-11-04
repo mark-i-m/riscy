@@ -25,20 +25,14 @@ branches:
 
 env:
   matrix:
-    - MODULE=HelloModule.test
-    - MODULE=Fetch.test
-    - MODULE=Decode.test
-    - MODULE=Alloc.test
-    - MODULE=ROB.test
-    - MODULE=RegFile.test
-    - MODULE=OpDecode.test
-    - MODULE=Hello.hex.bench
+    - TARGETS='HelloModule.test Fetch.test Decode.test Alloc.test OpDecode.test RegFile.test ROB.test'
+    - TARGETS=Hello.hex.bench
 
 before_install:
   - export CXX=g++-4.8 CC=gcc-4.8
 
 script:
-  - make -C riscy ${MODULE}
+  - make -C riscy ${TARGETS}
 
 before_cache:
   - ls -tr regression/install | tail -n+2 | sed s@^@regression/install/@ | xargs rm -rf
