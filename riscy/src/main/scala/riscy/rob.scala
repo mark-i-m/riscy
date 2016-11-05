@@ -17,17 +17,37 @@ class ROBEntry extends DecodeIns {
   // Destination register with ready bit
   val rdVal = Valid(UInt(OUTPUT, 64))
 
-  // Unique instruction tag
-  // TODO: for now, it is just the ROB entry number...
+  // Unique instruction tag (ROB entry number)
+  val pc = UInt(OUTPUT, 64)
   val tag = UInt(OUTPUT, 6)
 
-  // Speculative bit
-  val spec = Bool(OUTPUT)
+  // From OpDecode:
+  // - does this instruction have a dest reg
+  // - is this instruction a jump
+  val hasRd = Bool(OUTPUT)
+  val isSt = Bool(OUTPUT)
+  
+  // From BP:
+  // - was this branch predicted taken? 1 => T, 0 => NT
+  val predTaken = Bool(OUTPUT)
+  val isMispredicted = Bool(OUTPUT)
+}
+
+class WBValue extends Bundle {
+  // Which physical reg?
+  val id = Valid(UInt(INPUT, 6))
+  // The value to write back
+  val value = UInt(INPUT, 32)
 }
 
 class ROB extends Module {
   val io = new Bundle {
-    // TODO: what is the interface with writeback?
+    // Get signals from the FOO
+    val fooALU0 = new WBValue
+    val fooALU1 = new WBValue
+    val fooALU2 = new WBValue
+    val fooALU3 = new WBValue
+    val fooLSQ  = new WBValue
 
     // Signal to load/store to actually issue a store.
     // There is exactly one store that could be at the head of the LSQ, so we
@@ -53,6 +73,7 @@ class ROB extends Module {
 
   // The ROB storage structure
   val rob = Vec.fill(64) { new ROBEntry() }
+  val head = Reg(next = UInt(width = 6))
 
   // The Architectural register file
   val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64)))
@@ -68,31 +89,34 @@ class ROB extends Module {
   // - Instructions with an rd should actually write the Arch reg file
   // - Branches that were mispredicted should trigger cleanup at this point
   //   (TODO: possibly can be done earlier?)
-  // - TODO: move the head pointer
+  // - Move the head pointer
   
   // For convenience, create label wires for the four instructions at the head
   // of ROB.
   //
   // front(i) = head + i
-  val front = Vec.tabulate(4) { rob(head + _) }
+  val front = Vec.tabulate(4) { i => rob(head + UInt(i)) }
 
   // Compute a simple flag that tells if an instruction could commit this cycle.
   // This should only happen if it is at the front of the queue (first 4) AND
   // all the instructions before it are ready to commit AND the ready bit for its
-  // destination is set.
-  //
-  // TODO: AND the previous instruction is not a mispredicted branch...
+  // destination is set AND the previous instruction is not a mispredicted branch.
   //
   // couldCommit(i) corresponds to front(i)
   val couldCommit = Vec.fill(4) { Bool() }
   for(i <- 0 until 4) {
-    couldCommit(i) := (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) && front(i).rdVal.valid
+    couldCommit(i) := 
+      (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) && 
+      front(i).rdVal.valid && 
+      (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) })
   }
+
+  // TODO: On misprediction, clear the ROB and Remap table
 
   // If the head of the ROB is a store, tell the L/SQ to actually write to
   // memory now that the store has committed.
   for(i <- 0 until 4) {
-    io.stCommit(i) := rob(head + i).isSt && couldCommit(i)
+    io.stCommit(i) := rob(head + UInt(i)).isSt && couldCommit(i)
   }
 
   // If the head of the ROB is a mispredicted branch...
@@ -115,9 +139,24 @@ class ROB extends Module {
     // TODO: want to only write the last value out of all ready instructions.
     // i.e. if multiple committing instructions want to write the same reg,
     // only the last write should win...
-    rf.wPorts(i).valid := couldCommit(i) && front(i).hasRd
-    rf.wPorts(i).bits := front(i).rdVal.bits
+    rf.io.wPorts(i).valid := couldCommit(i) && front(i).hasRd
+    rf.io.wPorts(i).bits := front(i).rdVal.bits
   }
+
+  // Compute the new head
+  when(couldCommit(3)) {
+    head := head + UInt(3)
+  } .elsewhen(!couldCommit(3) && couldCommit(2)) {
+    head := head + UInt(2)
+  } .elsewhen(!couldCommit(2) && couldCommit(1)) {
+    head := head + UInt(1)
+  } .elsewhen(!couldCommit(1) && couldCommit(0)) {
+    head := head + UInt(0)
+  } .otherwise {
+    head := head
+  }
+
+  // TODO: set the popped elements as not valid
 }
 
 class ROBTests(c: ROB) extends Tester(c) {
