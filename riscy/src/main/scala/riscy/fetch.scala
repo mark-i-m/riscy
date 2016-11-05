@@ -22,17 +22,7 @@ class Fetch extends Module {
     val isReturn = Bool(INPUT)
     val stall = Bool(INPUT)
 
-    // Address corresponding to the instructions received from Icache
-    val icacheRespAddr = UInt(INPUT, 32)
-    val icacheRespValues = Vec.fill(4) { UInt(INPUT, 32) }
-    // Did we get a hit in Icache?
-    val hit_notmiss = Bool(INPUT)
-    // Is the Icache ready to fetch at a new address?
-    val icacheReady = Bool(INPUT)
-
     /* OUTPUTS */
-    // What address should we request the Icache to fetch?
-    val icacheReqAddr = UInt(OUTPUT, 32)
     // Instructions to be passed to the decode stage
     val insts = Vec.fill(4) { UInt(OUTPUT, 32) }
     // Are the instructions to be passed over to the decode valid?
@@ -140,7 +130,7 @@ class Fetch extends Module {
   }
 
   // Pass the PC value down the pipeline
-  io.fetchBlockPC := io.icacheRespAddr
+  io.fetchBlockPC := icache.io.resp.addr
 
   for (i <- 0 until 4) {
     io.insts(i) := icache.io.resp.inst(i)

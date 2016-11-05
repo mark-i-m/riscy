@@ -30,8 +30,8 @@ class ICacheReq extends Bundle {
 
 // Emits out a cache line.
 class ICacheResp extends Bundle {
-  // This ready signal can be used by the next stage to stall Icache
-  val ready = Bool(INPUT)
+  // This signal can be used to stall Icache
+  val stall = Bool(INPUT)
   // Indicates whether Icache encountered a hit.
   val valid = Bool(OUTPUT)
   // Indicates whether the Icache is available for accepting requests
@@ -56,7 +56,7 @@ class ICache extends Module {
   val s_ready :: s_request :: s_refill_wait :: s_refill_done :: Nil = Enum(UInt(), 4)
   val state = Reg(init=s_ready)
   // Used by frontend to stall the cache output
-  val stall = !io.resp.ready
+  val stall = io.resp.stall
   // Used by cache to determine if it is ready for access
   val rdy = Wire(Bool())
 
@@ -76,7 +76,6 @@ class ICache extends Module {
   val s1_dout = Wire(Vec(IcParams.nWays, Bits(width = IcParams.cache_line_width)))
 
   // output signals - Two cycle latency
-  val s2_valid = Reg(init=Bool(false))
   val s2_hit = Reg(init=Bool(false))
   val s2_miss = Reg(init=Bool(false))
   val s2_tag_hit = Vec(IcParams.nWays, Reg(init=Bool(false)))
@@ -97,11 +96,11 @@ class ICache extends Module {
   // The Icache is deemed idle if it saw a hit or didn't see a miss.
   // This is basically useful for the first few cycles where we will have
   // neither a hit nor a miss.
-  io.resp.idle := (s2_hit) || (!s2_miss && state === s_ready)
+  io.resp.idle := (s2_hit) || (!s2_miss && !stall && state === s_ready)
   io.resp.addr := s2_vaddr
 
-  val s0_valid = Mux(io.req.valid && rdy, io.req.valid, s1_valid)
-  val s0_vaddr = Mux(io.req.valid && rdy, io.req.addr, s1_vaddr)
+  val s0_valid = Mux(io.req.valid && rdy && !stall, io.req.valid, s1_valid)
+  val s0_vaddr = Mux(io.req.valid && rdy && !stall, io.req.addr, s1_vaddr)
   val s0_idx = s0_vaddr(IcParams.offset_bits+IcParams.index_bits-1,
                         IcParams.offset_bits)
 
@@ -145,11 +144,8 @@ class ICache extends Module {
   s1_dout := data_array.read(s0_idx, s0_valid && !refill_in_progress)
 
   // Perform updates useful for next cycle
-  // Don't forward s1_valid to s2_valid if cache is not access-ready
-  //s2_valid := s1_valid && rdy
-  s2_valid := s1_valid
-  s2_hit := s1_hit
-  s2_miss := s1_miss
+  s2_hit := s1_hit && !stall
+  s2_miss := s1_miss && !stall
   s2_tag_hit := s1_tag_hit
   s2_vaddr := s1_vaddr
 
@@ -204,7 +200,7 @@ class ICache extends Module {
 
 class ICacheTests(c: ICache) extends Tester(c) { 
   // Assume that the next stage (fetch) is always ready to receive
-  poke(c.io.resp.ready, true)
+  poke(c.io.resp.stall, false)
   // Assume for now that request is always valid
   poke(c.io.req.valid, true)
 
@@ -261,12 +257,58 @@ class ICacheTests(c: ICache) extends Tester(c) {
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 24)
   peek(c.io.resp.inst)
+  poke(c.io.req.addr, 32)
   step(1)
 
   // Cycle 12
   expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 28)
+  peek(c.io.resp.inst)
+  step(1)
+
+  // Cycle 13 - We expect a miss because of the request for addr 32.
+  // This will take 2 cycles to refill and 1 more cycle to get result
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
+  peek(c.io.resp.inst)
+  step(1)
+
+  // Cycle 14 - Refill going on
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
+  peek(c.io.resp.inst)
+  step(1)
+
+  // Cycle 15 - Refill finished. Should get hit in next cycle
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
+  peek(c.io.resp.inst)
+  poke(c.io.req.addr, 36)
+  step(1)
+
+  // Cycle 16 - Should get hit.
+  expect(c.io.resp.valid, true)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 32)
+  peek(c.io.resp.inst)
+  // Lets stall the Icache.
+  poke(c.io.resp.stall, true)
+  poke(c.io.req.addr, 40)
+  step(1)
+
+  // Cycle 17 - Should not get a valid response since Icache is stalled
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
+  peek(c.io.resp.inst)
+  // Unstall and verify that the previous response wasn't lost
+  poke(c.io.resp.stall, false)
+  step(1)
+
+  // Cycle 18 - Should get hit for 36 since we are unstalled.
+  expect(c.io.resp.valid, true)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 36)
   peek(c.io.resp.inst)
 
   /*
