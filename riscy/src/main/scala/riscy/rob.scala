@@ -112,6 +112,9 @@ class ROB extends Module {
   }
 
   // TODO: On misprediction, clear the ROB and Remap table
+  // So an entry becomes invalid if
+  // - it is popped
+  // - it is squashed by misprediction
 
   // If the head of the ROB is a store, tell the L/SQ to actually write to
   // memory now that the store has committed.
