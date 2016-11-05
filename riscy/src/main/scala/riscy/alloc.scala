@@ -37,7 +37,6 @@ class RiscyAlloc extends Module {
     // ROB table access to populate next ROB entry
     val robPorts = Vec.fill(8) { UInt(OUTPUT, 6) }
     val robDest = Vec.fill(8) { Valid(UInt(INPUT, 64)).asInput }
-    val robSpec = Bool(INPUT) // Is the last inst speculative?
     val robFree = UInt(INPUT, 6) // How many free entries
     val robFirst = UInt(INPUT, 6) // Index of the first free entry
 
@@ -217,33 +216,6 @@ class RiscyAlloc extends Module {
       }
     }
 
-    // There are two ways we discussed to do the speculative bit:
-    // 1) An instruction is speculative if either operand is speculative. This
-    //    allows us to do optimizations with re-execution, but it is more
-    //    complicated to reason about, so for now...
-    //
-    // 2) An instruction is speculative if last instruction was speculative or
-    //    if this instruction is a jump. NOTE: A jump instruction is itself
-    //    marked with a `speculative` bit, so when squashing instructions, we
-    //    need to be careful not to squash the jump too.  If i = 0, speculative
-    //    bit will come from ROB otherwise spec will come from last entry.
-    //
-    // NOTE: Loads can not be source of speculation as they are always after store, 
-    // so currently loads are not source of speculation - TODO!
-    if (i == 0) {
-      when (pipelinedInst(i).bits.op === UInt(0x63)) {
-        robEntry.spec := UInt(1) 
-      } .otherwise {
-      robEntry.spec := io.robSpec
-      }
-    } else {
-      when (pipelinedInst(i).bits.op === UInt(0x63)) {
-	robEntry.spec := UInt(1)
-      } .otherwise {
-	robEntry.spec := io.allocROB(i-1).bits.spec
-      }
-    }
-
     // Remap entries:
     // - a remap entry should be written if the instruction has a destination
     // register and no later instruction is renaming the same arch reg
@@ -292,7 +264,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.robDest(2).bits, 0x34)
   
   poke(c.io.rfValues(0), 0x1234)
-  poke(c.io.robSpec, false)
   poke(c.io.remapMapping(0).valid, 0)
   poke(c.io.remapMapping(1).valid, 0)
   poke(c.io.remapMapping(2).valid, 0)
@@ -318,7 +289,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(0).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs2Val.valid, true)
   expect(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(0).bits.spec, 0)
 
   // Should map r2 to ROB1
   expect(c.io.allocRemap(1).valid, 1)
@@ -338,7 +308,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(1).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(1).bits.rs2Val.valid, true)
   expect(c.io.allocROB(1).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(1).bits.spec, 0)
 
 
   expect(c.io.allocRemap(2).valid, 0)
@@ -393,7 +362,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.robDest(6).valid, 0)
   poke(c.io.robDest(6).bits, 0x34)
   
-  poke(c.io.robSpec, false)
   poke(c.io.remapMapping(0).bits, 0)
   poke(c.io.remapMapping(0).valid, 1)
   poke(c.io.remapMapping(2).valid, 1)
@@ -425,7 +393,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(0).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs2Val.valid, true)
   expect(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(0).bits.spec, false)
   
   expect(c.io.allocROB(1).valid, 1)
   expect(c.io.allocROB(1).bits.op, 0x13)
@@ -439,7 +406,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(1).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(1).bits.rs2Val.valid, true)
   expect(c.io.allocROB(1).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(1).bits.spec, false)
 
   expect(c.io.allocROB(2).valid, 1)
   expect(c.io.allocROB(2).bits.op, 0x13)
@@ -453,7 +419,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(2).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(2).bits.rs2Val.valid, true)
   expect(c.io.allocROB(2).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(2).bits.spec, false)
 
   expect(c.io.allocROB(3).valid, 1)
   expect(c.io.allocROB(3).bits.op, 0x13)
@@ -467,7 +432,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(3).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(3).bits.rs2Val.valid, true)
   expect(c.io.allocROB(3).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(3).bits.spec, false)
 
   // TEST 3: no valid instructions
   poke(c.io.inst(0).valid, 0)
@@ -523,7 +487,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.robDest(4).valid, 0)
   poke(c.io.robDest(4).bits, 0x34)
   
-  poke(c.io.robSpec, false)
   poke(c.io.remapMapping(0).bits, 5)
   poke(c.io.remapMapping(0).valid, 1)
   poke(c.io.remapMapping(2).valid, 1)
@@ -555,7 +518,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(0).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs2Val.valid, true)
   expect(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(0).bits.spec, false)
   
   expect(c.io.allocROB(1).valid, 1)
   expect(c.io.allocROB(1).bits.op, 0x13)
@@ -569,7 +531,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(1).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(1).bits.rs2Val.valid, true)
   expect(c.io.allocROB(1).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(1).bits.spec, false)
 
   expect(c.io.allocROB(2).valid, 1)
   expect(c.io.allocROB(2).bits.op, 0x13)
@@ -583,7 +544,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(2).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(2).bits.rs2Val.valid, true)
   expect(c.io.allocROB(2).bits.rs2Val.bits, 0xFFFF)
-  expect(c.io.allocROB(2).bits.spec, false)
 
 
   expect(c.io.allocRemap(1).valid, 0)
@@ -622,7 +582,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.robFree, 55)
   poke(c.io.robFirst, 9)
   
-  poke(c.io.robSpec, false)
   poke(c.io.remapMapping(0).valid, 0)
   poke(c.io.remapMapping(1).valid, 0)
   poke(c.io.remapMapping(2).valid, 0)
@@ -637,9 +596,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.rfValues(4), 0x5555)
   poke(c.io.rfValues(5), 0x6666)
   step(1)
-
-
-
 }
 
 class AllocGenerator extends TestGenerator {
