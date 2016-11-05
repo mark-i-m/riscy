@@ -7,30 +7,17 @@ cache:
   apt: true
   directories:
     $HOME/.ivy2
-    regression/install
-    emulator/verilator
     riscy/target/resolution-cache
 
 # packages needed to build riscv-tools
 addons:
   apt:
     sources:
-      - ubuntu-toolchain-r-test
+        - ubuntu-toolchain-r-test
     packages:
       - gcc-4.8
       - g++-4.8
-      - gperf
-      - autoconf
-      - automake
-      - autotools-dev
-      - libmpc-dev
-      - libmpfr-dev
-      - libgmp-dev
-      - gawk
       - build-essential
-      - bison
-      - flex
-      - texinfo
 
 branches:
   only:
@@ -38,19 +25,14 @@ branches:
 
 env:
   matrix:
-    - MODULE=HelloModule
-    - MODULE=Fetch
-    - MODULE=Decode
-    - MODULE=Alloc
-    - MODULE=ROB
-    - MODULE=RegFile
-    - MODULE=OpDecode
+    - TARGETS='HelloModule.test Fetch.test Decode.test Alloc.test OpDecode.test RegFile.test ROB.test'
+    - TARGETS=Hello.hex.bench
 
 before_install:
   - export CXX=g++-4.8 CC=gcc-4.8
 
 script:
-  - make -C riscy ${MODULE}.test
+  - make -C riscy ${TARGETS}
 
 before_cache:
   - ls -tr regression/install | tail -n+2 | sed s@^@regression/install/@ | xargs rm -rf
