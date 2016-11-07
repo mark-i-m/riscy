@@ -71,12 +71,13 @@ class ROB extends Module {
   // The remaining bits denote which ROB entry if the register is in the ROB
   val remap = Module(new RegFile(32, 8, 4, i => Valid(UInt(width = 6))))
 
-  // The ROB storage structure
-  val rob = Vec.fill(64) { new ROBEntry() }
-  val head = Reg(next = UInt(width = 6))
-
   // The Architectural register file
   val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64)))
+
+  // The ROB storage structure
+  val rob = Vec.fill(64) { new ROBEntry() }
+  val head = new MultiCounter(64)
+  val tail = new MultiCounter(64)
 
 
 
@@ -95,7 +96,7 @@ class ROB extends Module {
   // of ROB.
   //
   // front(i) = head + i
-  val front = Vec.tabulate(4) { i => rob(head + UInt(i)) }
+  val front = Vec.tabulate(4) { i => rob(head.value + UInt(i)) }
 
   // Compute a simple flag that tells if an instruction could commit this cycle.
   // This should only happen if it is at the front of the queue (first 4) AND
@@ -119,47 +120,48 @@ class ROB extends Module {
   // If the head of the ROB is a store, tell the L/SQ to actually write to
   // memory now that the store has committed.
   for(i <- 0 until 4) {
-    io.stCommit(i) := rob(head + UInt(i)).isSt && couldCommit(i)
+    io.stCommit(i) := rob(head.value + UInt(i)).isSt && couldCommit(i)
   }
 
   // If the head of the ROB is a mispredicted branch...
-  for(i <- 0 until 4) {
-    // TODO: this doesn't exactly work. We need to choose the first
-    // mispredicted branch, not all of them...
-    when (couldCommit(i) && front(i).isMispredicted) {
-      io.mispredPC.valid := Bool(true)
-      io.mispredPC.bits := front(i).pc
-      io.mispredTarget := front(i).rdVal.bits
-    } .otherwise {
-      io.mispredPC.valid := Bool(false)
-      io.mispredPC.bits := UInt(0)
-      io.mispredTarget := UInt(0)
-    }
+  val mispredFlags = Vec.tabulate(4) {
+    i => couldCommit(i) && front(i).isMispredicted
   }
+  val firstMispred: UInt = PriorityEncoder(mispredFlags)
+
+  io.mispredPC.valid := mispredFlags.exists(identity _)
+  io.mispredPC.bits  := MuxLookup(firstMispred, UInt(0), 
+    Array.tabulate(4) { i => UInt(i) -> front(i).pc})
+  io.mispredTarget   := MuxLookup(firstMispred, UInt(0), 
+    Array.tabulate(4) { i => UInt(i) -> front(i).rdVal.bits})
 
   // Write to the register file
+  // 
+  // - For each destination register among the four committing instructions,
+  //   find out which is the last to rename that register.
+  // - If this instruction is the last to rename, then write to RF
+  val lastToRename = Vec.tabulate(4) { i =>
+    PriorityEncoder((Array.tabulate(4) { j =>
+      front(i).rd === front(j).rd && front(j).hasRd
+    }).reverse)
+  }
+
   for(i <- 0 until 4) {
-    // TODO: want to only write the last value out of all ready instructions.
+    // Want to only write the last value out of all ready instructions.
     // i.e. if multiple committing instructions want to write the same reg,
     // only the last write should win...
-    rf.io.wPorts(i).valid := couldCommit(i) && front(i).hasRd
+    rf.io.wPorts(i).valid := couldCommit(i) && 
+                             front(i).hasRd && 
+                             lastToRename(i) === UInt(i)
     rf.io.wPorts(i).bits := front(i).rdVal.bits
   }
 
   // Compute the new head
-  when(couldCommit(3)) {
-    head := head + UInt(3)
-  } .elsewhen(!couldCommit(3) && couldCommit(2)) {
-    head := head + UInt(2)
-  } .elsewhen(!couldCommit(2) && couldCommit(1)) {
-    head := head + UInt(1)
-  } .elsewhen(!couldCommit(1) && couldCommit(0)) {
-    head := head + UInt(0)
-  } .otherwise {
-    head := head
-  }
+  head.inc(PopCount(couldCommit))
 
   // TODO: set the popped elements as not valid
+  // TODO: do ROB entries need a valid bit? we can just infer validity from
+  // head and tail pointers
 }
 
 class ROBTests(c: ROB) extends Tester(c) {
