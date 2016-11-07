@@ -1,5 +1,5 @@
 # List of MODULES for unit tests
-MODULES=HelloModule Fetch Decode Alloc ROB RegFile OpDecode ICache
+MODULES=HelloModule Fetch Decode Alloc ROB RegFile OpDecode ICache MultiCounter
 
 # List of BENCHES for integration testing
 BENCHES=Hello.hex.bench
