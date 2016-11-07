@@ -25,7 +25,7 @@ branches:
 
 env:
   matrix:
-    - TARGETS='HelloModule.test Fetch.test Decode.test Alloc.test OpDecode.test RegFile.test ROB.test'
+    - TARGETS='HelloModule.test Fetch.test Decode.test Alloc.test OpDecode.test ROB.test IssueQueue.test RegFile.test MultiCounter.test'
     - TARGETS=Hello.hex.bench
 
 before_install:
