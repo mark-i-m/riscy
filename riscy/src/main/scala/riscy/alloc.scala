@@ -82,62 +82,31 @@ class RiscyAlloc extends Module {
   }
 
   // Rename all src operands
-  val renamedRs1 = Vec.fill(4) { Valid(UInt(width = 6)) }
-  val renamedRs2 = Vec.fill(4) { Valid(UInt(width = 6)) }
-  for (i <- 0 until 4) {
-    // k renames i's operand if it comes before i and its destination is i's
-    // operand. Compute all possibilities. Then, choose the right one later.
-    val prevRs1IsRenamed = Vec.tabulate(4) { 
-      k => Bool(k < i) && io.inst(k).bits.rd === io.inst(i).bits.rs1 
-    }
-    val prevRs2IsRenamed = Vec.tabulate(4) { 
-      k => Bool(k < i) && io.inst(k).bits.rd === io.inst(i).bits.rs2 
-    }
-
-    // For each instruction k that comes before i, k produces the latest
-    // renaming of i's operand if it renames i's operand and there is no
-    // instruction g, k < g < i that also renames i's operand.
-    val rs1Possible = Array.tabulate(4) { k => 
-      (prevRs1IsRenamed(k) && 
-      Vec.tabulate(4) { g => 
-        Bool(g <= k) ||
-        Bool(g >= i) ||
-        Bool(k < g) && 
-        Bool(g < i) && 
-        !prevRs1IsRenamed(g)
-      }.forall(identity _)) -> UInt(k)
-    }
-    val prevRs1 = MuxCase(UInt(0), rs1Possible)
-    val rs2Possible = Array.tabulate(4) { k => 
-      (prevRs2IsRenamed(k) && 
-      Vec.tabulate(4) { g =>
-        Bool(g <= k) ||
-        Bool(g >= i) ||
-        Bool(k < g) && 
-        Bool(g < i) && 
-        !prevRs2IsRenamed(g)
-      }.forall(identity _)) -> UInt(k)
-    }
-    val prevRs2 = MuxCase(UInt(0), rs2Possible)
-
-    // For each instruction i, i's operand is renamed by a another instruction
-    // that is currently also being renamed if any entry in prevRs1IsRenamed is
-    // true. If this is the case, prevRs1 specifies which previous instruction
-    // renames i's operand. Otherwise, take the entry from the remap table.
-    when (prevRs1IsRenamed.exists(identity _)) {
-      renamedRs1(i).valid := Bool(true)
-      renamedRs1(i).bits := renamedDest(prevRs1)
-    } .otherwise {
-      renamedRs1(i).valid := io.remapMapping(2*i).valid
-      renamedRs1(i).bits := io.remapMapping(2*i).bits
-    }
-    when (prevRs2IsRenamed.exists(identity _)) {
-      renamedRs2(i).valid := Bool(true)
-      renamedRs2(i).bits := renamedDest(prevRs2)
-    } .otherwise {
-      renamedRs2(i).valid := io.remapMapping(2*i+1).valid
-      renamedRs2(i).bits := io.remapMapping(2*i+1).bits
-    }
+  val renamedRs1 = Vec.tabulate(4) { i => 
+    PriorityMux(
+      ((Array.tabulate(i) { j => (
+        io.inst(j).bits.rd === io.inst(i).bits.rs1,
+        {
+          val renamed = Valid(UInt(6))
+          renamed.valid := Bool(true)
+          renamed.bits  := renamedDest(j)
+          renamed
+        }
+      )}).reverse :+ (Bool(true), io.remapMapping(2*i)))
+    ) 
+  }
+  val renamedRs2 = Vec.tabulate(4) { i => 
+    PriorityMux(
+      ((Array.tabulate(i) { j => (
+        io.inst(j).bits.rd === io.inst(i).bits.rs2,
+        {
+          val renamed = Valid(UInt(6))
+          renamed.valid := Bool(true)
+          renamed.bits  := renamedDest(j)
+          renamed
+        }
+      )}).reverse :+ (Bool(true), io.remapMapping(2*i+1)))
+    ) 
   }
 
   // Hook up instructions to ROB
@@ -156,14 +125,11 @@ class RiscyAlloc extends Module {
     // Which ROB entry
     robEntry.entry := renamedDest(i)
 
-    // Bulk wire data from decoded instruction
+    // Operation
     robEntry.op := pipelinedInst(i).bits.op
     robEntry.funct3 := pipelinedInst(i).bits.funct3
-    when (pipelinedOpDecode(i).hasRs2) {
-      robEntry.funct7 := pipelinedInst(i).bits.funct7
-    } .otherwise {
-      robEntry.funct7 := UInt(0, 7)
-    }
+    robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
+
     // First operand
     when (renamedRs1(i).valid) {
       // Getting from ROB
