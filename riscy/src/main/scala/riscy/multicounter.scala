@@ -16,6 +16,14 @@ class MultiCounter(val n: Int) {
       wrap
     }
   }
+  def inc(x: UInt): Bool = {
+    if (n == 1) Bool(true)
+    else {
+      val wrap = value > (UInt(n - 1) - UInt(x))
+      value := Mux(Bool(!isPow2(n)) && wrap, UInt(0), value + x)
+      wrap
+    }
+  }
 }
 
 class MultiCounterTestModule extends Module {
@@ -30,7 +38,7 @@ class MultiCounterTestModule extends Module {
   when (io.inc1) {
     counter.inc(2);
   } .elsewhen (io.inc2) {
-    counter.inc(4);
+    counter.inc(UInt(4));
   }
 
   io.out := counter.value
