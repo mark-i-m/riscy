@@ -79,9 +79,35 @@ class ROB extends Module {
   val head = new MultiCounter(64)
   val tail = new MultiCounter(64)
 
-
-
-
+//  // The ROB storage structure
+//  class CirculrBufferIterator[T](buffer:Array[T], start:Int) extends Iterator[T]{
+//    var idx=0
+//    override def hasNext = idx<buffer.size
+//    override def next()={
+//      val i=idx
+//      idx=idx+1
+//      buffer(i)
+//    } 
+//  }
+//  
+//  class CircularBuffer[T](size:Int)(implicit m:Manifest[T]) extends Seq[T]{
+//    val buffer=new Array[T](size);
+//    var bIdx=0;
+//  
+//    override def apply (idx: Int): T = buffer((bIdx+idx) % size)
+//
+//    override def length = size
+//
+//    override def iterator= new CirculrBufferIterator[T](buffer, bIdx)
+//
+//    def add(e:T)= {
+//      buffer(bIdx)=e
+//      bIdx=(bIdx +1) % size
+//    }
+//  }
+//  
+//  val rob = new CircularBuffer(64) { new ROBEntry() }
+//  val head = Reg(next = UInt(width = 6))
 
   // Commit logic
   // - 4-wide in order commit
