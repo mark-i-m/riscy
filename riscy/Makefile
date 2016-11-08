@@ -1,5 +1,5 @@
 # List of MODULES for unit tests
-MODULES=HelloModule Fetch Decode Alloc ROB RegFile OpDecode ICache
+MODULES=HelloModule Fetch Decode Alloc ROB RegFile OpDecode ICache IssueQueue MultiCounter
 
 # List of BENCHES for integration testing
 BENCHES=Hello.hex.bench
@@ -14,6 +14,9 @@ SBT ?= java -Xmx2G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
 
 SCALA_FILES=$(wildcard src/main/scala/riscy/*.scala)
 TESTS=$(patsubst %, %.test, $(MODULES))
+
+# Target to run all tests
+test: $(TESTS)
 
 # Run unit tests with `make <Module name>.test`
 $(TESTS) : %.test :
