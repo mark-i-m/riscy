@@ -42,7 +42,25 @@ class WBValue extends Bundle {
 
 class ROB extends Module {
   val io = new Bundle {
-    // Get signals from the FOO
+    // Get signals from allocate
+    //  - remap table
+    //  - RF
+    //  - ROB
+    val remapPorts = Vec.fill(8) { UInt(INPUT, 5) }
+    val remapMapping = Vec.fill(8) { Valid(UInt(OUTPUT, 6)).asOutput }
+
+    val rfPorts = Vec.fill(8) { UInt(INPUT, 5) }
+    val rfValues = Vec.fill(8) { UInt(OUTPUT, 64) }
+
+    val robPorts = Vec.fill(8) { UInt(INPUT, 6) }
+    val robDest = Vec.fill(8) { Valid(UInt(OUTPUT, 64)).asOutput }
+    val robFree = UInt(OUTPUT, 6) // How many free entries
+    val robFirst = UInt(OUTPUT, 6) // Index of the first free entry
+
+    val allocRemap = Vec.fill(4) { Valid(new AllocRemap()).flip }
+    val allocROB = Vec.fill(4) { Valid(new AllocROB()).flip }
+
+    // Get signals from the FOO for WB
     val fooALU0 = new WBValue
     val fooALU1 = new WBValue
     val fooALU2 = new WBValue
@@ -75,39 +93,58 @@ class ROB extends Module {
   val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64)))
 
   // The ROB storage structure
-  val rob = Vec.fill(64) { new ROBEntry() }
-  val head = new MultiCounter(64)
-  val tail = new MultiCounter(64)
+  val robW = Vec.fill(64) { Valid(new ROBEntry) } // Write enable and write value for ROB
+  val rob = Vec.tabulate(64) { i => RegEnable(robW(i).bits, robW(i).valid) }
 
-//  // The ROB storage structure
-//  class CirculrBufferIterator[T](buffer:Array[T], start:Int) extends Iterator[T]{
-//    var idx=0
-//    override def hasNext = idx<buffer.size
-//    override def next()={
-//      val i=idx
-//      idx=idx+1
-//      buffer(i)
-//    } 
-//  }
-//  
-//  class CircularBuffer[T](size:Int)(implicit m:Manifest[T]) extends Seq[T]{
-//    val buffer=new Array[T](size);
-//    var bIdx=0;
-//  
-//    override def apply (idx: Int): T = buffer((bIdx+idx) % size)
-//
-//    override def length = size
-//
-//    override def iterator= new CirculrBufferIterator[T](buffer, bIdx)
-//
-//    def add(e:T)= {
-//      buffer(bIdx)=e
-//      bIdx=(bIdx +1) % size
-//    }
-//  }
-//  
-//  val rob = new CircularBuffer(64) { new ROBEntry() }
-//  val head = Reg(next = UInt(width = 6))
+  val head = new MultiCounter(64) // most senior
+  val headInc = UInt();
+  val tail = new MultiCounter(64) // most recent (last valid instr if any)
+  val tailInc = UInt();
+
+  // # free entries
+  var freeInc = UInt();
+  val free = Reg(init = UInt(0), next = freeInc)
+
+  when(io.mispredPC.valid) {
+    freeInc := UInt(64)
+    head.reset
+    tail.reset
+  } .otherwise {
+    freeInc := free + headInc - tailInc
+    head.inc(headInc)
+    tail.inc(tailInc)
+  }
+
+  // TODO: add stalling logic
+
+  // Allocation logic
+  io.robFirst := tail.value + UInt(1)
+  io.robFree  := free
+
+  for(i <- 0 until 8) {
+    remap.io.rPorts(i) := io.remapPorts(i)
+    io.remapMapping(i) := remap.io.rValues(i)
+
+    rf.io.rPorts(i) := io.rfPorts(i)
+    io.rfValues(i) := rf.io.rValues(i)
+
+    io.robDest(i) := rob(io.robPorts(i)).rdVal
+  }
+
+  // Latch new remap table mappings
+  for(i <- 0 until 4) {
+    remap.io.wPorts(i).valid := io.allocRemap(i).valid
+    remap.io.wPorts(i).bits  := io.allocRemap(i).bits.reg
+    remap.io.wValues(i)      := io.allocRemap(i).bits.idxROB
+  }
+
+  // Latch new ROB entries
+  val back = Vec.tabulate(4) { i => robW(tail.value + UInt(i+1)) }
+  back <> Array.tabulate(4) { io.allocROB(_) }
+  // TODO: get ready operand values, too
+
+  // Update tail pointer
+  tailInc := PopCount(Array.tabulate(4) { back(_).valid })
 
   // Commit logic
   // - 4-wide in order commit
@@ -137,11 +174,6 @@ class ROB extends Module {
       front(i).rdVal.valid && 
       (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) })
   }
-
-  // TODO: On misprediction, clear the ROB and Remap table
-  // So an entry becomes invalid if
-  // - it is popped
-  // - it is squashed by misprediction
 
   // If the head of the ROB is a store, tell the L/SQ to actually write to
   // memory now that the store has committed.
@@ -183,11 +215,7 @@ class ROB extends Module {
   }
 
   // Compute the new head
-  head.inc(PopCount(couldCommit))
-
-  // TODO: set the popped elements as not valid
-  // TODO: do ROB entries need a valid bit? we can just infer validity from
-  // head and tail pointers
+  headInc := PopCount(couldCommit)
 }
 
 class ROBTests(c: ROB) extends Tester(c) {
@@ -199,3 +227,35 @@ class ROBGenerator extends TestGenerator {
   def genTest[T <: Module](c: T): Tester[T] =
     (new ROBTests(c.asInstanceOf[ROB])).asInstanceOf[Tester[T]]
 }
+
+//  // The ROB storage structure
+//  class CirculrBufferIterator[T](buffer:Array[T], start:Int) extends Iterator[T]{
+//    var idx=0
+//    override def hasNext = idx<buffer.size
+//    override def next()={
+//      val i=idx
+//      idx=idx+1
+//      buffer(i)
+//    } 
+//  }
+//  
+//  class CircularBuffer[T](size:Int)(implicit m:Manifest[T]) extends Seq[T]{
+//    val buffer=new Array[T](size);
+//    var bIdx=0;
+//  
+//    override def apply (idx: Int): T = buffer((bIdx+idx) % size)
+//
+//    override def length = size
+//
+//    override def iterator= new CirculrBufferIterator[T](buffer, bIdx)
+//
+//    def add(e:T)= {
+//      buffer(bIdx)=e
+//      bIdx=(bIdx +1) % size
+//    }
+//  }
+//  
+//  val rob = new CircularBuffer(64) { new ROBEntry() }
+//  val head = Reg(next = UInt(width = 6))
+
+
