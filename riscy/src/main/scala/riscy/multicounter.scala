@@ -24,21 +24,26 @@ class MultiCounter(val n: Int) {
       wrap
     }
   }
+
+  def reset() = value := UInt(0)
 }
 
 class MultiCounterTestModule extends Module {
   val io = new Bundle {
     val inc1 = Bool(INPUT)
     val inc2 = Bool(INPUT)
+    val inc3 = Bool(INPUT)
     val out = UInt(OUTPUT, 4)
   }
 
   val counter = new MultiCounter(16)
 
   when (io.inc1) {
-    counter.inc(2);
+    counter inc 2 
   } .elsewhen (io.inc2) {
-    counter.inc(UInt(4));
+    counter inc UInt(4) 
+  } .elsewhen (io.inc3) {
+    counter reset
   }
 
   io.out := counter.value
@@ -47,6 +52,7 @@ class MultiCounterTestModule extends Module {
 class MultiCounterTests(c: MultiCounterTestModule) extends Tester(c) {
   poke(c.io.inc1, true)
   poke(c.io.inc2, false)
+  poke(c.io.inc3, false)
 
   step(1)
 
@@ -54,6 +60,7 @@ class MultiCounterTests(c: MultiCounterTestModule) extends Tester(c) {
 
   poke(c.io.inc1, false)
   poke(c.io.inc2, false)
+  poke(c.io.inc3, false)
 
   step(1)
 
@@ -61,6 +68,7 @@ class MultiCounterTests(c: MultiCounterTestModule) extends Tester(c) {
 
   poke(c.io.inc1, false)
   poke(c.io.inc2, true)
+  poke(c.io.inc3, false)
 
   step(1)
 
@@ -68,6 +76,7 @@ class MultiCounterTests(c: MultiCounterTestModule) extends Tester(c) {
 
   poke(c.io.inc1, false)
   poke(c.io.inc2, false)
+  poke(c.io.inc3, false)
 
   step(1)
 
@@ -75,6 +84,7 @@ class MultiCounterTests(c: MultiCounterTestModule) extends Tester(c) {
 
   poke(c.io.inc1, false)
   poke(c.io.inc2, true)
+  poke(c.io.inc3, false)
 
   step(1)
 
@@ -82,6 +92,7 @@ class MultiCounterTests(c: MultiCounterTestModule) extends Tester(c) {
 
   poke(c.io.inc1, false)
   poke(c.io.inc2, true)
+  poke(c.io.inc3, false)
 
   step(1)
 
@@ -89,10 +100,75 @@ class MultiCounterTests(c: MultiCounterTestModule) extends Tester(c) {
 
   poke(c.io.inc1, false)
   poke(c.io.inc2, true)
+  poke(c.io.inc3, false)
 
   step(1)
 
   expect(c.io.out, 2)
+
+  poke(c.io.inc1, false)
+  poke(c.io.inc2, false)
+  poke(c.io.inc3, true)
+
+  step(1)
+
+  expect(c.io.out, 0)
+
+  poke(c.io.inc1, true)
+  poke(c.io.inc2, false)
+  poke(c.io.inc3, false)
+
+  step(1)
+
+  expect(c.io.out, 2)
+
+  poke(c.io.inc1, false)
+  poke(c.io.inc2, false)
+  poke(c.io.inc3, false)
+
+  step(1)
+
+  expect(c.io.out, 2)
+
+  poke(c.io.inc1, false)
+  poke(c.io.inc2, true)
+  poke(c.io.inc3, false)
+
+  step(1)
+
+  expect(c.io.out, 6)
+
+  poke(c.io.inc1, false)
+  poke(c.io.inc2, false)
+  poke(c.io.inc3, false)
+
+  step(1)
+
+  expect(c.io.out, 6)
+
+  poke(c.io.inc1, false)
+  poke(c.io.inc2, true)
+  poke(c.io.inc3, false)
+
+  step(1)
+
+  expect(c.io.out, 10)
+
+  poke(c.io.inc1, false)
+  poke(c.io.inc2, true)
+  poke(c.io.inc3, false)
+
+  step(1)
+
+  expect(c.io.out, 14)
+
+  poke(c.io.inc1, false)
+  poke(c.io.inc2, false)
+  poke(c.io.inc3, true)
+
+  step(1)
+
+  expect(c.io.out, 0)
 }
 
 class MultiCounterGenerator extends TestGenerator {
