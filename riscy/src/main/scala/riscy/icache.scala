@@ -47,7 +47,15 @@ class ICacheResp extends Bundle {
 
 class ICache extends Module {
   val io = new Bundle {
+    // Address to be requested
     val req = new ICacheReq
+    // Use this to invalidate any request issued 1 cycle ago
+    val s1_kill = Bool(INPUT)
+    // Use this to invalidate any request issued 2 cycles ago
+    val s2_kill = Bool(INPUT)
+
+    // Gives four valid instructions if possible. Valid bits are unset if four
+    // valid instructions could not be found due to boundary issues.
     val resp = new ICacheResp
     val mem = new DummyMem
   }
@@ -83,8 +91,8 @@ class ICache extends Module {
   val s2_vaddr = Reg(UInt(0, width = IcParams.addr_width))
 
   // Time starts now!
-  s1_hit := s1_valid && s1_any_tag_hit
-  s1_miss := s1_valid && !s1_any_tag_hit
+  s1_hit := s1_valid && s1_any_tag_hit && !io.s1_kill
+  s1_miss := s1_valid && !s1_any_tag_hit && !io.s1_kill
   rdy := state === s_ready && !s1_miss
 
   val dout = Mux1H(s2_tag_hit, s2_dout)
@@ -122,7 +130,8 @@ class ICache extends Module {
                                IcParams.offset_bits)
   val repl_way = LFSR16(s1_miss)(log2Up(IcParams.nWays)-1,0)
   when (state === s_refill_wait) {
-    // TODO kbavishi: Need a smarter way to update the correct way
+    // TODO kbavishi: Need a smarter cache line replacement policy. Right now,
+    // I'm updating lines in both the ways in a set.
     tag_array.write(refill_idx, Vec.fill(IcParams.nWays)(refill_tag))
     data_array.write(refill_idx, Vec.fill(IcParams.nWays)(io.mem.datablock))
     vb_array := vb_array.bitSet(Cat(Bits(0), refill_idx), Bool(true))
@@ -144,8 +153,8 @@ class ICache extends Module {
   s1_dout := data_array.read(s0_idx, s0_valid && !refill_in_progress)
 
   // Perform updates useful for next cycle
-  s2_hit := s1_hit && !stall
-  s2_miss := s1_miss && !stall
+  s2_hit := s1_hit && !stall && !io.s2_kill
+  s2_miss := s1_miss && !stall && !io.s2_kill
   s2_tag_hit := s1_tag_hit
   s2_vaddr := s1_vaddr
 
@@ -310,7 +319,48 @@ class ICacheTests(c: ICache) extends Tester(c) {
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 36)
   peek(c.io.resp.inst)
+  // Kill request issued 2 cycles ago
+  poke(c.io.s2_kill, true)
+  poke(c.io.req.addr, 4)
+  step(1)
 
+  // Cycle 19 - Response for addr 40 should be invalidated because of our kill
+  // request
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 40)
+  peek(c.io.resp.inst)
+  poke(c.io.s2_kill, false)
+  // Kill request for addr 4 issued 1 cycle ago
+  poke(c.io.s1_kill, true)
+  poke(c.io.req.addr, 8)
+  step(1)
+
+  // Cycle 20 - Response for addr 4 should be invalidated because of our kill
+  // request
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 4)
+  peek(c.io.resp.inst)
+  poke(c.io.s2_kill, false)
+  poke(c.io.s1_kill, false)
+  poke(c.io.req.addr, 12)
+  step(1)
+
+  // Verify that everything proceeds as normal once all kill requests have been
+  // reset. Cycle 21 - Response for addr 8 should be received correctly
+  expect(c.io.resp.valid, true)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 8)
+  peek(c.io.resp.inst)
+  poke(c.io.req.addr, 16)
+  step(1)
+
+  // Cycle 22 - Response for addr 12 should be received correctly
+  expect(c.io.resp.valid, true)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 12)
+  peek(c.io.resp.inst)
   /*
    * Testcases to be added:
    * 1. Increment PC by 4W. Verify that we refill every other instruction and
@@ -325,8 +375,7 @@ class ICacheTests(c: ICache) extends Tester(c) {
    * 
    * Code to be added:
    * 1. Add random tag block replacement logic
-   * 2. Add stall, s1_kill, s2_kill logic and testcases
-   * 3. Add request invalid testcases.
+   * 2. Add request invalid testcases.
    * 4. Add rotator logic. Add testcases for cache line boundary crossing
    *    requests
    *
