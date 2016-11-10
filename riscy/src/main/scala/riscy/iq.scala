@@ -17,6 +17,7 @@ class IssueQueue extends Module {
 	val counter = new CounterUpDown(16)
 	
 	// Assigning entries to current issue queue entries
+	// New entries are assigned only if valid bit is set
 	for (i <- 0 until 4) {
 		when (io.newEntry(i).valid) {
 			iqueue(counter.value + UInt(i)).valid := Bool(true)
