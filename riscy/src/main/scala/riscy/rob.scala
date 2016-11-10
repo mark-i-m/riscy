@@ -166,7 +166,8 @@ class ROB extends Module {
   // - Branches that were mispredicted should trigger cleanup at this point
   //   (TODO: possibly can be done earlier?)
   // - Move the head pointer
-  // - TODO: clear mappings in the remap table
+  // - TODO: clear mappings in the remap table on commit
+  // - TODO: clear mappings in the remap table on mispredict
   
   // For convenience, create label wires for the four instructions at the head
   // of ROB.
@@ -316,6 +317,31 @@ class ROBTests(c: ROB) extends Tester(c) {
   expect(c.io.remapMapping(5).valid, false)
   expect(c.io.remapMapping(6).valid, false)
   expect(c.io.remapMapping(7).valid, false)
+
+  // Try some random reads and writes
+  for(i <- 0 until 1000) {
+    val randRPort = rnd.nextInt(8)
+    val randWPort = rnd.nextInt(4)
+    val randWReg = rnd.nextInt(32)
+    val randWROBIdx = rnd.nextInt(64)
+
+    for(p <- 0 until 4) {
+      if(p == randWPort) {
+        poke(c.io.allocRemap(p).valid, false)
+      } else {
+        poke(c.io.allocRemap(p).valid, true)
+        poke(c.io.allocRemap(p).bits.reg, randWReg)
+        poke(c.io.allocRemap(p).bits.idxROB, randWROBIdx)
+      }
+    }
+
+    poke(c.io.remapPorts(randRPort), randWReg)
+
+    step(1)
+
+    expect(c.io.remapMapping(randRPort).valid, true)
+    expect(c.io.remapMapping(randRPort).bits, randWROBIdx)
+  }
 }
 
 class ROBGenerator extends TestGenerator {
