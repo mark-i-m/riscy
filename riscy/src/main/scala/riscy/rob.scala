@@ -141,7 +141,6 @@ class ROB extends Module {
   // Latch new ROB entries
   val back = Vec.tabulate(4) { i => robW(tail.value + UInt(i+1)) }
   back <> Array.tabulate(4) { io.allocROB(_) }
-  // TODO: get ready operand values, too
 
   // Update tail pointer
   tailInc := PopCount(Array.tabulate(4) { back(_).valid })
