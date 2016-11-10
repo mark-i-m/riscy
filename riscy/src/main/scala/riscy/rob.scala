@@ -133,17 +133,30 @@ class ROB extends Module {
 
   // Latch new remap table mappings
   for(i <- 0 until 4) {
-    remap.io.wPorts(i).valid := io.allocRemap(i).valid
-    remap.io.wPorts(i).bits  := io.allocRemap(i).bits.reg
-    remap.io.wValues(i)      := io.allocRemap(i).bits.idxROB
+    remap.io.wPorts(i).valid  := io.allocRemap(i).valid
+    remap.io.wPorts(i).bits   := io.allocRemap(i).bits.reg
+    remap.io.wValues(i).valid := Bool(true)
+    remap.io.wValues(i).bits  := io.allocRemap(i).bits.idxROB
   }
 
   // Latch new ROB entries
-  val back = Vec.tabulate(4) { i => robW(tail.value + UInt(i+1)) }
-  back <> Array.tabulate(4) { io.allocROB(_) }
+  for(i <- 0 until 64) {
+    when(UInt(i) === tail.value + UInt(1)) {
+      robW(i) := io.allocROB(0)
+    } .elsewhen(UInt(i) === tail.value + UInt(2)) {
+      robW(i) := io.allocROB(1)
+    } .elsewhen(UInt(i) === tail.value + UInt(3)) {
+      robW(i) := io.allocROB(2)
+    } .elsewhen(UInt(i) === tail.value + UInt(4)) {
+      robW(i) := io.allocROB(3)
+    } .otherwise {
+      robW(i).valid := Bool(false) // write disable
+      robW(i).bits  := new ROBEntry
+    }
+  }
 
   // Update tail pointer
-  tailInc := PopCount(Array.tabulate(4) { back(_).valid })
+  tailInc := PopCount(Array.tabulate(4) { io.allocROB(_).valid })
 
   // Commit logic
   // - 4-wide in order commit
@@ -218,7 +231,8 @@ class ROB extends Module {
 }
 
 class ROBTests(c: ROB) extends Tester(c) {
-  println("TODO")
+  // test the remap ports
+  // TODO
 }
 
 class ROBGenerator extends TestGenerator {
