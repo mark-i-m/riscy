@@ -23,13 +23,15 @@ import Chisel._
  * @param gen a function that takes an integer i and returns an instance of the
  * register type. i is the register number.
  */
-class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => T, reset: ValidIO[T] = null) extends Module {
+class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => T) extends Module {
   val io = new Bundle {
     val rPorts = Vec.fill(numRPorts) { UInt(INPUT, log2Up(size)) }
     val rValues = Vec.tabulate(numRPorts) { i => gen(i).asOutput }
 
     val wPorts = Vec.fill(numWPorts) { Valid(UInt(width = log2Up(size))).asInput }
     val wValues = Vec.tabulate(numWPorts) { i => gen(i).asInput }
+
+    val reset = Valid(gen(0)).asInput
   }
 
   // The actual registers
@@ -49,32 +51,14 @@ class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => 
     }
   }
 
-  if(reset != null) {
-    when(reset.valid) {
-      for(r <- 0 until size) {
-        regs(r)._2 := reset.bits
-      }
+  when(io.reset.valid) {
+    for(r <- 0 until size) {
+      regs(r)._2 := io.reset.bits
     }
   }
 }
 
-class RFModuleTest[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => T) extends Module {
-  val io = new Bundle {
-    val rPorts = Vec.fill(numRPorts) { UInt(INPUT, log2Up(size)) }
-    val rValues = Vec.tabulate(numRPorts) { i => gen(i).asOutput }
-
-    val wPorts = Vec.fill(numWPorts) { Valid(UInt(width = log2Up(size))).asInput }
-    val wValues = Vec.tabulate(numWPorts) { i => gen(i).asInput }
-
-    val reset = Valid(gen(0)).asInput
-  }
-
-  val rf = Module(new RegFile(size, numRPorts, numWPorts, gen, io.reset))
-
-  this <> rf
-}
-
-class RegFileTests(c: RFModuleTest[ValidIO[UInt]]) extends Tester(c) {
+class RegFileTests(c: RegFile[ValidIO[UInt]]) extends Tester(c) {
   for (i <- 0 until 1000) {
     val randVal = rnd.nextInt(1 << 16)
     val randValid = rnd.nextInt(2)
@@ -123,7 +107,7 @@ class RegFileTests(c: RFModuleTest[ValidIO[UInt]]) extends Tester(c) {
 }
 
 class RegFileGenerator extends TestGenerator {
-  def genMod(): Module = Module(new RFModuleTest(16, 4, 4, i => Valid(UInt(OUTPUT, 16))))
+  def genMod(): Module = Module(new RegFile(16, 4, 4, i => Valid(UInt(OUTPUT, 16))))
   def genTest[T <: Module](c: T): Tester[T] =
-    (new RegFileTests(c.asInstanceOf[RFModuleTest[ValidIO[UInt]]])).asInstanceOf[Tester[T]]
+    (new RegFileTests(c.asInstanceOf[RegFile[ValidIO[UInt]]])).asInstanceOf[Tester[T]]
 }
