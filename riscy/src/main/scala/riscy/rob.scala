@@ -166,6 +166,7 @@ class ROB extends Module {
   // - Branches that were mispredicted should trigger cleanup at this point
   //   (TODO: possibly can be done earlier?)
   // - Move the head pointer
+  // - TODO: clear mappings in the remap table
   
   // For convenience, create label wires for the four instructions at the head
   // of ROB.
@@ -232,7 +233,89 @@ class ROB extends Module {
 
 class ROBTests(c: ROB) extends Tester(c) {
   // test the remap ports
-  // TODO
+  poke(c.io.remapPorts(0), 0)
+  poke(c.io.remapPorts(1), 1)
+  poke(c.io.remapPorts(2), 2)
+  poke(c.io.remapPorts(3), 3)
+  poke(c.io.remapPorts(4), 4)
+  poke(c.io.remapPorts(5), 5)
+  poke(c.io.remapPorts(6), 6)
+  poke(c.io.remapPorts(7), 7)
+
+  step(0)
+
+  expect(c.io.remapMapping(0).valid, false)
+  expect(c.io.remapMapping(1).valid, false)
+  expect(c.io.remapMapping(2).valid, false)
+  expect(c.io.remapMapping(3).valid, false)
+  expect(c.io.remapMapping(4).valid, false)
+  expect(c.io.remapMapping(5).valid, false)
+  expect(c.io.remapMapping(6).valid, false)
+  expect(c.io.remapMapping(7).valid, false)
+
+  // map r0 to p4
+  poke(c.io.allocRemap(0).valid, true)
+  poke(c.io.allocRemap(0).bits.reg, 0)
+  poke(c.io.allocRemap(0).bits.idxROB, 4)
+
+  // map r1 to p3
+  poke(c.io.allocRemap(1).valid, true)
+  poke(c.io.allocRemap(1).bits.reg, 1)
+  poke(c.io.allocRemap(1).bits.idxROB, 3)
+
+  step(1)
+
+  expect(c.io.remapMapping(0).valid, true)
+  expect(c.io.remapMapping(0).bits, 4)
+  expect(c.io.remapMapping(1).valid, true)
+  expect(c.io.remapMapping(1).bits, 3)
+  expect(c.io.remapMapping(2).valid, false)
+  expect(c.io.remapMapping(3).valid, false)
+  expect(c.io.remapMapping(4).valid, false)
+  expect(c.io.remapMapping(5).valid, false)
+  expect(c.io.remapMapping(6).valid, false)
+  expect(c.io.remapMapping(7).valid, false)
+
+  poke(c.io.allocRemap(0).valid, false)
+  poke(c.io.allocRemap(1).valid, false)
+
+  step(1)
+
+  expect(c.io.remapMapping(0).valid, true)
+  expect(c.io.remapMapping(0).bits, 4)
+  expect(c.io.remapMapping(1).valid, true)
+  expect(c.io.remapMapping(1).bits, 3)
+  expect(c.io.remapMapping(2).valid, false)
+  expect(c.io.remapMapping(3).valid, false)
+  expect(c.io.remapMapping(4).valid, false)
+  expect(c.io.remapMapping(5).valid, false)
+  expect(c.io.remapMapping(6).valid, false)
+  expect(c.io.remapMapping(7).valid, false)
+
+  // map r0 to p7
+  poke(c.io.allocRemap(0).valid, true)
+  poke(c.io.allocRemap(0).bits.reg, 0)
+  poke(c.io.allocRemap(0).bits.idxROB, 7)
+
+  // map r30 to p8
+  poke(c.io.allocRemap(1).valid, true)
+  poke(c.io.allocRemap(1).bits.reg, 30)
+  poke(c.io.allocRemap(1).bits.idxROB, 8)
+  poke(c.io.remapPorts(2), 30)
+
+  step(1)
+
+  expect(c.io.remapMapping(0).valid, true)
+  expect(c.io.remapMapping(0).bits, 7)
+  expect(c.io.remapMapping(1).valid, true)
+  expect(c.io.remapMapping(1).bits, 3)
+  expect(c.io.remapMapping(2).valid, true)
+  expect(c.io.remapMapping(2).bits, 8)
+  expect(c.io.remapMapping(3).valid, false)
+  expect(c.io.remapMapping(4).valid, false)
+  expect(c.io.remapMapping(5).valid, false)
+  expect(c.io.remapMapping(6).valid, false)
+  expect(c.io.remapMapping(7).valid, false)
 }
 
 class ROBGenerator extends TestGenerator {
