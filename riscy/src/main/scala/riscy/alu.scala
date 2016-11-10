@@ -161,13 +161,16 @@ class ALU(xLen : Int) extends Module {
     sel_a2 := A2_RS2
   }
 
+  // immI is only 32 bits. Sign extend it before using it
+  val immI_ext = Cat(Fill(32, io.inst.immI(31)), io.inst.immI)
+
   // Select the inputs for ALU operations
   val in1 = MuxLookup(sel_a1, UInt(0), Seq(
     A1_RS1 -> io.rs1_val,
     A1_PC -> io.PC))
   val in2 = MuxLookup(sel_a2, UInt(0), Seq(
     A2_RS2 -> io.rs2_val,
-    A2_IMM_I -> io.inst.immI.asUInt))
+    A2_IMM_I -> immI_ext.asUInt))
 
   // ADD, SUB
   val in2_inv = Mux(op === FN_SUB, ~in2, in2)
@@ -182,7 +185,7 @@ class ALU(xLen : Int) extends Module {
   // SLL, SRL, SRA
   val sh_amt = in2(5,0)
   val sh_out_l = (in1 << sh_amt)(xLen-1,0)
-  // Drop the sign bit if we are doing SRL
+  // Sign bits are extended only for SRA
   val sh_out_r = (Cat(op === FN_SRA & in1(xLen-1),
                   in1(xLen-1,0)).asSInt >> sh_amt)(xLen-1,0)
   //val sh_out_r = (Cat(Bits(1), in1).asSInt >> sh_amt)
@@ -212,7 +215,17 @@ class ALUTests(c: ALU) extends Tester(c) {
     "SRL" -> (0x33, 0x5, 0x0),
     "SRA" -> (0x33, 0x5, 0x20),
     "OR" -> (0x33, 0x6, 0x0),
-    "AND" -> (0x33, 0x7, 0x0)
+    "AND" -> (0x33, 0x7, 0x0),
+
+    "ADDI" -> (0x13, 0x0, 0x0),
+    "SLLI" -> (0x13, 0x1, 0x0),
+    "SLTI" -> (0x13, 0x2, 0x0),
+    "SLTIU" -> (0x13, 0x3, 0x0),
+    "XORI" -> (0x13, 0x4, 0x0),
+    "SRLI" -> (0x13, 0x5, 0x0),
+    "SRAI" -> (0x13, 0x5, 0x20),
+    "ORI" -> (0x13, 0x6, 0x0),
+    "ANDI" -> (0x13, 0x7, 0x0)
   )
   // Utility function for setting opcode, funct3 and funct7 values
   def set_instruction(inst_name : String) = {
@@ -223,28 +236,63 @@ class ALUTests(c: ALU) extends Tester(c) {
     poke(c.io.inst.funct7, value._3)
   }
 
-  // Test ADD instruction
+  // 1. Test ADD instruction - Sanity
   set_instruction("ADD")
   poke(c.io.rs1_val, 50)
   poke(c.io.rs2_val, 50)
   step(1)
   expect(c.io.out, 100)
 
-  // Test SUB instruction
+  // 2. Test ADD instruction - 1 negative value
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, -100L)
+  step(1)
+  expect(c.io.out, -50L)
+
+  // 3. Test ADD instruction - 2 negative values
+  set_instruction("ADD")
+  poke(c.io.rs1_val, -100L)
+  poke(c.io.rs2_val, -100L)
+  step(1)
+  expect(c.io.out, -200L)
+
+  // 4. Test SUB instruction - Sanity
   set_instruction("SUB")
   poke(c.io.rs1_val, 50)
   poke(c.io.rs2_val, 50)
   step(1)
   expect(c.io.out, 0)
 
-  // Test SLL instruction - sanity
-  set_instruction("SLL")
+  // 5. Test SUB instruction - Sanity 2
+  set_instruction("SUB")
   poke(c.io.rs1_val, 50)
-  poke(c.io.rs2_val, 4)
+  poke(c.io.rs2_val, 100)
   step(1)
-  expect(c.io.out, 50 << 4)
+  expect(c.io.out, -50L)
 
-  // Test SLL instruction - Verify that only the 5 lower bits in rs2_val are
+  // 6. Test SUB instruction - 1 negative value
+  set_instruction("SUB")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, -50L)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 7. Test SUB instruction - 2 negative values
+  set_instruction("SUB")
+  poke(c.io.rs1_val, -50L)
+  poke(c.io.rs2_val, 50L)
+  step(1)
+  expect(c.io.out, -100L)
+
+  // 8. Test SLL instruction - sanity
+  set_instruction("SLL")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 2)
+  step(1)
+  expect(c.io.out, 400)
+
+  // 9. Test SLL instruction - Verify that only the 5 lower bits in rs2_val are
   // taken. 
   set_instruction("SLL")
   poke(c.io.rs1_val, 1)
@@ -254,71 +302,71 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 1)
 
-  // Test SLT instruction - sanity 1 (not less than)
+  // 10. Test SLT instruction - sanity 1 (not less than)
   set_instruction("SLT")
   poke(c.io.rs1_val, 50)
   poke(c.io.rs2_val, 50)
   step(1)
   expect(c.io.out, 0)
   
-  // Test SLT instruction - sanity 2 (less than)
+  // 11. Test SLT instruction - sanity 2 (less than)
   set_instruction("SLT")
   poke(c.io.rs1_val, 50)
   poke(c.io.rs2_val, 100)
   step(1)
   expect(c.io.out, 1)
 
-  // Test SLT instruction - Signed comparison sanity 1 (not less than)
+  // 12. Test SLT instruction - Signed comparison sanity 1 (not less than)
   set_instruction("SLT")
   poke(c.io.rs1_val, -1L)
   poke(c.io.rs2_val, -2L)
   step(1)
   expect(c.io.out, 0)
 
-  // Test SLT instruction - Signed comparison sanity 2 (less than)
+  // 13. Test SLT instruction - Signed comparison sanity 2 (less than)
   set_instruction("SLT")
   poke(c.io.rs1_val, -2L)
   poke(c.io.rs2_val, -1L)
   step(1)
   expect(c.io.out, 1)
 
-  // Test SLTU instruction - sanity 1 (not less than)
+  // 14. Test SLTU instruction - sanity 1 (not less than)
   set_instruction("SLTU")
   poke(c.io.rs1_val, 50)
   poke(c.io.rs2_val, 50)
   step(1)
   expect(c.io.out, 0)
   
-  // Test SLT instruction - sanity 2 (less than)
+  // 15. Test SLTU instruction - sanity 2 (less than)
   set_instruction("SLTU")
   poke(c.io.rs1_val, 50)
   poke(c.io.rs2_val, 100)
   step(1)
   expect(c.io.out, 1)
 
-  // Test SLT instruction - sanity 3 (Pick one huge number. Should not be
-  // considered as a signed value)
+  // 16. Test SLTU instruction - sanity 3 (Pick a negative number. Should not
+  // be considered as a signed value)
   set_instruction("SLTU")
   poke(c.io.rs1_val, -1L)
   poke(c.io.rs2_val, 0)
   step(1)
   expect(c.io.out, 0)
 
-  // Test XOR instruction 
+  // 17. Test XOR instruction 
   set_instruction("XOR")
   poke(c.io.rs1_val, 123456789)
   poke(c.io.rs2_val, 234567890)
   step(1)
   expect(c.io.out, 123456789 ^ 234567890)
 
-  // Test SRL instruction - sanity
+  // 18. Test SRL instruction - sanity
   set_instruction("SRL")
   poke(c.io.rs1_val, 50)
   poke(c.io.rs2_val, 1)
   step(1)
   expect(c.io.out, 50 >> 1)
 
-  // Test SRL instruction - Verify that only 5 lower bits of rs2_val are
+  // 19. Test SRL instruction - Verify that only 5 lower bits of rs2_val are
   // considered.
   set_instruction("SRL")
   poke(c.io.rs1_val, 50)
@@ -328,7 +376,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 50)
 
-  // Test SRL instruction - Verify that sign extended bit is ignored
+  // 20. Test SRL instruction - Verify that sign extended bit is ignored
   set_instruction("SRL")
   // Set to -4 ie. 0xfffffffffffffffc
   poke(c.io.rs1_val, -4L)
@@ -338,21 +386,21 @@ class ALUTests(c: ALU) extends Tester(c) {
   // convert to 0x3fffffffffffffff
   expect(c.io.out, 0x3fffffffffffffffL)
 
-  // Test SRA instruction - Sanity
+  // 21. Test SRA instruction - Sanity
   set_instruction("SRA")
   poke(c.io.rs1_val, 50)
   poke(c.io.rs2_val, 1)
   step(1)
   expect(c.io.out, 50 >> 1)
 
-  // Test SRA instruction - Verify that sign extended bit is not ignored
+  // 22. Test SRA instruction - Verify that sign extended bit is not ignored
   set_instruction("SRA")
   poke(c.io.rs1_val, -4L)
   poke(c.io.rs2_val, 2)
   step(1)
   expect(c.io.out, -1L)
 
-  // Test SRA instruction - Verify that only 5 lower bits of rs2_val are
+  // 23. Test SRA instruction - Verify that only 5 lower bits of rs2_val are
   // considered.
   set_instruction("SRA")
   poke(c.io.rs1_val, 50)
@@ -362,19 +410,188 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 50)
 
-  // Test OR instruction 
+  // 24. Test OR instruction 
   set_instruction("OR")
   poke(c.io.rs1_val, 123456789)
   poke(c.io.rs2_val, 234567890)
   step(1)
   expect(c.io.out, 123456789 | 234567890)
 
-  // Test AND instruction 
+  // 25. Test AND instruction 
   set_instruction("AND")
   poke(c.io.rs1_val, 123456789)
   poke(c.io.rs2_val, 234567890)
   step(1)
   expect(c.io.out, 123456789 & 234567890)
+
+  // 26. Test ADDI instruction - Sanity
+  set_instruction("ADDI")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, 100)
+  step(1)
+  expect(c.io.out, 200)
+
+  // 27. Test ADDI instruction - Negative IMMI value
+  set_instruction("ADDI")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -200)
+  step(1)
+  expect(c.io.out, -100L)
+
+  // 28. Test ADDI instruction - Both negative values
+  set_instruction("ADDI")
+  poke(c.io.rs1_val, -100L)
+  poke(c.io.inst.immI, -200)
+  step(1)
+  expect(c.io.out, -300L)
+
+  // 29. Test SLLI instruction - Sanity
+  set_instruction("SLLI")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, 2)
+  step(1)
+  expect(c.io.out, 400)
+
+  // 30. Test SLLI instruction - Verify that only the lower 5 bits in IMMI
+  // value are considered
+  set_instruction("SLLI")
+  poke(c.io.rs1_val, 100)
+  // The lower five bits are all zero for IMMI. We expect the result to be
+  // equal to rs1_val
+  poke(c.io.inst.immI, 64)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 31. Test SLTI instruction - sanity 1 (not less than)
+  set_instruction("SLTI")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 0)
+  
+  // 32. Test SLTI instruction - sanity 2 (less than)
+  set_instruction("SLTI")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 100)
+  step(1)
+  expect(c.io.out, 1)
+
+  // 33. Test SLTI instruction - Signed comparison sanity 1 (not less than)
+  set_instruction("SLTI")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.inst.immI, -2)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 34. Test SLT instruction - Signed comparison sanity 2 (less than)
+  set_instruction("SLTI")
+  poke(c.io.rs1_val, -2L)
+  poke(c.io.inst.immI, -1)
+  step(1)
+  expect(c.io.out, 1)
+
+  // 35. Test SLTIU instruction - sanity 1 (not less than)
+  set_instruction("SLTIU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 0)
+  
+  // 36. Test SLTIU instruction - sanity 2 (less than)
+  set_instruction("SLTIU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 100)
+  step(1)
+  expect(c.io.out, 1)
+
+  // 37. Test SLTIU instruction - sanity 3 (Pick a negative number for rs1_val.
+  // Should not be considered as a signed value)
+  set_instruction("SLTIU")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.inst.immI, 0)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 38. Test SLTIU instruction - sanity 4 (Pick a negative number for IMMI.
+  // Should not be considered as a signed value)
+  set_instruction("SLTIU")
+  poke(c.io.rs1_val, 0)
+  poke(c.io.inst.immI, -1)
+  step(1)
+  expect(c.io.out, 1)
+
+  // 39. Test XORI instruction 
+  set_instruction("XORI")
+  poke(c.io.rs1_val, 123456789)
+  poke(c.io.inst.immI, 234567890)
+  step(1)
+  expect(c.io.out, 123456789 ^ 234567890)
+
+  // 40. Test SRLI instruction - sanity
+  set_instruction("SRLI")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 1)
+  step(1)
+  expect(c.io.out, 25)
+
+  // 41. Test SRLI instruction - Verify that only 5 lower bits of IMMI are
+  // considered.
+  set_instruction("SRLI")
+  poke(c.io.rs1_val, 50)
+  // The lower five bits are all zero for IMMI. We expect the result to be
+  // equal to rs1_val
+  poke(c.io.inst.immI, 64)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 42. Test SRLI instruction - Verify that sign extended bit is ignored
+  set_instruction("SRLI")
+  // Set to -4 ie. 0xfffffffffffffffc
+  poke(c.io.rs1_val, -4L)
+  poke(c.io.inst.immI, 2)
+  step(1)
+  // Since SRL ignores the sign bit and just brings in zeroes, we expect it to
+  // convert to 0x3fffffffffffffff
+  expect(c.io.out, 0x3fffffffffffffffL)
+
+  // 43. Test SRAI instruction - Sanity
+  set_instruction("SRAI")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 1)
+  step(1)
+  expect(c.io.out, 25)
+
+  // 44. Test SRAI instruction - Verify that sign extended bit is not ignored
+  set_instruction("SRAI")
+  poke(c.io.rs1_val, -4L)
+  poke(c.io.inst.immI, 2)
+  step(1)
+  expect(c.io.out, -1L)
+
+  // 45. Test SRAI instruction - Verify that only 5 lower bits of IMMI are
+  // considered.
+  set_instruction("SRAI")
+  poke(c.io.rs1_val, 50)
+  // The lower five bits are all zero for IMMI. We expect the result to be
+  // equal to rs1_val
+  poke(c.io.inst.immI, 64)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 46. Test ORI instruction 
+  set_instruction("ORI")
+  poke(c.io.rs1_val, 123456789)
+  poke(c.io.inst.immI, 234567890)
+  step(1)
+  expect(c.io.out, 123456789 | 234567890)
+
+  // 47. Test ANDI instruction 
+  set_instruction("ANDI")
+  poke(c.io.rs1_val, 123456789)
+  poke(c.io.inst.immI, 234567890)
+  step(1)
+  expect(c.io.out, 123456789 & 234567890)
+
 }
 
 class ALUGenerator extends TestGenerator {
