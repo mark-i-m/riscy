@@ -97,12 +97,12 @@ class ROB extends Module {
   val rob = Vec.tabulate(64) { i => RegEnable(robW(i).bits, robW(i).valid) }
 
   val head = new MultiCounter(64) // most senior
-  val headInc = UInt();
+  val headInc = UInt()
   val tail = new MultiCounter(64) // most recent (last valid instr if any)
-  val tailInc = UInt();
+  val tailInc = UInt()
 
   // # free entries
-  var freeInc = UInt();
+  var freeInc = UInt()
   val free = Reg(init = UInt(0), next = freeInc)
 
   when(io.mispredPC.valid) {
@@ -206,6 +206,11 @@ class ROB extends Module {
     Array.tabulate(4) { i => UInt(i) -> front(i).pc})
   io.mispredTarget   := MuxLookup(firstMispred, UInt(0),
     Array.tabulate(4) { i => UInt(i) -> front(i).rdVal.bits})
+  
+  // Clear remap table on misprediction
+  remap.io.reset.valid := io.mispredPC.valid
+  remap.io.reset.bits.valid := Bool(false)
+  remap.io.reset.bits.bits  := UInt(0)
 
   // Write to the register file
   //
@@ -392,8 +397,8 @@ class ROBGenerator extends TestGenerator {
 //  }
 //
 //  class CircularBuffer[T](size:Int)(implicit m:Manifest[T]) extends Seq[T]{
-//    val buffer=new Array[T](size);
-//    var bIdx=0;
+//    val buffer=new Array[T](size)
+//    var bIdx=0
 //
 //    override def apply (idx: Int): T = buffer((bIdx+idx) % size)
 //
