@@ -26,7 +26,7 @@ class ROBEntry extends DecodeIns {
   // - is this instruction a jump
   val hasRd = Bool(OUTPUT)
   val isSt = Bool(OUTPUT)
-  
+
   // From BP:
   // - was this branch predicted taken? 1 => T, 0 => NT
   val predTaken = Bool(OUTPUT)
@@ -87,7 +87,7 @@ class ROB extends Module {
   // (1) or in the ROB (0).
   //
   // The remaining bits denote which ROB entry if the register is in the ROB
-  val remap = Module(new RegFile(32, 8, 4, i => Valid(UInt(width = 6))))
+  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6))))
 
   // The Architectural register file
   val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64)))
@@ -166,9 +166,9 @@ class ROB extends Module {
   // - Branches that were mispredicted should trigger cleanup at this point
   //   (TODO: possibly can be done earlier?)
   // - Move the head pointer
-  // - TODO: clear mappings in the remap table on commit
+  // - Clear mappings in the remap table on commit
   // - TODO: clear mappings in the remap table on mispredict
-  
+
   // For convenience, create label wires for the four instructions at the head
   // of ROB.
   //
@@ -183,9 +183,9 @@ class ROB extends Module {
   // couldCommit(i) corresponds to front(i)
   val couldCommit = Vec.fill(4) { Bool() }
   for(i <- 0 until 4) {
-    couldCommit(i) := 
-      (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) && 
-      front(i).rdVal.valid && 
+    couldCommit(i) :=
+      (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) &&
+      front(i).rdVal.valid &&
       (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) })
   }
 
@@ -202,13 +202,13 @@ class ROB extends Module {
   val firstMispred: UInt = PriorityEncoder(mispredFlags)
 
   io.mispredPC.valid := mispredFlags.exists(identity _)
-  io.mispredPC.bits  := MuxLookup(firstMispred, UInt(0), 
+  io.mispredPC.bits  := MuxLookup(firstMispred, UInt(0),
     Array.tabulate(4) { i => UInt(i) -> front(i).pc})
-  io.mispredTarget   := MuxLookup(firstMispred, UInt(0), 
+  io.mispredTarget   := MuxLookup(firstMispred, UInt(0),
     Array.tabulate(4) { i => UInt(i) -> front(i).rdVal.bits})
 
   // Write to the register file
-  // 
+  //
   // - For each destination register among the four committing instructions,
   //   find out which is the last to rename that register.
   // - If this instruction is the last to rename, then write to RF
@@ -222,10 +222,40 @@ class ROB extends Module {
     // Want to only write the last value out of all ready instructions.
     // i.e. if multiple committing instructions want to write the same reg,
     // only the last write should win...
-    rf.io.wPorts(i).valid := couldCommit(i) && 
-                             front(i).hasRd && 
+    rf.io.wPorts(i).valid := couldCommit(i) &&
+                             front(i).hasRd &&
                              lastToRename(i) === UInt(i)
     rf.io.wPorts(i).bits := front(i).rdVal.bits
+  }
+
+  // Clear remap table entries
+  //
+  // An entry should be cleared if
+  // - that register was mapped to an instruction that is committing
+  // - that register is not being remapped by an incoming instruction
+  val shouldUnmap = Vec.fill(4) { Valid(UInt(width = 5)) }
+  for (i <- 0 until 4) {
+    // Is an incoming instruction mapping the destination
+    val rdReRemapped = (Vec.tabulate(4) {j => 
+      io.allocROB(j).valid && 
+      io.allocROB(j).bits.rd === front(i).rd && 
+      io.allocROB(j).bits.hasRd
+    }).exists(identity[Bool] _)
+
+    shouldUnmap(i).valid := couldCommit(i) && 
+                            remap.io.rValues(i+8).valid && 
+                            remap.io.rValues(i+8).bits === head.value + UInt(i) && 
+                            !rdReRemapped
+    shouldUnmap(i).bits  := front(i).rd
+  }
+
+  for(i <- 4 until 8) {
+    remap.io.rPorts(i+4) := front(i-4).rd
+
+    remap.io.wPorts(i).valid := shouldUnmap(i-4).valid
+    remap.io.wPorts(i).bits  := shouldUnmap(i-4).bits
+    remap.io.wValues(i).valid := Bool(false)
+    remap.io.wValues(i).bits := UInt(0)
   }
 
   // Compute the new head
@@ -358,13 +388,13 @@ class ROBGenerator extends TestGenerator {
 //      val i=idx
 //      idx=idx+1
 //      buffer(i)
-//    } 
+//    }
 //  }
-//  
+//
 //  class CircularBuffer[T](size:Int)(implicit m:Manifest[T]) extends Seq[T]{
 //    val buffer=new Array[T](size);
 //    var bIdx=0;
-//  
+//
 //    override def apply (idx: Int): T = buffer((bIdx+idx) % size)
 //
 //    override def length = size
@@ -376,7 +406,7 @@ class ROBGenerator extends TestGenerator {
 //      bIdx=(bIdx +1) % size
 //    }
 //  }
-//  
+//
 //  val rob = new CircularBuffer(64) { new ROBEntry() }
 //  val head = Reg(next = UInt(width = 6))
 
