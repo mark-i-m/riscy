@@ -96,29 +96,28 @@ class ROB extends Module {
   val robW = Vec.fill(64) { Valid(new ROBEntry) } // Write enable and write value for ROB
   val rob = Vec.tabulate(64) { i => RegEnable(robW(i).bits, robW(i).valid) }
 
-  val head = new MultiCounter(64) // most senior
+  // most senior
+  val head = new MultiCounter(64)
   val headInc = UInt()
-  val tail = new MultiCounter(64) // most recent (last valid instr if any)
-  val tailInc = UInt()
 
   // # free entries
+  var tailInc = UInt()
   var freeInc = UInt()
   val free = Reg(init = UInt(0), next = freeInc)
 
   when(io.mispredPC.valid) {
     freeInc := UInt(64)
     head.reset
-    tail.reset
   } .otherwise {
     freeInc := free + headInc - tailInc
     head.inc(headInc)
-    tail.inc(tailInc)
   }
 
   // TODO: add stalling logic
+  // TODO: add WB logic
 
   // Allocation logic
-  io.robFirst := tail.value + UInt(1)
+  io.robFirst := head.value + (UInt(64) - free)
   io.robFree  := free
 
   for(i <- 0 until 8) {
@@ -141,13 +140,13 @@ class ROB extends Module {
 
   // Latch new ROB entries
   for(i <- 0 until 64) {
-    when(UInt(i) === tail.value + UInt(1)) {
+    when(UInt(i) === io.robFirst) {
       robW(i) := io.allocROB(0)
-    } .elsewhen(UInt(i) === tail.value + UInt(2)) {
+    } .elsewhen(UInt(i) === io.robFirst + UInt(1)) {
       robW(i) := io.allocROB(1)
-    } .elsewhen(UInt(i) === tail.value + UInt(3)) {
+    } .elsewhen(UInt(i) === io.robFirst + UInt(2)) {
       robW(i) := io.allocROB(2)
-    } .elsewhen(UInt(i) === tail.value + UInt(4)) {
+    } .elsewhen(UInt(i) === io.robFirst + UInt(3)) {
       robW(i) := io.allocROB(3)
     } .otherwise {
       robW(i).valid := Bool(false) // write disable
@@ -167,7 +166,7 @@ class ROB extends Module {
   //   (TODO: possibly can be done earlier?)
   // - Move the head pointer
   // - Clear mappings in the remap table on commit
-  // - TODO: clear mappings in the remap table on mispredict
+  // - Clear mappings in the remap table on mispredict
 
   // For convenience, create label wires for the four instructions at the head
   // of ROB.
@@ -377,6 +376,83 @@ class ROBTests(c: ROB) extends Tester(c) {
     expect(c.io.remapMapping(randRPort).valid, true)
     expect(c.io.remapMapping(randRPort).bits, randWROBIdx)
   }
+
+  // Try latching some instructions
+  
+  // add r1 <- r1 + 0xFFFF
+  // add r2 <- r1 + 0xFFFF
+  poke(c.io.allocROB(0).valid, true)
+  poke(c.io.allocROB(0).bits.pc, 0xa0)
+  poke(c.io.allocROB(0).bits.tag, 0x0)
+  poke(c.io.allocROB(0).bits.op, 0x13)
+  poke(c.io.allocROB(0).bits.funct3, 0x0)
+  poke(c.io.allocROB(0).bits.rs1, 0x1)
+  poke(c.io.allocROB(0).bits.rd, 0x1)
+  poke(c.io.allocROB(0).bits.immI, 0xFFFF)
+  poke(c.io.allocROB(0).bits.hasRd, true)
+  poke(c.io.allocROB(0).bits.isSt, false)
+  poke(c.io.allocROB(0).bits.predTaken, false)
+  poke(c.io.allocROB(0).bits.isMispredicted, false)
+  poke(c.io.allocROB(0).bits.rs1Rename, 0) // Not renamed
+  poke(c.io.allocROB(0).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(0).bits.rs1Val.valid, true) // Ready
+  poke(c.io.allocROB(0).bits.rs1Val.bits, 0xDEADBEEF) // Value from RF
+  poke(c.io.allocROB(0).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF) // No RS2, use Imm
+  poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
+
+  poke(c.io.allocRemap(0).valid, true)
+  poke(c.io.allocRemap(0).bits.reg, 0x1)
+  poke(c.io.allocRemap(0).bits.idxROB, 0x0)
+
+  poke(c.io.allocROB(1).valid, 1)
+  poke(c.io.allocROB(1).bits.pc, 0xa4)
+  poke(c.io.allocROB(1).bits.tag, 0x1)
+  poke(c.io.allocROB(1).bits.op, 0x13)
+  poke(c.io.allocROB(1).bits.funct3, 0x0)
+  poke(c.io.allocROB(1).bits.rs1, 0x1)
+  poke(c.io.allocROB(1).bits.rd, 0x2)
+  poke(c.io.allocROB(1).bits.immI, 0xFFFF)
+  poke(c.io.allocROB(1).bits.hasRd, true)
+  poke(c.io.allocROB(1).bits.isSt, false)
+  poke(c.io.allocROB(1).bits.predTaken, false)
+  poke(c.io.allocROB(1).bits.isMispredicted, false)
+  poke(c.io.allocROB(1).bits.rs1Rename, 0) // Renamed to p0
+  poke(c.io.allocROB(1).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(1).bits.rs1Val.valid, false) // NOT Ready
+  poke(c.io.allocROB(1).bits.rs1Val.bits, 0x0) // Value from ROB
+  poke(c.io.allocROB(1).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(1).bits.rs2Val.bits, 0xFFFF) // No RS2, use Imm
+  poke(c.io.allocROB(1).bits.rdVal.valid, false) // NOT Ready
+
+  poke(c.io.allocRemap(1).valid, true)
+  poke(c.io.allocRemap(1).bits.reg, 0x2)
+  poke(c.io.allocRemap(1).bits.idxROB, 0x1)
+
+  expect(c.io.robFree, 64)
+  expect(c.io.robFirst, 0)
+
+  step(1)
+
+  poke(c.io.remapPorts(0), 1)
+  poke(c.io.remapPorts(1), 2)
+
+  poke(c.io.robPorts(0), 0)
+  poke(c.io.robPorts(1), 1)
+
+  step(0)
+
+  expect(c.io.robFree, 62)
+  expect(c.io.robFirst, 2)
+
+  expect(c.io.remapMapping(0).valid, true)
+  expect(c.io.remapMapping(0).bits, 0)
+
+  expect(c.io.remapMapping(1).valid, true)
+  expect(c.io.remapMapping(1).bits, 1)
+
+  expect(c.io.robDest(0).valid, false) // Rd not ready
+  expect(c.io.robDest(1).valid, false) // Rd not ready
 }
 
 class ROBGenerator extends TestGenerator {
