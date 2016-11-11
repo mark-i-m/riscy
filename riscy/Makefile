@@ -1,5 +1,5 @@
 # List of MODULES for unit tests
-MODULES = Fetch ICache Decode OpDecode Alloc ROB IssueQueue IqArbiter RobWriteback Stall
+MODULES = Fetch ICache Decode OpDecode Alloc ROB IssueQueue IqArbiter LSQ RobWriteback Stall
 MODULES += HelloModule MultiCounter CAM RegFile 
 
 # List of BENCHES for integration testing
