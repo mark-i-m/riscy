@@ -14,8 +14,8 @@ class AllocROB extends ROBEntry {
   val entry = UInt(OUTPUT, 6)
 
   // Is the operand coming from the ROB? T => Y, F => N
-  val rs1Map = Bool(OUTPUT)
-  val rs2Map = Bool(OUTPUT)
+  //val rs1Map = Bool(OUTPUT)
+  //val rs2Map = Bool(OUTPUT)
 }
 
 // The Control Magic to rename instructions and send signals to update the
@@ -82,62 +82,31 @@ class RiscyAlloc extends Module {
   }
 
   // Rename all src operands
-  val renamedRs1 = Vec.fill(4) { Valid(UInt(width = 6)) }
-  val renamedRs2 = Vec.fill(4) { Valid(UInt(width = 6)) }
-  for (i <- 0 until 4) {
-    // k renames i's operand if it comes before i and its destination is i's
-    // operand. Compute all possibilities. Then, choose the right one later.
-    val prevRs1IsRenamed = Vec.tabulate(4) { 
-      k => Bool(k < i) && io.inst(k).bits.rd === io.inst(i).bits.rs1 
-    }
-    val prevRs2IsRenamed = Vec.tabulate(4) { 
-      k => Bool(k < i) && io.inst(k).bits.rd === io.inst(i).bits.rs2 
-    }
-
-    // For each instruction k that comes before i, k produces the latest
-    // renaming of i's operand if it renames i's operand and there is no
-    // instruction g, k < g < i that also renames i's operand.
-    val rs1Possible = Array.tabulate(4) { k => 
-      (prevRs1IsRenamed(k) && 
-      Vec.tabulate(4) { g => 
-        Bool(g <= k) ||
-        Bool(g >= i) ||
-        Bool(k < g) && 
-        Bool(g < i) && 
-        !prevRs1IsRenamed(g)
-      }.forall(identity _)) -> UInt(k)
-    }
-    val prevRs1 = MuxCase(UInt(0), rs1Possible)
-    val rs2Possible = Array.tabulate(4) { k => 
-      (prevRs2IsRenamed(k) && 
-      Vec.tabulate(4) { g =>
-        Bool(g <= k) ||
-        Bool(g >= i) ||
-        Bool(k < g) && 
-        Bool(g < i) && 
-        !prevRs2IsRenamed(g)
-      }.forall(identity _)) -> UInt(k)
-    }
-    val prevRs2 = MuxCase(UInt(0), rs2Possible)
-
-    // For each instruction i, i's operand is renamed by a another instruction
-    // that is currently also being renamed if any entry in prevRs1IsRenamed is
-    // true. If this is the case, prevRs1 specifies which previous instruction
-    // renames i's operand. Otherwise, take the entry from the remap table.
-    when (prevRs1IsRenamed.exists(identity _)) {
-      renamedRs1(i).valid := Bool(true)
-      renamedRs1(i).bits := renamedDest(prevRs1)
-    } .otherwise {
-      renamedRs1(i).valid := io.remapMapping(2*i).valid
-      renamedRs1(i).bits := io.remapMapping(2*i).bits
-    }
-    when (prevRs2IsRenamed.exists(identity _)) {
-      renamedRs2(i).valid := Bool(true)
-      renamedRs2(i).bits := renamedDest(prevRs2)
-    } .otherwise {
-      renamedRs2(i).valid := io.remapMapping(2*i+1).valid
-      renamedRs2(i).bits := io.remapMapping(2*i+1).bits
-    }
+  val renamedRs1 = Vec.tabulate(4) { i => 
+    PriorityMux(
+      ((Array.tabulate(i) { j => (
+        io.inst(j).bits.rd === io.inst(i).bits.rs1,
+        {
+          val renamed = Valid(UInt(6))
+          renamed.valid := Bool(true)
+          renamed.bits  := renamedDest(j)
+          renamed
+        }
+      )}).reverse :+ (Bool(true), io.remapMapping(2*i)))
+    ) 
+  }
+  val renamedRs2 = Vec.tabulate(4) { i => 
+    PriorityMux(
+      ((Array.tabulate(i) { j => (
+        io.inst(j).bits.rd === io.inst(i).bits.rs2,
+        {
+          val renamed = Valid(UInt(6))
+          renamed.valid := Bool(true)
+          renamed.bits  := renamedDest(j)
+          renamed
+        }
+      )}).reverse :+ (Bool(true), io.remapMapping(2*i+1)))
+    ) 
   }
 
   // Hook up instructions to ROB
@@ -156,24 +125,21 @@ class RiscyAlloc extends Module {
     // Which ROB entry
     robEntry.entry := renamedDest(i)
 
-    // Bulk wire data from decoded instruction
+    // Operation
     robEntry.op := pipelinedInst(i).bits.op
     robEntry.funct3 := pipelinedInst(i).bits.funct3
-    when (pipelinedOpDecode(i).hasRs2) {
-      robEntry.funct7 := pipelinedInst(i).bits.funct7
-    } .otherwise {
-      robEntry.funct7 := UInt(0, 7)
-    }
+    robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
+
     // First operand
     when (renamedRs1(i).valid) {
       // Getting from ROB
-      robEntry.rs1Map := Bool(true)
+      //robEntry.rs1Map := Bool(true)
       robEntry.rs1Rename := renamedRs1(i).bits
       robEntry.rs1Val.valid := io.robDest(2*i).valid
       robEntry.rs1Val.bits := io.robDest(2*i).bits
     } .otherwise {
       // Getting from Arch Reg File
-      robEntry.rs1Map := Bool(false)
+      //robEntry.rs1Map := Bool(false)
       robEntry.rs1Rename := pipelinedInst(i).bits.rs1
       robEntry.rs1Val.valid := Bool(true)
       robEntry.rs1Val.bits := io.rfValues(2*i)
@@ -184,20 +150,20 @@ class RiscyAlloc extends Module {
       // Second operand is a register
       when (renamedRs2(i).valid) {
         // Getting from ROB
-        robEntry.rs2Map := Bool(true)
+        //robEntry.rs2Map := Bool(true)
         robEntry.rs2Rename := renamedRs2(i).bits
         robEntry.rs2Val.valid := io.robDest(2*i+1).valid
         robEntry.rs2Val.bits := io.robDest(2*i+1).bits
       } .otherwise {
         // Getting from Arch Reg File
-        robEntry.rs2Map := Bool(false)
+        //robEntry.rs2Map := Bool(false)
         robEntry.rs2Rename := pipelinedInst(i).bits.rs2
         robEntry.rs2Val.valid := Bool(true)
         robEntry.rs2Val.bits := io.rfValues(2*i+1)
       }
     } .otherwise {
       // Second operand is an immediate
-      robEntry.rs2Map := Bool(false)
+      //robEntry.rs2Map := Bool(false)
       robEntry.rs2Rename := UInt(0)
       robEntry.rs2Val.valid := Bool(true)
       robEntry.rs2Val.bits := UInt(0) // chisel requires this for some reason :(
@@ -281,11 +247,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(0).bits.op, 0x13)
   expect(c.io.allocROB(0).bits.funct3, 0x0)
   expect(c.io.allocROB(0).bits.funct7, 0x00)
-  expect(c.io.allocROB(0).bits.rs1Map, false)
+  //expect(c.io.allocROB(0).bits.rs1Map, false)
   expect(c.io.allocROB(0).bits.rs1Rename, 0x1)
   expect(c.io.allocROB(0).bits.rs1Val.valid, true)
   expect(c.io.allocROB(0).bits.rs1Val.bits, 0x1234)
-  expect(c.io.allocROB(0).bits.rs2Map, false)
+  //expect(c.io.allocROB(0).bits.rs2Map, false)
   expect(c.io.allocROB(0).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs2Val.valid, true)
   expect(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF)
@@ -300,11 +266,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(1).bits.op, 0x13)
   expect(c.io.allocROB(1).bits.funct3, 0x0)
   expect(c.io.allocROB(1).bits.funct7, 0x00)
-  expect(c.io.allocROB(1).bits.rs1Map, true)
+  //expect(c.io.allocROB(1).bits.rs1Map, true)
   expect(c.io.allocROB(1).bits.rs1Rename, 0x00)
   expect(c.io.allocROB(1).bits.rs1Val.valid, false)
   expect(c.io.allocROB(1).bits.rs1Val.bits, 0x34)
-  expect(c.io.allocROB(1).bits.rs2Map, false)
+  //expect(c.io.allocROB(1).bits.rs2Map, false)
   expect(c.io.allocROB(1).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(1).bits.rs2Val.valid, true)
   expect(c.io.allocROB(1).bits.rs2Val.bits, 0xFFFF)
@@ -385,11 +351,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(0).bits.op, 0x13)
   expect(c.io.allocROB(0).bits.funct3, 0x0)
   expect(c.io.allocROB(0).bits.funct7, 0x00)
-  expect(c.io.allocROB(0).bits.rs1Map, true)
+  //expect(c.io.allocROB(0).bits.rs1Map, true)
   expect(c.io.allocROB(0).bits.rs1Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs1Val.valid, false)
   expect(c.io.allocROB(0).bits.rs1Val.bits, 0x34)
-  expect(c.io.allocROB(0).bits.rs2Map, false)
+  //expect(c.io.allocROB(0).bits.rs2Map, false)
   expect(c.io.allocROB(0).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs2Val.valid, true)
   expect(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF)
@@ -398,11 +364,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(1).bits.op, 0x13)
   expect(c.io.allocROB(1).bits.funct3, 0x0)
   expect(c.io.allocROB(1).bits.funct7, 0x00)
-  expect(c.io.allocROB(1).bits.rs1Map, true)
+  //expect(c.io.allocROB(1).bits.rs1Map, true)
   expect(c.io.allocROB(1).bits.rs1Rename, 0x2)
   expect(c.io.allocROB(1).bits.rs1Val.valid, false)
   expect(c.io.allocROB(1).bits.rs1Val.bits, 0x34)
-  expect(c.io.allocROB(1).bits.rs2Map, false)
+  //expect(c.io.allocROB(1).bits.rs2Map, false)
   expect(c.io.allocROB(1).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(1).bits.rs2Val.valid, true)
   expect(c.io.allocROB(1).bits.rs2Val.bits, 0xFFFF)
@@ -411,11 +377,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(2).bits.op, 0x13)
   expect(c.io.allocROB(2).bits.funct3, 0x0)
   expect(c.io.allocROB(2).bits.funct7, 0x00)
-  expect(c.io.allocROB(2).bits.rs1Map, true)
+  //expect(c.io.allocROB(2).bits.rs1Map, true)
   expect(c.io.allocROB(2).bits.rs1Rename, 0x3)
   expect(c.io.allocROB(2).bits.rs1Val.valid, false)
   expect(c.io.allocROB(2).bits.rs1Val.bits, 0x34)
-  expect(c.io.allocROB(2).bits.rs2Map, false)
+  //expect(c.io.allocROB(2).bits.rs2Map, false)
   expect(c.io.allocROB(2).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(2).bits.rs2Val.valid, true)
   expect(c.io.allocROB(2).bits.rs2Val.bits, 0xFFFF)
@@ -424,11 +390,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(3).bits.op, 0x13)
   expect(c.io.allocROB(3).bits.funct3, 0x0)
   expect(c.io.allocROB(3).bits.funct7, 0x00)
-  expect(c.io.allocROB(3).bits.rs1Map, true)
+  //expect(c.io.allocROB(3).bits.rs1Map, true)
   expect(c.io.allocROB(3).bits.rs1Rename, 0x4)
   expect(c.io.allocROB(3).bits.rs1Val.valid, false)
   expect(c.io.allocROB(3).bits.rs1Val.bits, 0x34)
-  expect(c.io.allocROB(3).bits.rs2Map, false)
+  //expect(c.io.allocROB(3).bits.rs2Map, false)
   expect(c.io.allocROB(3).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(3).bits.rs2Val.valid, true)
   expect(c.io.allocROB(3).bits.rs2Val.bits, 0xFFFF)
@@ -510,11 +476,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(0).bits.op, 0x13)
   expect(c.io.allocROB(0).bits.funct3, 0x0)
   expect(c.io.allocROB(0).bits.funct7, 0x00)
-  expect(c.io.allocROB(0).bits.rs1Map, true)
+  //expect(c.io.allocROB(0).bits.rs1Map, true)
   expect(c.io.allocROB(0).bits.rs1Rename, 0x5)
   expect(c.io.allocROB(0).bits.rs1Val.valid, false)
   expect(c.io.allocROB(0).bits.rs1Val.bits, 0x34)
-  expect(c.io.allocROB(0).bits.rs2Map, false)
+  //expect(c.io.allocROB(0).bits.rs2Map, false)
   expect(c.io.allocROB(0).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs2Val.valid, true)
   expect(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF)
@@ -523,11 +489,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(1).bits.op, 0x13)
   expect(c.io.allocROB(1).bits.funct3, 0x0)
   expect(c.io.allocROB(1).bits.funct7, 0x00)
-  expect(c.io.allocROB(1).bits.rs1Map, true)
+  //expect(c.io.allocROB(1).bits.rs1Map, true)
   expect(c.io.allocROB(1).bits.rs1Rename, 0x6)
   expect(c.io.allocROB(1).bits.rs1Val.valid, false)
   expect(c.io.allocROB(1).bits.rs1Val.bits, 0x34)
-  expect(c.io.allocROB(1).bits.rs2Map, false)
+  //expect(c.io.allocROB(1).bits.rs2Map, false)
   expect(c.io.allocROB(1).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(1).bits.rs2Val.valid, true)
   expect(c.io.allocROB(1).bits.rs2Val.bits, 0xFFFF)
@@ -536,11 +502,11 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(2).bits.op, 0x13)
   expect(c.io.allocROB(2).bits.funct3, 0x0)
   expect(c.io.allocROB(2).bits.funct7, 0x00)
-  expect(c.io.allocROB(2).bits.rs1Map, true)
+  //expect(c.io.allocROB(2).bits.rs1Map, true)
   expect(c.io.allocROB(2).bits.rs1Rename, 0x6)
   expect(c.io.allocROB(2).bits.rs1Val.valid, false)
   expect(c.io.allocROB(2).bits.rs1Val.bits, 0x34)
-  expect(c.io.allocROB(2).bits.rs2Map, false)
+  //expect(c.io.allocROB(2).bits.rs2Map, false)
   expect(c.io.allocROB(2).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(2).bits.rs2Val.valid, true)
   expect(c.io.allocROB(2).bits.rs2Val.bits, 0xFFFF)
