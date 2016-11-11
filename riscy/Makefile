@@ -1,6 +1,6 @@
 # List of MODULES for unit tests
-MODULES = HelloModule Fetch Decode Alloc ROB RegFile OpDecode ICache IssueQueue MultiCounter
-MODULES += CounterUpDownModule CAM IqArbiter RobWriteback
+MODULES = Fetch ICache Decode OpDecode Alloc ROB IssueQueue IqArbiter RobWriteback
+MODULES += HelloModule MultiCounter CAM RegFile 
 
 # List of BENCHES for integration testing
 BENCHES=Hello.hex.bench

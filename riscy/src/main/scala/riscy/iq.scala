@@ -13,8 +13,7 @@ class IssueQueue extends Module {
 	//val eachEntry = Module ( new ShiftRegPP(() => new  ROBEntry))
 	val iqueue = Vec.fill(16) {Reg(outType = Valid(new AllocROB))}
 
-        
-	val counter = new CounterUpDown(16)
+	val counter = new MultiCounter(16)
 	
 	// Assigning entries to current issue queue entries
 	// New entries are assigned only if valid bit is set
