@@ -23,9 +23,10 @@ object ALU {
   val FN_SGEU = UInt(14)
 
   // ALU Input 1 selection options
-  val A1_RS1 = UInt(0)
-  val A1_PC  = UInt(1)
-  val A1_RS2 = UInt(2)
+  val A1_RS1  = UInt(0)
+  val A1_RS2  = UInt(1)
+  val A1_PC   = UInt(2)
+  val A1_ZERO = UInt(3)
 
   // ALU Input 2 selection options
   val A2_RS2   = UInt(0)
@@ -33,6 +34,8 @@ object ALU {
   val A2_IMM_I = UInt(2)
   val A2_IMM_S = UInt(3)
   val A2_IMM_B = UInt(4)
+  val A2_IMM_J = UInt(5)
+  val A2_IMM_U = UInt(6)
 
   // Instructions needing the subtractor: UInt(8) - UInt(15)
   def isSub(cmd: UInt) = cmd(3)
@@ -160,6 +163,18 @@ class ALU(xLen : Int) extends Module {
     } .elsewhen (io.inst.funct3 === UInt(0x7)) {
       op := FN_SGEU
     }
+  } .elsewhen (io.inst.op === UInt(0x6F)) {
+    // JAL
+    op := FN_ADD
+  } .elsewhen (io.inst.op === UInt(0x67)) {
+    // JALR
+    op := FN_ADD
+  } .elsewhen (io.inst.op === UInt(0x17)) {
+    // AUIPC
+    op := FN_ADD
+  } .elsewhen (io.inst.op === UInt(0x37)) {
+    // LUI
+    op := FN_ADD
   } .otherwise {
     op := FN_UNKNOWN
   }
@@ -204,6 +219,22 @@ class ALU(xLen : Int) extends Module {
       sel_a1 := A1_RS1
       sel_a2 := A2_RS2
     }
+  } .elsewhen (io.inst.op === UInt(0x6F)) {
+    // JAL
+    sel_a1 := A1_PC
+    sel_a2 := A2_IMM_J
+  } .elsewhen (io.inst.op === UInt(0x67)) {
+    // JALR
+    sel_a1 := A1_PC
+    sel_a2 := A2_IMM_I
+  } .elsewhen (io.inst.op === UInt(0x17)) {
+    // AUIPC
+    sel_a1 := A1_PC
+    sel_a2 := A2_IMM_U
+  } .elsewhen (io.inst.op === UInt(0x37)) {
+    // LUI
+    sel_a1 := A1_ZERO
+    sel_a2 := A2_IMM_U
   } .otherwise {
     sel_a1 := A1_RS1
     sel_a2 := A2_RS2
@@ -213,23 +244,39 @@ class ALU(xLen : Int) extends Module {
   val immI_ext = Cat(Fill(32, io.inst.immI(31)), io.inst.immI)
   val immS_ext = Cat(Fill(32, io.inst.immS(31)), io.inst.immS)
   val immB_ext = Cat(Fill(32, io.inst.immB(31)), io.inst.immB)
+  val immJ_ext = Cat(Fill(32, io.inst.immJ(31)), io.inst.immJ)
+  val immU_ext = Cat(Fill(32, io.inst.immU(31)), io.inst.immU)
 
   // Select the inputs for ALU operations
   val in1 = MuxLookup(sel_a1, UInt(0), Seq(
-    A1_RS1 -> io.rs1_val,
-    A1_RS2 -> io.rs2_val,
-    A1_PC -> io.PC))
+    A1_RS1  -> io.rs1_val,
+    A1_RS2  -> io.rs2_val,
+    A1_PC   -> io.PC,
+    A1_ZERO -> UInt(0, width=xLen)))
+
+  // XXX-kbavishi: Do we care about the sign of immU? Assume no for now.
+  // We are interested in putting 20 bits of immU followed by 12 bits of zeroes
+  // in the 32-bit registers for LUI and AUIPC. I'm assuming that they are only
+  // interested in filling the lower 32 bits of our 64 bit registers.
   val in2 = MuxLookup(sel_a2, UInt(0), Seq(
-    A2_RS2 -> io.rs2_val,
-    A2_RS1 -> io.rs1_val,
+    A2_RS2   -> io.rs2_val,
+    A2_RS1   -> io.rs1_val,
     A2_IMM_I -> immI_ext.asUInt,
     A2_IMM_S -> immS_ext.asUInt,
-    A2_IMM_B -> immB_ext.asUInt))
+    A2_IMM_B -> immB_ext.asUInt,
+    A2_IMM_J -> immJ_ext.asUInt,
+    A2_IMM_U -> Cat(Cat(Fill(32, UInt(0)), immU_ext.asUInt()(20,0)),
+                    Fill(12, UInt(0))) ))
 
   // ADD, SUB - Use an adder to derive results
+  // LB, LH, LW, LBU, LHU, SB, SH, SW - Use adder to compute addresses
+  // JAL, JALR - Use adder to compute target address (offset + PC + 4)
+  // LUI, AUIPC
   val in2_inv = Mux(isSub(op), ~in2, in2)
   val in1_xor_in2 = in1 ^ in2
-  io.adder_out := in1 + in2_inv + isSub(op)
+  val isJmp = io.inst.op === UInt(0x6F) || io.inst.op === UInt(0x67)
+  io.adder_out := (in1 + in2_inv +
+                   Mux(isSub(op), UInt(1), Mux(isJmp, UInt(4), UInt(0))))
 
   // Use another adder for computing branch target since the prev adder will be
   // busy doing the subtraction for checking the condition
@@ -319,7 +366,13 @@ class ALUTests(c: ALU) extends Tester(c) {
     "BLT" -> (0x63, 0x4, 0x0),
     "BGE" -> (0x63, 0x5, 0x0),
     "BLTU" -> (0x63, 0x6, 0x0),
-    "BGEU" -> (0x63, 0x7, 0x0)
+    "BGEU" -> (0x63, 0x7, 0x0),
+
+    "JAL" -> (0x6F, 0x0, 0x0),
+    "JALR" -> (0x67, 0x0, 0x0),
+
+    "LUI" -> (0x37, 0x0, 0x0),
+    "AUIPC" -> (0x17, 0x0, 0x0)
   )
   // Utility function for setting opcode, funct3 and funct7 values
   def set_instruction(inst_name : String) = {
@@ -1298,6 +1351,40 @@ class ALUTests(c: ALU) extends Tester(c) {
   // BGEU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
   expect(c.io.branch_addr_out, 900)
+
+  // 113. Test JAL instruction - Positive IMMJ value
+  set_instruction("JAL")
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immJ, 100)
+  step(1)
+  expect(c.io.out, 1104)
+
+  // 114. Test JAL instruction - Negative IMMJ value
+  set_instruction("JAL")
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immJ, -100)
+  step(1)
+  expect(c.io.out, 904)
+
+  // 115. Test JALR instruction - Positive IMMI value
+  set_instruction("JALR")
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immI, 100)
+  step(1)
+  expect(c.io.out, 1104)
+
+  // 116. Test LUI instruction
+  set_instruction("LUI")
+  poke(c.io.inst.immU, 10)
+  step(1)
+  expect(c.io.out, 10 << 12)
+
+  // 117. Test AUIPC instruction
+  set_instruction("AUIPC")
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immU, 10)
+  step(1)
+  expect(c.io.out, 1000 + (10 << 12))
 }
 
 class ALUGenerator extends TestGenerator {
