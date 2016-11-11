@@ -184,7 +184,7 @@ class ROB extends Module {
   // - Branches that were mispredicted should trigger cleanup at this point
   //   (TODO: can be done earlier if we regenerate the remap table from the ROB)
   // - Move the head pointer
-  // - TODO: invalidate popped entries by changing rdVal.valid to false
+  // - Clear popped entries by changing rdVal.valid to false
   // - Clear mappings in the remap table on commit
   // - Clear mappings in the remap table on mispredict
   /////////////////////////////////////////////////////////////////////////////
@@ -297,6 +297,23 @@ class ROB extends Module {
     remap.io.wPorts(i).bits  := shouldUnmap(i-4).bits
     remap.io.wValues(i).valid := Bool(false)
     remap.io.wValues(i).bits := UInt(0)
+  }
+
+  // Clear popped entries
+  for(i <- 0 until 64) {
+    when(UInt(i) === head.value && couldCommit(0)) {
+      robW(i).valid := Bool(true)
+      robW(i).bits := new ROBEntry
+    } .elsewhen(UInt(i) === head.value + UInt(1) && couldCommit(1)) {
+      robW(i).valid := Bool(true)
+      robW(i).bits := new ROBEntry
+    } .elsewhen(UInt(i) === head.value + UInt(2) && couldCommit(2)) {
+      robW(i).valid := Bool(true)
+      robW(i).bits := new ROBEntry
+    } .elsewhen(UInt(i) === head.value + UInt(3) && couldCommit(3)) {
+      robW(i).valid := Bool(true)
+      robW(i).bits := new ROBEntry
+    }
   }
 
   // Compute the new head
