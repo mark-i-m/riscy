@@ -61,11 +61,9 @@ class ROB extends Module {
     val allocROB = Vec.fill(4) { Valid(new AllocROB()).flip }
 
     // Get signals from the FOO for WB
-    val fooALU0 = new WBValue
-    val fooALU1 = new WBValue
-    val fooALU2 = new WBValue
-    val fooALU3 = new WBValue
-    val fooLSQ  = new WBValue
+    // - ALU 0-3
+    // - LSQ 0, 1
+    val wbValues = Vec.fill(6) { new WBValue }
 
     // Signal to load/store to actually issue a store.
     // There is exactly one store that could be at the head of the LSQ, so we
@@ -114,9 +112,10 @@ class ROB extends Module {
   }
 
   // TODO: add stalling logic
-  // TODO: add WB logic
 
+  /////////////////////////////////////////////////////////////////////////////
   // Allocation logic
+  /////////////////////////////////////////////////////////////////////////////
   io.robFirst := head.value + (UInt(64) - free)
   io.robFree  := free
 
@@ -157,16 +156,32 @@ class ROB extends Module {
   // Update tail pointer
   tailInc := PopCount(Array.tabulate(4) { io.allocROB(_).valid })
 
+  /////////////////////////////////////////////////////////////////////////////
+  // Writeback logic
+  /////////////////////////////////////////////////////////////////////////////
+  for(i <- 0 until 6) {
+    when(io.wbValues(i).id.valid) {
+      robW(io.wbValues(i).id.bits).valid := Bool(true)
+      // The ROB entry stays the same, but the rdVal changes
+      robW(io.wbValues(i).id.bits).bits := rob(io.wbValues(i).id.bits)
+      robW(io.wbValues(i).id.bits).bits.rdVal.valid := Bool(true)
+      robW(io.wbValues(i).id.bits).bits.rdVal.bits := io.wbValues(i).value
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
   // Commit logic
+  /////////////////////////////////////////////////////////////////////////////
   // - 4-wide in order commit
   // - Only commit if the head of the queue has a ready destination bit
   // - Stores should actually make their memory requests at this time
   // - Instructions with an rd should actually write the Arch reg file
   // - Branches that were mispredicted should trigger cleanup at this point
-  //   (TODO: possibly can be done earlier?)
+  //   (TODO: can be done earlier if we regenerate the remap table from the ROB)
   // - Move the head pointer
   // - Clear mappings in the remap table on commit
   // - Clear mappings in the remap table on mispredict
+  /////////////////////////////////////////////////////////////////////////////
 
   // For convenience, create label wires for the four instructions at the head
   // of ROB.
