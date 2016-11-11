@@ -63,7 +63,7 @@ class ROB extends Module {
     // Get signals from the FOO for WB
     // - ALU 0-3
     // - LSQ 0, 1
-    val wbValues = Vec.fill(6) { new WBValue }
+    val wbValues = Vec.fill(6) { (new WBValue).asInput }
 
     // Signal to load/store to actually issue a store.
     // There is exactly one store that could be at the head of the LSQ, so we
@@ -159,6 +159,9 @@ class ROB extends Module {
   /////////////////////////////////////////////////////////////////////////////
   // Writeback logic
   /////////////////////////////////////////////////////////////////////////////
+  // TODO: How to ignore flushed instructions? In all likelihood, the ROB entry
+  // number will not match, so they will be ignored, but this case is not
+  // guaranteed, so how to handle?
   for(i <- 0 until 6) {
     when(io.wbValues(i).id.valid) {
       robW(io.wbValues(i).id.bits).valid := Bool(true)
@@ -468,6 +471,158 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   expect(c.io.robDest(0).valid, false) // Rd not ready
   expect(c.io.robDest(1).valid, false) // Rd not ready
+
+  
+  // add r1 <- r1 + 0xFFFF
+  // add r1 <- r1 + 0xFFFF
+  // add r1 <- r1 + 0xFFFF
+  // add r1 <- r1 + 0xFFFF
+  poke(c.io.allocROB(0).valid, true)
+  poke(c.io.allocROB(0).bits.pc, 0xa8)
+  poke(c.io.allocROB(0).bits.tag, 0x2)
+  poke(c.io.allocROB(0).bits.op, 0x13)
+  poke(c.io.allocROB(0).bits.funct3, 0x0)
+  poke(c.io.allocROB(0).bits.rs1, 0x1)
+  poke(c.io.allocROB(0).bits.rd, 0x1)
+  poke(c.io.allocROB(0).bits.immI, 0xFFFF)
+  poke(c.io.allocROB(0).bits.hasRd, true)
+  poke(c.io.allocROB(0).bits.isSt, false)
+  poke(c.io.allocROB(0).bits.predTaken, false)
+  poke(c.io.allocROB(0).bits.isMispredicted, false)
+  poke(c.io.allocROB(0).bits.rs1Rename, 1) // Renamed
+  poke(c.io.allocROB(0).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(0).bits.rs1Val.valid, false) // NOT Ready
+  poke(c.io.allocROB(0).bits.rs1Val.bits, 0x0) // Value from ROB
+  poke(c.io.allocROB(0).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF) // No RS2, use Imm
+  poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
+
+  poke(c.io.allocROB(1).valid, true)
+  poke(c.io.allocROB(1).bits.pc, 0xac)
+  poke(c.io.allocROB(1).bits.tag, 0x3)
+  poke(c.io.allocROB(1).bits.op, 0x13)
+  poke(c.io.allocROB(1).bits.funct3, 0x0)
+  poke(c.io.allocROB(1).bits.rs1, 0x1)
+  poke(c.io.allocROB(1).bits.rd, 0x1)
+  poke(c.io.allocROB(1).bits.immI, 0xFFFF)
+  poke(c.io.allocROB(1).bits.hasRd, true)
+  poke(c.io.allocROB(1).bits.isSt, false)
+  poke(c.io.allocROB(1).bits.predTaken, false)
+  poke(c.io.allocROB(1).bits.isMispredicted, false)
+  poke(c.io.allocROB(1).bits.rs1Rename, 2) // Renamed
+  poke(c.io.allocROB(1).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(1).bits.rs1Val.valid, false) // NOT Ready
+  poke(c.io.allocROB(1).bits.rs1Val.bits, 0x0) // Value from ROB
+  poke(c.io.allocROB(1).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(1).bits.rs2Val.bits, 0xFFFF) // No RS2, use Imm
+  poke(c.io.allocROB(1).bits.rdVal.valid, false) // NOT Ready
+
+  poke(c.io.allocROB(2).valid, true)
+  poke(c.io.allocROB(2).bits.pc, 0xb0)
+  poke(c.io.allocROB(2).bits.tag, 0x4)
+  poke(c.io.allocROB(2).bits.op, 0x13)
+  poke(c.io.allocROB(2).bits.funct3, 0x0)
+  poke(c.io.allocROB(2).bits.rs1, 0x1)
+  poke(c.io.allocROB(2).bits.rd, 0x1)
+  poke(c.io.allocROB(2).bits.immI, 0xFFFF)
+  poke(c.io.allocROB(2).bits.hasRd, true)
+  poke(c.io.allocROB(2).bits.isSt, false)
+  poke(c.io.allocROB(2).bits.predTaken, false)
+  poke(c.io.allocROB(2).bits.isMispredicted, false)
+  poke(c.io.allocROB(2).bits.rs1Rename, 3) // Renamed
+  poke(c.io.allocROB(2).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(2).bits.rs1Val.valid, false) // NOT Ready
+  poke(c.io.allocROB(2).bits.rs1Val.bits, 0x0) // Value from ROB
+  poke(c.io.allocROB(2).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(2).bits.rs2Val.bits, 0xFFFF) // No RS2, use Imm
+  poke(c.io.allocROB(2).bits.rdVal.valid, false) // NOT Ready
+
+  poke(c.io.allocROB(3).valid, true)
+  poke(c.io.allocROB(3).bits.pc, 0xb4)
+  poke(c.io.allocROB(3).bits.tag, 0x5)
+  poke(c.io.allocROB(3).bits.op, 0x13)
+  poke(c.io.allocROB(3).bits.funct3, 0x0)
+  poke(c.io.allocROB(3).bits.rs1, 0x1)
+  poke(c.io.allocROB(3).bits.rd, 0x1)
+  poke(c.io.allocROB(3).bits.immI, 0xFFFF)
+  poke(c.io.allocROB(3).bits.hasRd, true)
+  poke(c.io.allocROB(3).bits.isSt, false)
+  poke(c.io.allocROB(3).bits.predTaken, false)
+  poke(c.io.allocROB(3).bits.isMispredicted, false)
+  poke(c.io.allocROB(3).bits.rs1Rename, 4) // Renamed
+  poke(c.io.allocROB(3).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(3).bits.rs1Val.valid, false) // NOT Ready
+  poke(c.io.allocROB(3).bits.rs1Val.bits, 0x0) // Value from ROB
+  poke(c.io.allocROB(3).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(3).bits.rs2Val.bits, 0xFFFF) // No RS2, use Imm
+  poke(c.io.allocROB(3).bits.rdVal.valid, false) // NOT Ready
+
+  poke(c.io.allocRemap(3).valid, true)
+  poke(c.io.allocRemap(3).bits.reg, 0x1)
+  poke(c.io.allocRemap(3).bits.idxROB, 0x5)
+
+  poke(c.io.allocRemap(0).valid, false)
+  poke(c.io.allocRemap(1).valid, false)
+
+  step(1)
+
+  poke(c.io.remapPorts(0), 1)
+  poke(c.io.remapPorts(1), 2)
+
+  poke(c.io.robPorts(0), 0)
+  poke(c.io.robPorts(1), 1)
+  poke(c.io.robPorts(2), 2)
+  poke(c.io.robPorts(3), 3)
+  poke(c.io.robPorts(4), 4)
+  poke(c.io.robPorts(5), 5)
+
+  step(0)
+
+  expect(c.io.robFree, 58)
+  expect(c.io.robFirst, 6)
+
+  expect(c.io.remapMapping(0).valid, true)
+  expect(c.io.remapMapping(0).bits, 5)
+
+  expect(c.io.remapMapping(1).valid, true)
+  expect(c.io.remapMapping(1).bits, 1)
+
+  expect(c.io.robDest(0).valid, false) // Rd not ready
+  expect(c.io.robDest(1).valid, false) // Rd not ready
+  expect(c.io.robDest(2).valid, false) // Rd not ready
+  expect(c.io.robDest(3).valid, false) // Rd not ready
+  expect(c.io.robDest(4).valid, false) // Rd not ready
+  expect(c.io.robDest(5).valid, false) // Rd not ready
+
+  // Test writeback
+
+  poke(c.io.allocROB(0).valid, false)
+  poke(c.io.allocROB(1).valid, false)
+  poke(c.io.allocROB(2).valid, false)
+  poke(c.io.allocROB(3).valid, false)
+
+  poke(c.io.allocRemap(3).valid, false)
+
+  // result of first add comes back
+  poke(c.io.wbValues(0).id.valid, true)
+  poke(c.io.wbValues(0).id.bits, 0)
+  poke(c.io.wbValues(0).value, 0xDEAEBEEE) // 0xDEADBEEF + 0xFFFF
+
+  step(1)
+
+  expect(c.io.robFree, 58)
+  expect(c.io.robFirst, 6)
+
+  expect(c.io.remapMapping(0).valid, true)
+  expect(c.io.remapMapping(0).bits, 5)
+
+  expect(c.io.remapMapping(1).valid, true)
+  expect(c.io.remapMapping(1).bits, 1)
+
+  expect(c.io.robDest(0).valid, true) // Rd ready
+  expect(c.io.robDest(0).bits, 0xDEAEBEEE) // WB value
+
+
 }
 
 class ROBGenerator extends TestGenerator {
