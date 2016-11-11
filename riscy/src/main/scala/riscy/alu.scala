@@ -26,6 +26,7 @@ object ALU {
 
   val A2_RS2 = UInt(0)
   val A2_IMM_I = UInt(1)
+  val A2_IMM_J = UInt(2)
 
   def isMulFN(fn: UInt, cmp: UInt) = fn(1,0) === cmp(1,0)
   def isSub(cmd: UInt) = cmd(3)
@@ -103,66 +104,81 @@ class ALU(xLen : Int) extends Module {
         op := FN_AND
       }
   } .elsewhen (io.inst.op === UInt(0x1B)) {
-      // ADDIW, SLLIW, SRLIW, SRAIW
-      when (io.inst.funct3 === UInt(0x0)) {
-        op := FN_ADD
-      } .elsewhen (io.inst.funct3 === UInt(0x1)) {
-        op := FN_SLL
-      } .elsewhen (io.inst.funct3 === UInt(0x5)) {
-        when (io.inst.funct7 === UInt(0x0)) {
-          op := FN_SRL
-        } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-          op := FN_SRA
-        }
+    // ADDIW, SLLIW, SRLIW, SRAIW
+    when (io.inst.funct3 === UInt(0x0)) {
+      op := FN_ADD
+    } .elsewhen (io.inst.funct3 === UInt(0x1)) {
+      op := FN_SLL
+    } .elsewhen (io.inst.funct3 === UInt(0x5)) {
+      when (io.inst.funct7 === UInt(0x0)) {
+        op := FN_SRL
+      } .elsewhen (io.inst.funct7 === UInt(0x20)) {
+        op := FN_SRA
       }
+    }
   } .elsewhen (io.inst.op === UInt(0x3B)) {
-      // ADDW, SUBW, SLLW, SRLW, SRAW
-      when (io.inst.funct3 === UInt(0x0)) {
-        when (io.inst.funct7 === UInt(0x0)) {
-          op := FN_ADD
-        } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-          op := FN_SUB
-        }
-      } .elsewhen (io.inst.funct3 === UInt(0x1)) {
-        op := FN_SLL
-      } .elsewhen (io.inst.funct3 === UInt(0x5)) {
-        when (io.inst.funct7 === UInt(0x0)) {
-          op := FN_SRL
-        } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-          op := FN_SRA
-        }
+    // ADDW, SUBW, SLLW, SRLW, SRAW
+    when (io.inst.funct3 === UInt(0x0)) {
+      when (io.inst.funct7 === UInt(0x0)) {
+        op := FN_ADD
+      } .elsewhen (io.inst.funct7 === UInt(0x20)) {
+        op := FN_SUB
       }
+    } .elsewhen (io.inst.funct3 === UInt(0x1)) {
+      op := FN_SLL
+    } .elsewhen (io.inst.funct3 === UInt(0x5)) {
+      when (io.inst.funct7 === UInt(0x0)) {
+        op := FN_SRL
+      } .elsewhen (io.inst.funct7 === UInt(0x20)) {
+        op := FN_SRA
+      }
+    }
+  } .elsewhen (io.inst.op === UInt(0x3)) {
+    // LB, LH, LW, LBU, LHU
+    op := FN_ADD
+  } .elsewhen (io.inst.op === UInt(0x23)) {
+    // SB, SH, SW
+    op := FN_ADD
   } .otherwise {
     op := FN_UNKNOWN
   }
 
   // Selector logic for deciding which inputs must be chosen for the ALU to
   // perform the operation
-  val sel_a1 = UInt(width=2)
-  val sel_a2 = UInt(width=2)
+  val sel_a1 = UInt(width=3)
+  val sel_a2 = UInt(width=3)
   when (io.inst.op === UInt(0x33)) {
-      // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
-      sel_a1 := A1_RS1
-      sel_a2 := A2_RS2
+    // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+    sel_a1 := A1_RS1
+    sel_a2 := A2_RS2
   } .elsewhen (io.inst.op === UInt(0x13)) {
-      // ADDI, SLLI, SLTI, SLTIU, XORI, SRLI, SRAI, ORI, ANDI
-      sel_a1 := A1_RS1
-      sel_a2 := A2_IMM_I
+    // ADDI, SLLI, SLTI, SLTIU, XORI, SRLI, SRAI, ORI, ANDI
+    sel_a1 := A1_RS1
+    sel_a2 := A2_IMM_I
   } .elsewhen (io.inst.op === UInt(0x1B)) {
-      // ADDIW, SLLIW, SRLIW, SRAIW
-      sel_a1 := A1_RS1
-      sel_a2 := A2_IMM_I
+    // ADDIW, SLLIW, SRLIW, SRAIW
+    sel_a1 := A1_RS1
+    sel_a2 := A2_IMM_I
   } .elsewhen (io.inst.op === UInt(0x3B)) {
-      // ADDW, SUBW, SLLW, SRLW, SRAW
-      sel_a1 := A1_RS1
-      sel_a2 := A2_RS2
+    // ADDW, SUBW, SLLW, SRLW, SRAW
+    sel_a1 := A1_RS1
+    sel_a2 := A2_RS2
+  } .elsewhen (io.inst.op === UInt(0x3)) {
+    // LB, LH, LW, LBU, LHU
+    sel_a1 := A1_RS1
+    sel_a2 := A2_IMM_I
+  } .elsewhen (io.inst.op === UInt(0x23)) {
+    // SB, SH, SW
+    sel_a1 := A1_RS1
+    sel_a2 := A2_IMM_J
   } .otherwise {
     sel_a1 := A1_RS1
     sel_a2 := A2_RS2
   }
 
-  // immI is only 32 bits. Sign extend it before using it
+  // immI and immJ are only 32 bits. Sign extend them before using
   val immI_ext = Cat(Fill(32, io.inst.immI(31)), io.inst.immI)
+  val immJ_ext = Cat(Fill(32, io.inst.immJ(31)), io.inst.immJ)
 
   // Select the inputs for ALU operations
   val in1 = MuxLookup(sel_a1, UInt(0), Seq(
@@ -170,7 +186,8 @@ class ALU(xLen : Int) extends Module {
     A1_PC -> io.PC))
   val in2 = MuxLookup(sel_a2, UInt(0), Seq(
     A2_RS2 -> io.rs2_val,
-    A2_IMM_I -> immI_ext.asUInt))
+    A2_IMM_I -> immI_ext.asUInt,
+    A2_IMM_J -> immJ_ext.asUInt))
 
   // ADD, SUB
   val in2_inv = Mux(op === FN_SUB, ~in2, in2)
@@ -225,7 +242,17 @@ class ALUTests(c: ALU) extends Tester(c) {
     "SRLI" -> (0x13, 0x5, 0x0),
     "SRAI" -> (0x13, 0x5, 0x20),
     "ORI" -> (0x13, 0x6, 0x0),
-    "ANDI" -> (0x13, 0x7, 0x0)
+    "ANDI" -> (0x13, 0x7, 0x0),
+
+    "LB" -> (0x3, 0x0, 0x0),
+    "LH" -> (0x3, 0x1, 0x0),
+    "LW" -> (0x3, 0x2, 0x0),
+    "LBU" -> (0x3, 0x3, 0x0),
+    "LBH" -> (0x3, 0x4, 0x0),
+
+    "SB" -> (0x23, 0x0, 0x0),
+    "SH" -> (0x23, 0x1, 0x0),
+    "SW" -> (0x23, 0x2, 0x0)
   )
   // Utility function for setting opcode, funct3 and funct7 values
   def set_instruction(inst_name : String) = {
@@ -592,6 +619,131 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 123456789 & 234567890)
 
+  // 49. Test LB instruction - Positive IMMI value
+  set_instruction("LB")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 50. Test LB instruction - Negative IMMI value
+  set_instruction("LB")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 49. Test LB instruction - Positive IMMI value
+  set_instruction("LB")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 50. Test LB instruction - Negative IMMI value
+  set_instruction("LB")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 51. Test LH instruction - Positive IMMI value
+  set_instruction("LH")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 52. Test LH instruction - Negative IMMI value
+  set_instruction("LH")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 53. Test LW instruction - Positive IMMI value
+  set_instruction("LW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 54. Test LW instruction - Negative IMMI value
+  set_instruction("LW")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 55. Test LBU instruction - Positive IMMI value
+  set_instruction("LBU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 56. Test LBU instruction - Negative IMMI value
+  set_instruction("LBU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 57. Test LBH instruction - Positive IMMI value
+  set_instruction("LBH")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 58. Test LBH instruction - Negative IMMI value
+  set_instruction("LBH")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 59. Test SB instruction - Positive IMMJ value
+  set_instruction("SB")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immJ, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 60. Test SB instruction - Negative IMMJ value
+  set_instruction("SB")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immJ, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 61. Test SH instruction - Positive IMMJ value
+  set_instruction("SH")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immJ, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 62. Test SH instruction - Negative IMMJ value
+  set_instruction("SH")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immJ, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 63. Test SW instruction - Positive IMMJ value
+  set_instruction("SW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immJ, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 64. Test SW instruction - Negative IMMJ value
+  set_instruction("SW")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immJ, -50)
+  step(1)
+  expect(c.io.out, 50)
 }
 
 class ALUGenerator extends TestGenerator {
