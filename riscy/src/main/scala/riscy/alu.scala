@@ -24,12 +24,15 @@ object ALU {
 
   // ALU Input 1 selection options
   val A1_RS1 = UInt(0)
-  val A1_PC = UInt(1)
+  val A1_PC  = UInt(1)
+  val A1_RS2 = UInt(2)
 
   // ALU Input 2 selection options
-  val A2_RS2 = UInt(0)
-  val A2_IMM_I = UInt(1)
-  val A2_IMM_S = UInt(2)
+  val A2_RS2   = UInt(0)
+  val A2_RS1   = UInt(1)
+  val A2_IMM_I = UInt(2)
+  val A2_IMM_S = UInt(3)
+  val A2_IMM_B = UInt(4)
 
   // Instructions needing the subtractor: UInt(8) - UInt(15)
   def isSub(cmd: UInt) = cmd(3)
@@ -40,7 +43,6 @@ object ALU {
 }
 import ALU._
 
-
 class ALU(xLen : Int) extends Module {
   val io = new Bundle {
     val rs1_val = UInt(INPUT, xLen)
@@ -50,6 +52,7 @@ class ALU(xLen : Int) extends Module {
 
     val out = UInt(OUTPUT, xLen)
     val adder_out = UInt(OUTPUT, xLen)
+    val branch_addr_out = UInt(OUTPUT, xLen)
     val cmp_out = Bool(OUTPUT)
   }
 
@@ -142,6 +145,21 @@ class ALU(xLen : Int) extends Module {
   } .elsewhen (io.inst.op === UInt(0x23)) {
     // SB, SH, SW
     op := FN_ADD
+  } .elsewhen (io.inst.op === UInt(0x63)) {
+    // BEQ, BNE, BLT, BGE, BLTU, BGEU
+    when (io.inst.funct3 === UInt(0x0)) {
+      op := FN_EQ
+    } .elsewhen (io.inst.funct3 === UInt(0x1)) {
+      op := FN_NEQ
+    } .elsewhen (io.inst.funct3 === UInt(0x4)) {
+      op := FN_SLT
+    } .elsewhen (io.inst.funct3 === UInt(0x5)) {
+      op := FN_SGE
+    } .elsewhen (io.inst.funct3 === UInt(0x6)) {
+      op := FN_SLTU
+    } .elsewhen (io.inst.funct3 === UInt(0x7)) {
+      op := FN_SGEU
+    }
   } .otherwise {
     op := FN_UNKNOWN
   }
@@ -174,36 +192,70 @@ class ALU(xLen : Int) extends Module {
     // SB, SH, SW
     sel_a1 := A1_RS1
     sel_a2 := A2_IMM_S
+  } .elsewhen (io.inst.op === UInt(0x63)) {
+    // BEQ, BNE, BLT, BGE, BLTU, BGEU
+    when (io.inst.funct3 === UInt(0x5) |
+          io.inst.funct3 === UInt(0x7)) {
+      // We reverse the operands for BGE and BGEU to derive results from BLT
+      // and BLTU
+      sel_a1 := A1_RS2
+      sel_a2 := A2_RS1
+    } .otherwise {
+      sel_a1 := A1_RS1
+      sel_a2 := A2_RS2
+    }
   } .otherwise {
     sel_a1 := A1_RS1
     sel_a2 := A2_RS2
   }
 
-  // immI and immS are only 32 bits. Sign extend them before using
+  // Immediate values are only 32 bits. Sign extend them before using
   val immI_ext = Cat(Fill(32, io.inst.immI(31)), io.inst.immI)
   val immS_ext = Cat(Fill(32, io.inst.immS(31)), io.inst.immS)
+  val immB_ext = Cat(Fill(32, io.inst.immB(31)), io.inst.immB)
 
   // Select the inputs for ALU operations
   val in1 = MuxLookup(sel_a1, UInt(0), Seq(
     A1_RS1 -> io.rs1_val,
+    A1_RS2 -> io.rs2_val,
     A1_PC -> io.PC))
   val in2 = MuxLookup(sel_a2, UInt(0), Seq(
     A2_RS2 -> io.rs2_val,
+    A2_RS1 -> io.rs1_val,
     A2_IMM_I -> immI_ext.asUInt,
-    A2_IMM_S -> immS_ext.asUInt))
+    A2_IMM_S -> immS_ext.asUInt,
+    A2_IMM_B -> immB_ext.asUInt))
 
-  // ADD, SUB
+  // ADD, SUB - Use an adder to derive results
   val in2_inv = Mux(isSub(op), ~in2, in2)
-  val in1_xor_in2 = in1 ^ in2_inv
+  val in1_xor_in2 = in1 ^ in2
   io.adder_out := in1 + in2_inv + isSub(op)
 
-  // SLT, SLTU
+  // Use another adder for computing branch target since the prev adder will be
+  // busy doing the subtraction for checking the condition
+  // BEQ, BNE, BLT, BLTU, BGE, BGEU
+  io.branch_addr_out := io.PC + immB_ext.asUInt
+
+  // SLT, SLTU, BEQ, BNE, BLT, BLTU, BGE, BGEU
   // These instructions rely on the subtraction result on the Adder above
+  //
+  // NOTE - We reuse the logic for BLT and BLTU for deriving results for BGE
+  // and BGEU, by simply reversing the operands
+  val in1_lt_in2 = Mux(in1(xLen-1) === in2(xLen-1),
+                       io.adder_out(xLen-1), in1(xLen-1))
+  val in1_ltu_in2 = Mux(in1(xLen-1) === in2(xLen-1),
+                        io.adder_out(xLen-1), in2(xLen-1))
+
+  // Select comparator output based on the ALU function to be performed
   io.cmp_out := MuxLookup(op, Bool(false), Seq(
     FN_EQ -> (in1_xor_in2 === UInt(0)),
     FN_NEQ -> (in1_xor_in2 != UInt(0)),
-    FN_SLT -> Mux(in1(xLen-1) === in2(xLen-1), io.adder_out(xLen-1), in1(xLen-1)),
-    FN_SLTU -> Mux(in1(xLen-1) === in2(xLen-1), io.adder_out(xLen-1), in2(xLen-1))))
+    FN_SLT -> in1_lt_in2,
+    FN_SLTU -> in1_ltu_in2,
+    FN_SGE -> (in1_lt_in2 | (in1_xor_in2 === UInt(0))),
+    FN_SGEU -> (in1_ltu_in2 | (in1_xor_in2 === UInt(0))) ))
+
+  // For SLT & SLTU, we also need to write to a register value
   val slt_out = UInt(width=xLen)
   slt_out := Mux(op === FN_SLT || op === FN_SLTU, io.cmp_out, UInt(0))
 
@@ -260,7 +312,14 @@ class ALUTests(c: ALU) extends Tester(c) {
 
     "SB" -> (0x23, 0x0, 0x0),
     "SH" -> (0x23, 0x1, 0x0),
-    "SW" -> (0x23, 0x2, 0x0)
+    "SW" -> (0x23, 0x2, 0x0),
+
+    "BEQ" -> (0x63, 0x0, 0x0),
+    "BNE" -> (0x63, 0x1, 0x0),
+    "BLT" -> (0x63, 0x4, 0x0),
+    "BGE" -> (0x63, 0x5, 0x0),
+    "BLTU" -> (0x63, 0x6, 0x0),
+    "BGEU" -> (0x63, 0x7, 0x0)
   )
   // Utility function for setting opcode, funct3 and funct7 values
   def set_instruction(inst_name : String) = {
@@ -752,6 +811,493 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immS, -50)
   step(1)
   expect(c.io.out, 50)
+
+  // 65. Test BEQ instruction - Equal values, Positive IMMB value
+  set_instruction("BEQ")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 66. Test BEQ instruction - Unequal values, Positive IMMB value
+  set_instruction("BEQ")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 51)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 67. Test BEQ instruction - Equal values, Negative IMMB value
+  set_instruction("BEQ")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 68. Test BEQ instruction - Unequal values, Negative IMMB value
+  set_instruction("BEQ")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 51)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 69. Test BNE instruction - Equal values, Positive IMMB value
+  set_instruction("BNE")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 70. Test BNE instruction - Unequal values, Positive IMMB value
+  set_instruction("BNE")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 51)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 71. Test BNE instruction - Equal values, Negative IMMB value
+  set_instruction("BNE")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 72. Test BNE instruction - Unequal values, Negative IMMB value
+  set_instruction("BNE")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 51)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 73. Test BLT instruction - Positive less than, Positive IMMB value
+  set_instruction("BLT")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 74. Test BLT instruction - Positive not less than, Positive IMMB value
+  set_instruction("BLT")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 75. Test BLT instruction - Negative less than, Positive IMMB value
+  set_instruction("BLT")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 76. Test BLT instruction - Negative not less than, Positive IMMB value
+  set_instruction("BLT")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, -2L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 77. Test BLT instruction - Positive less than, Negative IMMB value
+  set_instruction("BLT")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 78. Test BLT instruction - Positive not less than, Negative IMMB value
+  set_instruction("BLT")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 79. Test BLT instruction - Negative less than, Negative IMMB value
+  set_instruction("BLT")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 80. Test BLT instruction - Negative not less than, Negative IMMB value
+  set_instruction("BLT")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 81. Test BLTU instruction - Positive less than, Positive IMMB value
+  set_instruction("BLTU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 82. Test BLTU instruction - Positive not less than, Positive IMMB value
+  set_instruction("BLTU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 83. Test BLTU instruction - Negative less than, Positive IMMB value
+  set_instruction("BLTU")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  // BLTU ignores the sign bit, hence we get the opposite result
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 84. Test BLTU instruction - Negative not less than, Positive IMMB value
+  set_instruction("BLTU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  // BLTU ignores the sign bit, hence we get the opposite result
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 85. Test BLTU instruction - Positive less than, Negative IMMB value
+  set_instruction("BLTU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 86. Test BLTU instruction - Positive not less than, Negative IMMB value
+  set_instruction("BLTU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 87. Test BLTU instruction - Negative less than, Negative IMMB value
+  set_instruction("BLTU")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  // BLTU ignores the sign bit, hence we get the opposite result
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 88. Test BLTU instruction - Negative not less than, Negative IMMB value
+  set_instruction("BLTU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  // BLTU ignores the sign bit, hence we get the opposite result
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 89. Test BGE instruction - Positive greater, Positive IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 90. Test BGE instruction - Positive equal, Positive IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 91. Test BGE instruction - Positive less than, Positive IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 92. Test BGE instruction - Negative greater, Positive IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 93. Test BGE instruction - Negative equal, Positive IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 94. Test BGE instruction - Negative less than, Positive IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 95. Test BGE instruction - Positive greater, Negative IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 96. Test BGE instruction - Positive equal, Negative IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 97. Test BGE instruction - Positive less than, Negative IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 98. Test BGE instruction - Negative greater, Negative IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, -2L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 99. Test BGE instruction - Negative equal, Negative IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 100. Test BGE instruction - Negative less than, Negative IMMB value
+  set_instruction("BGE")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 101. Test BGEU instruction - Positive greater, Positive IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 102. Test BGEU instruction - Positive equal, Positive IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 103. Test BGE instruction - Positive less than, Positive IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 104. Test BGE instruction - Negative greater, Positive IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  // BGEU ignores the sign bit, hence we get the opposite result
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 105. Test BGEU instruction - Negative equal, Positive IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 106. Test BGEU instruction - Negative less than, Positive IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  // BGEU ignores the sign bit, hence we get the opposite result
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 1100)
+
+  // 107. Test BGEU instruction - Positive greater, Negative IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 108. Test BGEU instruction - Positive equal, Negative IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 109. Test BGEU instruction - Positive less than, Negative IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 0)
+  expect(c.io.branch_addr_out, 900)
+
+  // 110. Test BGEU instruction - Negative greater, Negative IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, -2L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 111. Test BGEU instruction - Negative equal, Negative IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, -1L)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
+
+  // 112. Test BGEU instruction - Negative less than, Negative IMMB value
+  set_instruction("BGEU")
+  poke(c.io.rs1_val, -1L)
+  poke(c.io.rs2_val, 100)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, -100)
+  step(1)
+  // BGEU ignores the sign bit, hence we get the opposite result
+  expect(c.io.cmp_out, 1)
+  expect(c.io.branch_addr_out, 900)
 }
 
 class ALUGenerator extends TestGenerator {
