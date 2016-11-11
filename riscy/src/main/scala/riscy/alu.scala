@@ -48,135 +48,139 @@ import ALU._
 
 class ALU(xLen : Int) extends Module {
   val io = new Bundle {
+    // The operand data values to be provided as input
     val rs1_val = UInt(INPUT, xLen)
     val rs2_val = UInt(INPUT, xLen)
+    // The PC of the instruction to be executed
     val PC = UInt(INPUT, xLen)
+    // The decoded information of the current instruction
     val inst = new DecodeIns().flip
 
+    // The output of the ALU. Can be a 64-bit data value or a 64-bit address
+    // depending on the type of the instruction
     val out = UInt(OUTPUT, xLen)
-    val adder_out = UInt(OUTPUT, xLen)
-    val branch_addr_out = UInt(OUTPUT, xLen)
+    // Output of the branch condition. Useful only for branch instructions
     val cmp_out = Bool(OUTPUT)
   }
 
-  // Determine the function we need to perform
-  val op = UInt(width=6)
+  // Determine the function the ALU needs to perform
+  val fn = UInt(width=6)
   when (io.inst.op === UInt(0x33)) {
       // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
       when (io.inst.funct3 === UInt(0x0)) {
         when (io.inst.funct7 === UInt(0x0)) {
-          op := FN_ADD
+          fn := FN_ADD
         } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-          op := FN_SUB
+          fn := FN_SUB
         }
       } .elsewhen (io.inst.funct3 === UInt(0x1)) {
-        op := FN_SLL
+        fn := FN_SLL
       } .elsewhen (io.inst.funct3 === UInt(0x2)) {
-        op := FN_SLT
+        fn := FN_SLT
       } .elsewhen (io.inst.funct3 === UInt(0x3)) {
-        op := FN_SLTU
+        fn := FN_SLTU
       } .elsewhen (io.inst.funct3 === UInt(0x4)) {
-        op := FN_XOR
+        fn := FN_XOR
       } .elsewhen (io.inst.funct3 === UInt(0x5)) {
         when (io.inst.funct7 === UInt(0x0)) {
-          op := FN_SRL
+          fn := FN_SRL
         } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-          op := FN_SRA
+          fn := FN_SRA
         }
       } .elsewhen (io.inst.funct3 === UInt(0x6)) {
-        op := FN_OR
+        fn := FN_OR
       } .elsewhen (io.inst.funct3 === UInt(0x7)) {
-        op := FN_AND
+        fn := FN_AND
       }
 
   } .elsewhen (io.inst.op === UInt(0x13)) {
       // ADDI, SLLI, SLTI, SLTIU, XORI, SRLI, SRAI, ORI, ANDI
       when (io.inst.funct3 === UInt(0x0)) {
-        op := FN_ADD
+        fn := FN_ADD
       } .elsewhen (io.inst.funct3 === UInt(0x1)) {
-        op := FN_SLL
+        fn := FN_SLL
       } .elsewhen (io.inst.funct3 === UInt(0x2)) {
-        op := FN_SLT
+        fn := FN_SLT
       } .elsewhen (io.inst.funct3 === UInt(0x3)) {
-        op := FN_SLTU
+        fn := FN_SLTU
       } .elsewhen (io.inst.funct3 === UInt(0x4)) {
-        op := FN_XOR
+        fn := FN_XOR
       } .elsewhen (io.inst.funct3 === UInt(0x5)) {
         when (io.inst.funct7 === UInt(0x0)) {
-          op := FN_SRL
+          fn := FN_SRL
         } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-          op := FN_SRA
+          fn := FN_SRA
         }
       } .elsewhen (io.inst.funct3 === UInt(0x6)) {
-        op := FN_OR
+        fn := FN_OR
       } .elsewhen (io.inst.funct3 === UInt(0x7)) {
-        op := FN_AND
+        fn := FN_AND
       }
   } .elsewhen (io.inst.op === UInt(0x1B)) {
     // ADDIW, SLLIW, SRLIW, SRAIW
     when (io.inst.funct3 === UInt(0x0)) {
-      op := FN_ADD
+      fn := FN_ADD
     } .elsewhen (io.inst.funct3 === UInt(0x1)) {
-      op := FN_SLL
+      fn := FN_SLL
     } .elsewhen (io.inst.funct3 === UInt(0x5)) {
       when (io.inst.funct7 === UInt(0x0)) {
-        op := FN_SRL
+        fn := FN_SRL
       } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-        op := FN_SRA
+        fn := FN_SRA
       }
     }
   } .elsewhen (io.inst.op === UInt(0x3B)) {
     // ADDW, SUBW, SLLW, SRLW, SRAW
     when (io.inst.funct3 === UInt(0x0)) {
       when (io.inst.funct7 === UInt(0x0)) {
-        op := FN_ADD
+        fn := FN_ADD
       } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-        op := FN_SUB
+        fn := FN_SUB
       }
     } .elsewhen (io.inst.funct3 === UInt(0x1)) {
-      op := FN_SLL
+      fn := FN_SLL
     } .elsewhen (io.inst.funct3 === UInt(0x5)) {
       when (io.inst.funct7 === UInt(0x0)) {
-        op := FN_SRL
+        fn := FN_SRL
       } .elsewhen (io.inst.funct7 === UInt(0x20)) {
-        op := FN_SRA
+        fn := FN_SRA
       }
     }
   } .elsewhen (io.inst.op === UInt(0x3)) {
     // LB, LH, LW, LBU, LHU
-    op := FN_ADD
+    fn := FN_ADD
   } .elsewhen (io.inst.op === UInt(0x23)) {
     // SB, SH, SW
-    op := FN_ADD
+    fn := FN_ADD
   } .elsewhen (io.inst.op === UInt(0x63)) {
     // BEQ, BNE, BLT, BGE, BLTU, BGEU
     when (io.inst.funct3 === UInt(0x0)) {
-      op := FN_EQ
+      fn := FN_EQ
     } .elsewhen (io.inst.funct3 === UInt(0x1)) {
-      op := FN_NEQ
+      fn := FN_NEQ
     } .elsewhen (io.inst.funct3 === UInt(0x4)) {
-      op := FN_SLT
+      fn := FN_SLT
     } .elsewhen (io.inst.funct3 === UInt(0x5)) {
-      op := FN_SGE
+      fn := FN_SGE
     } .elsewhen (io.inst.funct3 === UInt(0x6)) {
-      op := FN_SLTU
+      fn := FN_SLTU
     } .elsewhen (io.inst.funct3 === UInt(0x7)) {
-      op := FN_SGEU
+      fn := FN_SGEU
     }
   } .elsewhen (io.inst.op === UInt(0x6F)) {
     // JAL
-    op := FN_ADD
+    fn := FN_ADD
   } .elsewhen (io.inst.op === UInt(0x67)) {
     // JALR
-    op := FN_ADD
+    fn := FN_ADD
   } .elsewhen (io.inst.op === UInt(0x17)) {
     // AUIPC
-    op := FN_ADD
+    fn := FN_ADD
   } .elsewhen (io.inst.op === UInt(0x37)) {
     // LUI
-    op := FN_ADD
+    fn := FN_ADD
   } .otherwise {
-    op := FN_UNKNOWN
+    fn := FN_UNKNOWN
   }
 
   // Selector logic for deciding which inputs must be chosen for the ALU to
@@ -272,29 +276,29 @@ class ALU(xLen : Int) extends Module {
   // LB, LH, LW, LBU, LHU, SB, SH, SW - Use adder to compute addresses
   // JAL, JALR - Use adder to compute target address (offset + PC + 4)
   // LUI, AUIPC
-  val in2_inv = Mux(isSub(op), ~in2, in2)
+  val adder_out = UInt(width=xLen)
+  val in2_inv = Mux(isSub(fn), ~in2, in2)
   val in1_xor_in2 = in1 ^ in2
   val isJmp = io.inst.op === UInt(0x6F) || io.inst.op === UInt(0x67)
-  io.adder_out := (in1 + in2_inv +
-                   Mux(isSub(op), UInt(1), Mux(isJmp, UInt(4), UInt(0))))
+  adder_out := (in1 + in2_inv +
+                Mux(isSub(fn), UInt(1), Mux(isJmp, UInt(4), UInt(0))))
 
   // Use another adder for computing branch target since the prev adder will be
   // busy doing the subtraction for checking the condition
   // BEQ, BNE, BLT, BLTU, BGE, BGEU
-  io.branch_addr_out := io.PC + immB_ext.asUInt
+  val branch_addr_out = UInt(width=xLen)
+  branch_addr_out := io.PC + immB_ext.asUInt
 
   // SLT, SLTU, BEQ, BNE, BLT, BLTU, BGE, BGEU
   // These instructions rely on the subtraction result on the Adder above
   //
   // NOTE - We reuse the logic for BLT and BLTU for deriving results for BGE
   // and BGEU, by simply reversing the operands
-  val in1_lt_in2 = Mux(in1(xLen-1) === in2(xLen-1),
-                       io.adder_out(xLen-1), in1(xLen-1))
-  val in1_ltu_in2 = Mux(in1(xLen-1) === in2(xLen-1),
-                        io.adder_out(xLen-1), in2(xLen-1))
+  val in1_lt_in2 = Mux(in1(xLen-1) === in2(xLen-1), adder_out(xLen-1), in1(xLen-1))
+  val in1_ltu_in2 = Mux(in1(xLen-1) === in2(xLen-1), adder_out(xLen-1), in2(xLen-1))
 
   // Select comparator output based on the ALU function to be performed
-  io.cmp_out := MuxLookup(op, Bool(false), Seq(
+  io.cmp_out := MuxLookup(fn, Bool(false), Seq(
     FN_EQ -> (in1_xor_in2 === UInt(0)),
     FN_NEQ -> (in1_xor_in2 != UInt(0)),
     FN_SLT -> in1_lt_in2,
@@ -304,26 +308,28 @@ class ALU(xLen : Int) extends Module {
 
   // For SLT & SLTU, we also need to write to a register value
   val slt_out = UInt(width=xLen)
-  slt_out := Mux(op === FN_SLT || op === FN_SLTU, io.cmp_out, UInt(0))
+  slt_out := Mux(fn === FN_SLT || fn === FN_SLTU, io.cmp_out, UInt(0))
 
   // SLL, SRL, SRA
   val sh_amt = in2(5,0)
   val sh_out_l = (in1 << sh_amt)(xLen-1,0)
   // Sign bits are extended only for SRA
-  val sh_out_r = (Cat(op === FN_SRA & in1(xLen-1),
+  val sh_out_r = (Cat(fn === FN_SRA & in1(xLen-1),
                   in1(xLen-1,0)).asSInt >> sh_amt)(xLen-1,0)
   //val sh_out_r = (Cat(Bits(1), in1).asSInt >> sh_amt)
-  val sh_out = Mux(op === FN_SRL || op === FN_SRA, sh_out_r, UInt(0)) |
-               Mux(op === FN_SLL, sh_out_l, UInt(0))
+  val sh_out = Mux(fn === FN_SRL || fn === FN_SRA, sh_out_r, UInt(0)) |
+               Mux(fn === FN_SLL, sh_out_l, UInt(0))
 
   // AND, OR, XOR
-  val logic = MuxLookup(op, UInt(0), Seq(
+  val logic = MuxLookup(fn, UInt(0), Seq(
     FN_XOR -> in1_xor_in2,
     FN_OR -> UInt(in1(xLen-1,0) | in2(xLen-1,0)),
     FN_AND -> UInt(in1(xLen-1,0) & in2(xLen-1,0))))
 
   val non_arith_out = slt_out | logic | sh_out
-  io.out := Mux(op === FN_ADD || op === FN_SUB, io.adder_out, non_arith_out)
+  val isBranch = io.inst.op === UInt(0x63)
+  io.out := Mux(isBranch, branch_addr_out,
+            Mux(fn === FN_ADD || fn === FN_SUB, adder_out, non_arith_out))
 }
 
 class ALUTests(c: ALU) extends Tester(c) {
@@ -873,7 +879,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 66. Test BEQ instruction - Unequal values, Positive IMMB value
   set_instruction("BEQ")
@@ -883,7 +889,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 67. Test BEQ instruction - Equal values, Negative IMMB value
   set_instruction("BEQ")
@@ -893,7 +899,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 68. Test BEQ instruction - Unequal values, Negative IMMB value
   set_instruction("BEQ")
@@ -903,7 +909,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 69. Test BNE instruction - Equal values, Positive IMMB value
   set_instruction("BNE")
@@ -913,7 +919,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 70. Test BNE instruction - Unequal values, Positive IMMB value
   set_instruction("BNE")
@@ -923,7 +929,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 71. Test BNE instruction - Equal values, Negative IMMB value
   set_instruction("BNE")
@@ -933,7 +939,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 72. Test BNE instruction - Unequal values, Negative IMMB value
   set_instruction("BNE")
@@ -943,7 +949,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 73. Test BLT instruction - Positive less than, Positive IMMB value
   set_instruction("BLT")
@@ -953,7 +959,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 74. Test BLT instruction - Positive not less than, Positive IMMB value
   set_instruction("BLT")
@@ -963,7 +969,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 75. Test BLT instruction - Negative less than, Positive IMMB value
   set_instruction("BLT")
@@ -973,7 +979,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 76. Test BLT instruction - Negative not less than, Positive IMMB value
   set_instruction("BLT")
@@ -983,7 +989,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 77. Test BLT instruction - Positive less than, Negative IMMB value
   set_instruction("BLT")
@@ -993,7 +999,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 78. Test BLT instruction - Positive not less than, Negative IMMB value
   set_instruction("BLT")
@@ -1003,7 +1009,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 79. Test BLT instruction - Negative less than, Negative IMMB value
   set_instruction("BLT")
@@ -1013,7 +1019,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 80. Test BLT instruction - Negative not less than, Negative IMMB value
   set_instruction("BLT")
@@ -1023,7 +1029,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 81. Test BLTU instruction - Positive less than, Positive IMMB value
   set_instruction("BLTU")
@@ -1033,7 +1039,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 82. Test BLTU instruction - Positive not less than, Positive IMMB value
   set_instruction("BLTU")
@@ -1043,7 +1049,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 83. Test BLTU instruction - Negative less than, Positive IMMB value
   set_instruction("BLTU")
@@ -1054,7 +1060,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   // BLTU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 84. Test BLTU instruction - Negative not less than, Positive IMMB value
   set_instruction("BLTU")
@@ -1065,7 +1071,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   // BLTU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 85. Test BLTU instruction - Positive less than, Negative IMMB value
   set_instruction("BLTU")
@@ -1075,7 +1081,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 86. Test BLTU instruction - Positive not less than, Negative IMMB value
   set_instruction("BLTU")
@@ -1085,7 +1091,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 87. Test BLTU instruction - Negative less than, Negative IMMB value
   set_instruction("BLTU")
@@ -1096,7 +1102,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   // BLTU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 88. Test BLTU instruction - Negative not less than, Negative IMMB value
   set_instruction("BLTU")
@@ -1107,7 +1113,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   // BLTU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 89. Test BGE instruction - Positive greater, Positive IMMB value
   set_instruction("BGE")
@@ -1117,7 +1123,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 90. Test BGE instruction - Positive equal, Positive IMMB value
   set_instruction("BGE")
@@ -1127,7 +1133,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 91. Test BGE instruction - Positive less than, Positive IMMB value
   set_instruction("BGE")
@@ -1137,7 +1143,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 92. Test BGE instruction - Negative greater, Positive IMMB value
   set_instruction("BGE")
@@ -1147,7 +1153,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 93. Test BGE instruction - Negative equal, Positive IMMB value
   set_instruction("BGE")
@@ -1157,7 +1163,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 94. Test BGE instruction - Negative less than, Positive IMMB value
   set_instruction("BGE")
@@ -1167,7 +1173,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 95. Test BGE instruction - Positive greater, Negative IMMB value
   set_instruction("BGE")
@@ -1177,7 +1183,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 96. Test BGE instruction - Positive equal, Negative IMMB value
   set_instruction("BGE")
@@ -1187,7 +1193,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 97. Test BGE instruction - Positive less than, Negative IMMB value
   set_instruction("BGE")
@@ -1197,7 +1203,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 98. Test BGE instruction - Negative greater, Negative IMMB value
   set_instruction("BGE")
@@ -1207,7 +1213,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 99. Test BGE instruction - Negative equal, Negative IMMB value
   set_instruction("BGE")
@@ -1217,7 +1223,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 100. Test BGE instruction - Negative less than, Negative IMMB value
   set_instruction("BGE")
@@ -1227,7 +1233,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 101. Test BGEU instruction - Positive greater, Positive IMMB value
   set_instruction("BGEU")
@@ -1237,7 +1243,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 102. Test BGEU instruction - Positive equal, Positive IMMB value
   set_instruction("BGEU")
@@ -1247,7 +1253,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 103. Test BGE instruction - Positive less than, Positive IMMB value
   set_instruction("BGEU")
@@ -1257,7 +1263,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 104. Test BGE instruction - Negative greater, Positive IMMB value
   set_instruction("BGEU")
@@ -1268,7 +1274,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   // BGEU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 105. Test BGEU instruction - Negative equal, Positive IMMB value
   set_instruction("BGEU")
@@ -1278,7 +1284,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, 100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 106. Test BGEU instruction - Negative less than, Positive IMMB value
   set_instruction("BGEU")
@@ -1289,7 +1295,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   // BGEU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 1100)
+  expect(c.io.out, 1100)
 
   // 107. Test BGEU instruction - Positive greater, Negative IMMB value
   set_instruction("BGEU")
@@ -1299,7 +1305,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 108. Test BGEU instruction - Positive equal, Negative IMMB value
   set_instruction("BGEU")
@@ -1309,7 +1315,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 109. Test BGEU instruction - Positive less than, Negative IMMB value
   set_instruction("BGEU")
@@ -1319,7 +1325,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 0)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 110. Test BGEU instruction - Negative greater, Negative IMMB value
   set_instruction("BGEU")
@@ -1329,7 +1335,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 111. Test BGEU instruction - Negative equal, Negative IMMB value
   set_instruction("BGEU")
@@ -1339,7 +1345,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immB, -100)
   step(1)
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 112. Test BGEU instruction - Negative less than, Negative IMMB value
   set_instruction("BGEU")
@@ -1350,7 +1356,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   // BGEU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
-  expect(c.io.branch_addr_out, 900)
+  expect(c.io.out, 900)
 
   // 113. Test JAL instruction - Positive IMMJ value
   set_instruction("JAL")
