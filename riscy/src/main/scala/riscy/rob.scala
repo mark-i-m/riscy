@@ -207,6 +207,10 @@ class ROB extends Module {
       (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) &&
       front(i).rdVal.valid &&
       (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) })
+
+    when(couldCommit(i)) {
+      printf("Commit ROB%d\n", head.value + UInt(i))
+    }
   }
 
   // If the head of the ROB is a store, tell the L/SQ to actually write to
@@ -238,9 +242,9 @@ class ROB extends Module {
   //   find out which is the last to rename that register.
   // - If this instruction is the last to rename, then write to RF
   val lastToRename = Vec.tabulate(4) { i =>
-    PriorityEncoder((Array.tabulate(4) { j =>
-      front(i).rd === front(j).rd && front(j).hasRd
-    }).reverse)
+    PriorityMux(Array.tabulate(4) { j =>
+      (front(i).rd === front(j).rd && front(j).hasRd && couldCommit(j), UInt(j))
+    })
   }
 
   for(i <- 0 until 4) {
@@ -255,6 +259,13 @@ class ROB extends Module {
 
     when(rf.io.wPorts(i).valid) {
       printf("latch to rf committing ROB%d: %x\n", UInt(i), front(i).rdVal.bits)
+    } .elsewhen(couldCommit(i) && !lastToRename(i) === UInt(i)) {
+      printf("not latching to rf front(%d), ROB%d, r%d: %x\n", 
+        UInt(i), head.value + UInt(i), front(i).rd, front(i).rdVal.bits)
+      printf("\tlastToRename(0) = %d\n", lastToRename(0))
+      printf("\tlastToRename(1) = %d\n", lastToRename(1))
+      printf("\tlastToRename(2) = %d\n", lastToRename(2))
+      printf("\tlastToRename(3) = %d\n", lastToRename(3))
     }
   }
 
@@ -644,6 +655,9 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   step(1)
 
+  // Also, committed the first instruction
+  poke(c.io.rfPorts(0), 1) // Read r1
+
   expect(c.io.remapMapping(0).valid, true)
   expect(c.io.remapMapping(0).bits, 5)
 
@@ -656,20 +670,35 @@ class ROBTests(c: ROB) extends Tester(c) {
   expect(c.io.robDest(2).valid, true) // Rd ready
   expect(c.io.robDest(2).bits, 0xDEAFBEED) // WB value
 
-  poke(c.io.wbValues(0).id.valid, false)
-  poke(c.io.wbValues(1).id.valid, false)
-
-  // Also, committed the first instruction
-  poke(c.io.rfPorts(0), 1) // Read r1
-
-  step(1)
-
   expect(c.io.robFree, 59)
   expect(c.io.robFirst, 6)
 
   expect(c.io.robDest(0).valid, false) // This instruction committed
 
   expect(c.io.rfValues(0), 0xDEAEBEEE)
+
+  poke(c.io.wbValues(0).id.valid, false)
+  poke(c.io.wbValues(1).id.valid, false)
+
+  step(1)
+
+  // Two more instructions commit
+  poke(c.io.rfPorts(1), 2) // Read r2
+
+  expect(c.io.remapMapping(0).valid, true)
+  expect(c.io.remapMapping(0).bits, 5)
+
+  expect(c.io.remapMapping(1).valid, false)
+
+  expect(c.io.robDest(0).valid, false) // committed
+  expect(c.io.robDest(1).valid, false) // committed
+  expect(c.io.robDest(2).valid, false) // committed
+
+  expect(c.io.robFree, 61)
+  expect(c.io.robFirst, 6)
+
+  expect(c.io.rfValues(0), 0xDEAFBEED)
+  expect(c.io.rfValues(1), 0xDEAFBEED)
 }
 
 class ROBGenerator extends TestGenerator {
