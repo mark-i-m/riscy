@@ -26,7 +26,7 @@ object ALU {
 
   val A2_RS2 = UInt(0)
   val A2_IMM_I = UInt(1)
-  val A2_IMM_J = UInt(2)
+  val A2_IMM_S = UInt(2)
 
   def isMulFN(fn: UInt, cmp: UInt) = fn(1,0) === cmp(1,0)
   def isSub(cmd: UInt) = cmd(3)
@@ -170,15 +170,15 @@ class ALU(xLen : Int) extends Module {
   } .elsewhen (io.inst.op === UInt(0x23)) {
     // SB, SH, SW
     sel_a1 := A1_RS1
-    sel_a2 := A2_IMM_J
+    sel_a2 := A2_IMM_S
   } .otherwise {
     sel_a1 := A1_RS1
     sel_a2 := A2_RS2
   }
 
-  // immI and immJ are only 32 bits. Sign extend them before using
+  // immI and immS are only 32 bits. Sign extend them before using
   val immI_ext = Cat(Fill(32, io.inst.immI(31)), io.inst.immI)
-  val immJ_ext = Cat(Fill(32, io.inst.immJ(31)), io.inst.immJ)
+  val immS_ext = Cat(Fill(32, io.inst.immS(31)), io.inst.immS)
 
   // Select the inputs for ALU operations
   val in1 = MuxLookup(sel_a1, UInt(0), Seq(
@@ -187,7 +187,7 @@ class ALU(xLen : Int) extends Module {
   val in2 = MuxLookup(sel_a2, UInt(0), Seq(
     A2_RS2 -> io.rs2_val,
     A2_IMM_I -> immI_ext.asUInt,
-    A2_IMM_J -> immJ_ext.asUInt))
+    A2_IMM_S -> immS_ext.asUInt))
 
   // ADD, SUB
   val in2_inv = Mux(op === FN_SUB, ~in2, in2)
@@ -703,45 +703,45 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 50)
 
-  // 59. Test SB instruction - Positive IMMJ value
+  // 59. Test SB instruction - Positive IMMS value
   set_instruction("SB")
   poke(c.io.rs1_val, 50)
-  poke(c.io.inst.immJ, 50)
+  poke(c.io.inst.immS, 50)
   step(1)
   expect(c.io.out, 100)
 
-  // 60. Test SB instruction - Negative IMMJ value
+  // 60. Test SB instruction - Negative IMMS value
   set_instruction("SB")
   poke(c.io.rs1_val, 100)
-  poke(c.io.inst.immJ, -50)
+  poke(c.io.inst.immS, -50)
   step(1)
   expect(c.io.out, 50)
 
-  // 61. Test SH instruction - Positive IMMJ value
+  // 61. Test SH instruction - Positive IMMS value
   set_instruction("SH")
   poke(c.io.rs1_val, 50)
-  poke(c.io.inst.immJ, 50)
+  poke(c.io.inst.immS, 50)
   step(1)
   expect(c.io.out, 100)
 
-  // 62. Test SH instruction - Negative IMMJ value
+  // 62. Test SH instruction - Negative IMMS value
   set_instruction("SH")
   poke(c.io.rs1_val, 100)
-  poke(c.io.inst.immJ, -50)
+  poke(c.io.inst.immS, -50)
   step(1)
   expect(c.io.out, 50)
 
-  // 63. Test SW instruction - Positive IMMJ value
+  // 63. Test SW instruction - Positive IMMS value
   set_instruction("SW")
   poke(c.io.rs1_val, 50)
-  poke(c.io.inst.immJ, 50)
+  poke(c.io.inst.immS, 50)
   step(1)
   expect(c.io.out, 100)
 
-  // 64. Test SW instruction - Negative IMMJ value
+  // 64. Test SW instruction - Negative IMMS value
   set_instruction("SW")
   poke(c.io.rs1_val, 100)
-  poke(c.io.inst.immJ, -50)
+  poke(c.io.inst.immS, -50)
   step(1)
   expect(c.io.out, 50)
 }
