@@ -145,7 +145,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   // Cycle 1: No values will still be available
   expect_output_valid(c, List.fill(6)(false))
   // Add some new data values to be stored. Make entry #0 invalid
-  poke_input_valid(c, List(false, true, true, true, true, true)
+  poke_input_valid(c, List(false, true, true, true, true, true))
   poke_input_data(c, List.range(6, 12))
   poke_input_operand(c, List.range(6, 12))
   step(1)
