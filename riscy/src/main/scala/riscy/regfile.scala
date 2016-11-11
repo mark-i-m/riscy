@@ -21,15 +21,20 @@ import Chisel._
  * @param numRPorts the number of read ports.
  * @param numWPorts the number of write ports.
  * @param gen a function that takes an integer i and returns an instance of the
+ * @param name the name for debug printing
+ * @param which Chisel can't print aggregate types, so choose a subpart of each
+ * reg to print. This should be the return value of `which`.
  * register type. i is the register number.
  */
-class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => T) extends Module {
+class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => T, name: String = null, which: T => Data = identity[T] _) extends Module {
   val io = new Bundle {
     val rPorts = Vec.fill(numRPorts) { UInt(INPUT, log2Up(size)) }
     val rValues = Vec.tabulate(numRPorts) { i => gen(i).asOutput }
 
     val wPorts = Vec.fill(numWPorts) { Valid(UInt(width = log2Up(size))).asInput }
     val wValues = Vec.tabulate(numWPorts) { i => gen(i).asInput }
+
+    val reset = Valid(gen(0)).asInput
   }
 
   // The actual registers
@@ -45,7 +50,21 @@ class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => 
     for (r <- 0 until size) {
       when (io.wPorts(p).valid && io.wPorts(p).bits === UInt(r)) {
         regs(r)._2 := io.wValues(p)
+
+        if(name != null) {
+          printf(name + "[%d] = %x from port %d\n", UInt(r), which(io.wValues(p)), UInt(p))
+        }
       }
+    }
+  }
+
+  when(io.reset.valid) {
+    for(r <- 0 until size) {
+      regs(r)._2 := io.reset.bits
+    }
+
+    if(name != null) {
+      printf(name + " reset to %x\n", which(io.reset.bits))
     }
   }
 }
@@ -77,6 +96,24 @@ class RegFileTests(c: RegFile[ValidIO[UInt]]) extends Tester(c) {
     step(0)
     expect(c.io.rValues(randRPort).valid, randValid)
     expect(c.io.rValues(randRPort).bits, randVal)
+  }
+
+  // Test reset
+  poke(c.io.reset.valid, true)
+  poke(c.io.reset.bits.valid, false)
+  poke(c.io.reset.bits.bits, 0x1234)
+  for(p <- 0 until 4) {
+    poke(c.io.wPorts(p).valid, false)
+  }
+
+  step(1)
+
+  for(i <- 0 until 16) {
+    poke(c.io.rPorts(0), i)
+
+    step(0)
+    expect(c.io.rValues(0).valid, false)
+    expect(c.io.rValues(0).bits, 0x1234)
   }
 }
 
