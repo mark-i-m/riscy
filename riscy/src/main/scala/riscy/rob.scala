@@ -85,10 +85,10 @@ class ROB extends Module {
   // (1) or in the ROB (0).
   //
   // The remaining bits denote which ROB entry if the register is in the ROB
-  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6))))
+  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6)), "remap", (x: ValidIO[UInt]) => x.bits))
 
   // The Architectural register file
-  val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64)))
+  val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64), "RF"))
 
   // The ROB storage structure
   val robW = Vec.fill(64) { Valid(new ROBEntry) } // Write enable and write value for ROB
@@ -169,6 +169,8 @@ class ROB extends Module {
       robW(io.wbValues(i).id.bits).bits := rob(io.wbValues(i).id.bits)
       robW(io.wbValues(i).id.bits).bits.rdVal.valid := Bool(true)
       robW(io.wbValues(i).id.bits).bits.rdVal.bits := io.wbValues(i).value
+
+      printf("writing WB value to ROB%d: %x\n", io.wbValues(i).id.bits, io.wbValues(i).value)
     }
   }
 
@@ -182,6 +184,7 @@ class ROB extends Module {
   // - Branches that were mispredicted should trigger cleanup at this point
   //   (TODO: can be done earlier if we regenerate the remap table from the ROB)
   // - Move the head pointer
+  // - TODO: invalidate popped entries by changing rdVal.valid to false
   // - Clear mappings in the remap table on commit
   // - Clear mappings in the remap table on mispredict
   /////////////////////////////////////////////////////////////////////////////
@@ -247,7 +250,12 @@ class ROB extends Module {
     rf.io.wPorts(i).valid := couldCommit(i) &&
                              front(i).hasRd &&
                              lastToRename(i) === UInt(i)
-    rf.io.wPorts(i).bits := front(i).rdVal.bits
+    rf.io.wPorts(i).bits := front(i).rd
+    rf.io.wValues(i)     := front(i).rdVal.bits
+
+    when(rf.io.wPorts(i).valid) {
+      printf("latch to rf committing ROB%d: %x\n", UInt(i), front(i).rdVal.bits)
+    }
   }
 
   // Clear remap table entries
@@ -447,6 +455,9 @@ class ROBTests(c: ROB) extends Tester(c) {
   poke(c.io.allocRemap(1).bits.reg, 0x2)
   poke(c.io.allocRemap(1).bits.idxROB, 0x1)
 
+  poke(c.io.allocRemap(2).valid, false)
+  poke(c.io.allocRemap(3).valid, false)
+
   expect(c.io.robFree, 64)
   expect(c.io.robFirst, 0)
 
@@ -622,7 +633,43 @@ class ROBTests(c: ROB) extends Tester(c) {
   expect(c.io.robDest(0).valid, true) // Rd ready
   expect(c.io.robDest(0).bits, 0xDEAEBEEE) // WB value
 
+  // result of next two instructions come back
+  poke(c.io.wbValues(0).id.valid, true)
+  poke(c.io.wbValues(0).id.bits, 1)
+  poke(c.io.wbValues(0).value, 0xDEAFBEED) // 0xDEAEBEEE + 0xFFFF
 
+  poke(c.io.wbValues(1).id.valid, true)
+  poke(c.io.wbValues(1).id.bits, 2)
+  poke(c.io.wbValues(1).value, 0xDEAFBEED) // 0xDEAEBEEE + 0xFFFF
+
+  step(1)
+
+  expect(c.io.remapMapping(0).valid, true)
+  expect(c.io.remapMapping(0).bits, 5)
+
+  expect(c.io.remapMapping(1).valid, true)
+  expect(c.io.remapMapping(1).bits, 1)
+
+  expect(c.io.robDest(1).valid, true) // Rd ready
+  expect(c.io.robDest(1).bits, 0xDEAFBEED) // WB value
+
+  expect(c.io.robDest(2).valid, true) // Rd ready
+  expect(c.io.robDest(2).bits, 0xDEAFBEED) // WB value
+
+  poke(c.io.wbValues(0).id.valid, false)
+  poke(c.io.wbValues(1).id.valid, false)
+
+  // Also, committed the first instruction
+  poke(c.io.rfPorts(0), 1) // Read r1
+
+  step(1)
+
+  expect(c.io.robFree, 59)
+  expect(c.io.robFirst, 6)
+
+  expect(c.io.robDest(0).valid, false) // This instruction committed
+
+  expect(c.io.rfValues(0), 0xDEAEBEEE)
 }
 
 class ROBGenerator extends TestGenerator {
