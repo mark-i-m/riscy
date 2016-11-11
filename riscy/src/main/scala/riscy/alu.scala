@@ -8,29 +8,32 @@ object ALU {
   val FN_UNKNOWN = UInt(0)
   val FN_ADD  = UInt(1)
   val FN_SLL   = UInt(2)
-  val FN_SEQ  = UInt(3)
-  val FN_SNE  = UInt(4)
-  val FN_XOR  = UInt(5)
-  val FN_SRL   = UInt(6)
-  val FN_OR   = UInt(7)
-  val FN_AND  = UInt(8)
-  val FN_SUB  = UInt(9)
-  val FN_SRA  = UInt(10)
+  val FN_XOR  = UInt(3)
+  val FN_SRL   = UInt(4)
+  val FN_SRA  = UInt(5)
+  val FN_OR   = UInt(6)
+  val FN_AND  = UInt(7)
+
+  val FN_SUB  = UInt(8)
+  val FN_EQ   = UInt(9)
+  val FN_NEQ  = UInt(10)
   val FN_SLT  = UInt(11)
   val FN_SGE  = UInt(12)
   val FN_SLTU = UInt(13)
   val FN_SGEU = UInt(14)
 
+  // ALU Input 1 selection options
   val A1_RS1 = UInt(0)
   val A1_PC = UInt(1)
 
+  // ALU Input 2 selection options
   val A2_RS2 = UInt(0)
   val A2_IMM_I = UInt(1)
   val A2_IMM_S = UInt(2)
 
-  def isMulFN(fn: UInt, cmp: UInt) = fn(1,0) === cmp(1,0)
+  // Instructions needing the subtractor: UInt(8) - UInt(15)
   def isSub(cmd: UInt) = cmd(3)
-  def isCmp(cmd: UInt) = cmd === FN_SEQ || cmd === FN_SNE || cmd >= FN_SLT
+
   def cmpUnsigned(cmd: UInt) = cmd(1)
   def cmpInverted(cmd: UInt) = cmd(0)
   def cmpEq(cmd: UInt) = !cmd(3)
@@ -190,12 +193,17 @@ class ALU(xLen : Int) extends Module {
     A2_IMM_S -> immS_ext.asUInt))
 
   // ADD, SUB
-  val in2_inv = Mux(op === FN_SUB, ~in2, in2)
+  val in2_inv = Mux(isSub(op), ~in2, in2)
   val in1_xor_in2 = in1 ^ in2_inv
-  io.adder_out := in1 + in2_inv + UInt(op === FN_SUB)
+  io.adder_out := in1 + in2_inv + isSub(op)
 
   // SLT, SLTU
-  io.cmp_out := Mux(op === FN_SLT, in1.asSInt < in2.asSInt, in1 < in2)
+  // These instructions rely on the subtraction result on the Adder above
+  io.cmp_out := MuxLookup(op, Bool(false), Seq(
+    FN_EQ -> (in1_xor_in2 === UInt(0)),
+    FN_NEQ -> (in1_xor_in2 != UInt(0)),
+    FN_SLT -> Mux(in1(xLen-1) === in2(xLen-1), io.adder_out(xLen-1), in1(xLen-1)),
+    FN_SLTU -> Mux(in1(xLen-1) === in2(xLen-1), io.adder_out(xLen-1), in2(xLen-1))))
   val slt_out = UInt(width=xLen)
   slt_out := Mux(op === FN_SLT || op === FN_SLTU, io.cmp_out, UInt(0))
 
