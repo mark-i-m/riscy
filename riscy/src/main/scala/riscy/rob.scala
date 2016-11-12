@@ -716,6 +716,12 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   expect(c.io.rfValues(0), 0xDEAFBEED)
   expect(c.io.rfValues(1), 0xDEAFBEED)
+
+  // TODO: Try
+  // - a store
+  // - a mispredicted jump
+  // - a correctly predicted jump
+
 }
 
 class ROBGenerator extends TestGenerator {
