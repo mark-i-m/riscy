@@ -26,9 +26,12 @@ class IqArbiter extends Module {
 	// Logic to generate initial stalls in design
 	// Currently stalling the processor if there are less than 4 
 	// entries available all 4 Issue Queues combined
-	val totalLen = io.iqLen(0) + io.iqLen(1) + io.iqLen(2) + io.iqLen(3)
-	when ((io.addBufLen === UInt(31)) ||
-	      (totalLen > UInt(56))) {
+	// to make iqLen 5 width this new variable as scala does not 
+	val iqLen5W = Vec.fill(4) {UInt(width = 5)}
+	iqLen5W := io.iqLen
+	val totalLen = iqLen5W(0) + iqLen5W(1) + iqLen5W(2) + iqLen5W(3)
+	when ((io.addBufLen > UInt(0x1b)) ||
+	      (totalLen > UInt(0x16))) {
 		      io.stall := Bool(true)
 	      } .otherwise {
 		      io.stall := Bool(false)
@@ -60,27 +63,27 @@ class IqArbiter extends Module {
 		min2 := UInt(3)
 		max2 := UInt(2)
 	}
-	when ((min1 <= min2) && (max1 <= min2)) {
+	when ((io.iqLen(min1) <= io.iqLen(min2)) && (io.iqLen(max1) <= io.iqLen(min2))) {
 		finalMin(0) := min1
 		finalMin(1) := max1
 		finalMin(2) := min2
 		finalMin(3) := max2
-	} .elsewhen ((min1 <= min2) && !(max1 <= min2) && (max1 <= max2)) {
+	} .elsewhen ((io.iqLen(min1) <= io.iqLen(min2)) && !(io.iqLen(max1) <= io.iqLen(min2)) && (io.iqLen(max1) <= io.iqLen(max2))) {
 		finalMin(0) := min1
 		finalMin(1) := min2
 		finalMin(2) := max1
 		finalMin(3) := max2
-	} .elsewhen ((min1 <= min2) && !(max1 <= min2) && !(max1 <= max2)) {
+	} .elsewhen ((io.iqLen(min1) <= io.iqLen(min2)) && !(io.iqLen(max1) <= io.iqLen(min2)) && !(io.iqLen(max1) <= io.iqLen(max2))) {
 		finalMin(0) := min1
 		finalMin(1) := min2
 		finalMin(2) := max2
 		finalMin(3) := max1
-	} .elsewhen (!(min1 <= min2) && (max2 <= min1)) {
+	} .elsewhen (!(io.iqLen(min1) <= io.iqLen(min2)) && (io.iqLen(max2) <= io.iqLen(min1))) {
 		finalMin(0) := min2
 		finalMin(1) := max2
 		finalMin(2) := min1
 		finalMin(3) := max1
-	} .elsewhen (!(min1 <= min2) && !(max2 <= min1) && (max1 <= max2)) {
+	} .elsewhen (!(io.iqLen(min1) <= io.iqLen(min2)) && !(io.iqLen(max2) <= io.iqLen(min1)) && (io.iqLen(max1) <= io.iqLen(max2))) {
 		finalMin(0) := min2
 		finalMin(1) := min1
 		finalMin(2) := max1
@@ -131,7 +134,105 @@ class IqArbiter extends Module {
 }
 
 class IqArbiterTests(c: IqArbiter) extends Tester(c) {
-  println("TODO")
+	
+	// Test - 1  to check if all correct instructions are getting assigned
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  	poke(c.io.iqLen(0), 0x4)
+	poke(c.io.iqLen(1), 0x5)
+  	poke(c.io.iqLen(2), 0x6)
+	poke(c.io.iqLen(3), 0x7)
+	poke(c.io.addBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.allocIQ(0).iqNum, 0x0)
+	expect(c.io.allocIQ(1).iqNum, 0x1)
+	expect(c.io.allocIQ(2).iqNum, 0x2)
+	expect(c.io.allocIQ(3).iqNum, 0x3)
+	expect(c.io.allocIQ(0).inst.valid, 0x1)
+	expect(c.io.allocIQ(1).inst.valid, 0x1)
+	expect(c.io.allocIQ(2).inst.valid, 0x1)
+	expect(c.io.allocIQ(3).inst.valid, 0x1)
+	expect(c.io.stall, 0x0)
+
+	// Test - 2 check if stall is getting generated if all iqs are full
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  	poke(c.io.iqLen(0), 0xf)
+	poke(c.io.iqLen(1), 0xf)
+  	poke(c.io.iqLen(2), 0xf)
+	poke(c.io.iqLen(3), 0xf)
+	poke(c.io.addBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.stall, 0x1)
+
+	// Test - 3 check if stall is getting generated if all lsq is full
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  	poke(c.io.iqLen(0), 0x10)
+	poke(c.io.iqLen(1), 0x10)
+  	poke(c.io.iqLen(2), 0x10)
+	poke(c.io.iqLen(3), 0x10)
+	poke(c.io.addBufLen, 0x1c)
+
+	step(1)
+
+	expect(c.io.stall, 0x1)
+
+	// Test - 4  to check if all correct instructions are getting assigned
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  	poke(c.io.iqLen(0), 0x2)
+	poke(c.io.iqLen(1), 0x5)
+  	poke(c.io.iqLen(2), 0x6)
+	poke(c.io.iqLen(3), 0x7)
+	poke(c.io.addBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.allocIQ(0).iqNum, 0x0)
+	expect(c.io.allocIQ(1).iqNum, 0x0)
+	expect(c.io.allocIQ(2).iqNum, 0x0)
+	expect(c.io.allocIQ(3).iqNum, 0x1)
+	expect(c.io.allocIQ(0).inst.valid, 0x1)
+	expect(c.io.allocIQ(1).inst.valid, 0x1)
+	expect(c.io.allocIQ(2).inst.valid, 0x1)
+	expect(c.io.allocIQ(3).inst.valid, 0x1)
+	expect(c.io.stall, 0x0)
+
+	// Test - 5  to check if all correct instructions are getting assigned
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  	poke(c.io.iqLen(0), 0x9)
+	poke(c.io.iqLen(1), 0x6)
+  	poke(c.io.iqLen(2), 0x2)
+	poke(c.io.iqLen(3), 0xf)
+	poke(c.io.addBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.allocIQ(0).iqNum, 0x2)
+	expect(c.io.allocIQ(1).iqNum, 0x2)
+	expect(c.io.allocIQ(2).iqNum, 0x2)
+	expect(c.io.allocIQ(3).iqNum, 0x2)
+	expect(c.io.allocIQ(0).inst.valid, 0x1)
+	expect(c.io.allocIQ(1).inst.valid, 0x1)
+	expect(c.io.allocIQ(2).inst.valid, 0x1)
+	expect(c.io.allocIQ(3).inst.valid, 0x1)
+	expect(c.io.stall, 0x0)
 }
 
 class IqArbiterGenerator extends TestGenerator {
