@@ -233,6 +233,40 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	expect(c.io.allocIQ(2).inst.valid, 0x1)
 	expect(c.io.allocIQ(3).inst.valid, 0x1)
 	expect(c.io.stall, 0x0)
+
+	// Test - 6  to check if all correct instructions are getting assigned
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+	poke(c.io.inst(0).bits.op, 0x00)
+	poke(c.io.inst(1).bits.op, 0x08)
+	poke(c.io.inst(2).bits.op, 0x00)
+	poke(c.io.inst(3).bits.op, 0x3)
+  	poke(c.io.iqLen(0), 0x9)
+	poke(c.io.iqLen(1), 0x6)
+  	poke(c.io.iqLen(2), 0x2)
+	poke(c.io.iqLen(3), 0xf)
+	poke(c.io.addBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.allocIQ(0).iqNum, 0x2)
+	expect(c.io.allocIQ(1).iqNum, 0x2)
+	expect(c.io.allocIQ(2).iqNum, 0x2)
+	expect(c.io.allocIQ(3).iqNum, 0x2)
+	expect(c.io.addBuf(0).bits.lsType, 1)
+	expect(c.io.addBuf(1).bits.lsType, 0)
+	expect(c.io.addBuf(2).bits.lsType, 1)
+	expect(c.io.addBuf(0).valid, 1)
+	expect(c.io.addBuf(1).valid, 1)
+	expect(c.io.addBuf(2).valid, 1)
+	expect(c.io.addBuf(3).valid, 0)
+	expect(c.io.allocIQ(0).inst.valid, 0x1)
+	expect(c.io.allocIQ(1).inst.valid, 0x1)
+	expect(c.io.allocIQ(2).inst.valid, 0x1)
+	expect(c.io.allocIQ(3).inst.valid, 0x1)
+	expect(c.io.stall, 0x0)
 }
 
 class IqArbiterGenerator extends TestGenerator {
