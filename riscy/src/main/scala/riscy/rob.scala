@@ -39,7 +39,7 @@ class WBValue extends Bundle {
   // The value to write back
   val value = UInt(INPUT, 32)
   // Is this a taken branch
-  val taken = Bool(INPUT) // TODO: hook this up
+  val taken = Bool(INPUT)
 }
 
 class ROB extends Module {
@@ -171,6 +171,8 @@ class ROB extends Module {
       robW(io.wbValues(i).id.bits).bits := rob(io.wbValues(i).id.bits)
       robW(io.wbValues(i).id.bits).bits.rdVal.valid := Bool(true)
       robW(io.wbValues(i).id.bits).bits.rdVal.bits := io.wbValues(i).value
+      robW(io.wbValues(i).id.bits).bits.isMispredicted := 
+        io.wbValues(i).taken ^ robW(io.wbValues(i).id.bits).bits.predTaken
 
       printf("writing WB value to ROB%d: %x\n", io.wbValues(i).id.bits, io.wbValues(i).value)
     }
