@@ -343,6 +343,35 @@ class ROBTests(c: ROB) extends Tester(c) {
     ports foreach { port => poke(c.io.allocRemap(port).valid, false) }
   }
 
+  // Add Register Immediate
+  // if rs1Rename._1 => get value from ROB
+  // else            => get value from RF
+  //
+  def pokeROBAddRI(port: Int, tag: Int, pc: Int, 
+    rs1: Int, rs1Rename: (Boolean, Int), rs1Val: (Boolean, Int), 
+    imm: Int, rd: Int) = {
+
+    poke(c.io.allocROB(port).valid, true)
+    poke(c.io.allocROB(port).bits.pc, pc)
+    poke(c.io.allocROB(port).bits.tag, tag)
+    poke(c.io.allocROB(port).bits.op, 0x13)
+    poke(c.io.allocROB(port).bits.funct3, 0x0)
+    poke(c.io.allocROB(port).bits.rs1, rs1)
+    poke(c.io.allocROB(port).bits.rd, rd)
+    poke(c.io.allocROB(port).bits.immI, imm)
+    poke(c.io.allocROB(port).bits.hasRd, true)
+    poke(c.io.allocROB(port).bits.isSt, false)
+    poke(c.io.allocROB(port).bits.predTaken, false)
+    poke(c.io.allocROB(port).bits.isMispredicted, false)
+    poke(c.io.allocROB(port).bits.rs1Rename, if(rs1Rename._1) { rs1Rename._2 } else { 0 })
+    poke(c.io.allocROB(port).bits.rs2Rename, 0) // Not renamed
+    poke(c.io.allocROB(port).bits.rs1Val.valid, rs1Val._1) // Ready or ROB?
+    poke(c.io.allocROB(port).bits.rs1Val.bits, if(rs1Val._1) { rs1Val._2 } else { 0 }) // Value from RF or ROB
+    poke(c.io.allocROB(port).bits.rs2Val.valid, true) // Ready
+    poke(c.io.allocROB(port).bits.rs2Val.bits, imm) // No RS2, use Imm
+    poke(c.io.allocROB(port).bits.rdVal.valid, false) // NOT Ready
+  }
+
   // test the remap ports
   
   // Get the mapping for the first few registers and check that they are not
@@ -428,25 +457,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   
   // add r1 <- r1 + 0xFFFF
   // add r2 <- r1 + 0xFFFF
-  poke(c.io.allocROB(0).valid, true)
-  poke(c.io.allocROB(0).bits.pc, 0xa0)
-  poke(c.io.allocROB(0).bits.tag, 0x0)
-  poke(c.io.allocROB(0).bits.op, 0x13)
-  poke(c.io.allocROB(0).bits.funct3, 0x0)
-  poke(c.io.allocROB(0).bits.rs1, 0x1)
-  poke(c.io.allocROB(0).bits.rd, 0x1)
-  poke(c.io.allocROB(0).bits.immI, 0xFFFF)
-  poke(c.io.allocROB(0).bits.hasRd, true)
-  poke(c.io.allocROB(0).bits.isSt, false)
-  poke(c.io.allocROB(0).bits.predTaken, false)
-  poke(c.io.allocROB(0).bits.isMispredicted, false)
-  poke(c.io.allocROB(0).bits.rs1Rename, 0) // Not renamed
-  poke(c.io.allocROB(0).bits.rs2Rename, 0) // Not renamed
-  poke(c.io.allocROB(0).bits.rs1Val.valid, true) // Ready
-  poke(c.io.allocROB(0).bits.rs1Val.bits, 0xDEADBEEF) // Value from RF
-  poke(c.io.allocROB(0).bits.rs2Val.valid, true) // Ready
-  poke(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF) // No RS2, use Imm
-  poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
+  pokeROBAddRI(0, 0, 0xa0, 1, (false, 0), (true, 0xDEADBEEF), 0xFFFF, 1)
 
   poke(c.io.allocRemap(0).valid, true)
   poke(c.io.allocRemap(0).bits.reg, 0x1)
