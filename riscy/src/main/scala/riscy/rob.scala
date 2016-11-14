@@ -38,6 +38,8 @@ class WBValue extends Bundle {
   val id = Valid(UInt(INPUT, 6))
   // The value to write back
   val value = UInt(INPUT, 32)
+  // Is this a taken branch
+  val taken = Bool(INPUT) // TODO: hook this up
 }
 
 class ROB extends Module {
@@ -471,6 +473,27 @@ class ROBTests(c: ROB) extends Tester(c) {
   }
 
   // Try latching some instructions
+  //
+  // The rest of this test executes a simple program
+  //
+  // add r1 <- r1 + 0xFFFF
+  // add r2 <- r1 + 0xFFFF
+  //
+  // add r1 <- r1 + 0xFFFF
+  // add r1 <- r1 + 0xFFFF
+  // add r1 <- r1 + 0xFFFF
+  // add r1 <- r1 + 0xFFFF
+  //
+  // lw r3 <- 0x100[r1]
+  //
+  // bne r1 != r2 => PC + 0x44 
+  // sw -0x100[r2] <- r3
+  //
+  // beq r1 == r2 => PC - 0x44 
+  // sw -0x100[r2] <- r3
+  // r1 <- r1 + 0xFFFF
+
+  // Beginning of tests...
 
   // add r1 <- r1 + 0xFFFF
   pokeROBAddRI(0, 0, 0xa0, 1, (false, 0), (true, 0xDEADBEEF), 0xFFFF, 1)
@@ -599,7 +622,7 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   // Try some other types of instructions now
 
-  // lw (load word) r3 <- r1 + 0x100
+  // lw (load word) r3 <- 0x100[r1]
   poke(c.io.allocROB(0).valid, true)
   poke(c.io.allocROB(0).bits.pc, 0xb8)
   poke(c.io.allocROB(0).bits.tag, 0x6)
@@ -661,10 +684,54 @@ class ROBTests(c: ROB) extends Tester(c) {
   // write back ROB5
   pokeWB(0, 5, 0xDEB2BEEC) // 0xDEB1BEEB + 0xFFFF
 
+  // bne r1 != r2 => PC + 0x44 
+  poke(c.io.allocROB(0).valid, true)
+  poke(c.io.allocROB(0).bits.pc, 0xbc)
+  poke(c.io.allocROB(0).bits.tag, 0x7)
+  poke(c.io.allocROB(0).bits.op, 0x63)
+  poke(c.io.allocROB(0).bits.funct3, 0x1) // not equal
+  poke(c.io.allocROB(0).bits.rs1, 1)
+  poke(c.io.allocROB(0).bits.rs2, 2)
+  poke(c.io.allocROB(0).bits.rd, 0) // No rd
+  poke(c.io.allocROB(0).bits.immSB, 0x44)
+  poke(c.io.allocROB(0).bits.hasRd, false)
+  poke(c.io.allocROB(0).bits.isSt, false)
+  poke(c.io.allocROB(0).bits.predTaken, true)
+  poke(c.io.allocROB(0).bits.isMispredicted, false) // Don't know yet
+  poke(c.io.allocROB(0).bits.rs1Rename, 5) // Renamed
+  poke(c.io.allocROB(0).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(0).bits.rs1Val.valid, false) // Not Ready
+  poke(c.io.allocROB(0).bits.rs1Val.bits, 0) // Value from ROB
+  poke(c.io.allocROB(0).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(0).bits.rs2Val.bits, 0xDEAEBEEE) // R2 from RF
+  poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
+
+  // sw (store word) -0x100[r2] <- r3
+  poke(c.io.allocROB(1).valid, true)
+  poke(c.io.allocROB(1).bits.pc, 0x100)
+  poke(c.io.allocROB(1).bits.tag, 0x8)
+  poke(c.io.allocROB(1).bits.op, 0x23)
+  poke(c.io.allocROB(1).bits.funct3, 0x2) // word, not byte, or double
+  poke(c.io.allocROB(1).bits.rs1, 2)
+  poke(c.io.allocROB(1).bits.rs2, 3)
+  poke(c.io.allocROB(1).bits.rd, 0) // No dest
+  poke(c.io.allocROB(1).bits.immS, -0x100)
+  poke(c.io.allocROB(1).bits.hasRd, false)
+  poke(c.io.allocROB(1).bits.isSt, true)
+  poke(c.io.allocROB(1).bits.predTaken, false)
+  poke(c.io.allocROB(1).bits.isMispredicted, false)
+  poke(c.io.allocROB(1).bits.rs1Rename, 0) // Not renamed
+  poke(c.io.allocROB(1).bits.rs2Rename, 6) // Renamed
+  poke(c.io.allocROB(1).bits.rs1Val.valid, true) // Ready
+  poke(c.io.allocROB(1).bits.rs1Val.bits, 0xDEAEBEEE) // Value from RF
+  poke(c.io.allocROB(1).bits.rs2Val.valid, false) // Not Ready
+  poke(c.io.allocROB(1).bits.rs2Val.bits, 0) // Value from ROB
+  poke(c.io.allocROB(1).bits.rdVal.valid, false) // NOT Ready
+
   step(1)
 
-  expect(c.io.robFree, 62)
-  expect(c.io.robFirst, 7)
+  expect(c.io.robFree, 60)
+  expect(c.io.robFirst, 9)
 
   expectRemapMappingValid(Array(0 -> true, 3 -> true))
   expectRemapMappingBits(Array(0 -> 5, 3 -> 6))
@@ -676,10 +743,63 @@ class ROBTests(c: ROB) extends Tester(c) {
   // RF should have been written
   expect(c.io.rfValues(0), 0xDEB1BEEB)
 
+  // beq r1 == r2 => PC - 0x44 
+  poke(c.io.allocROB(0).valid, true)
+  poke(c.io.allocROB(0).bits.pc, 0x104)
+  poke(c.io.allocROB(0).bits.tag, 0x9)
+  poke(c.io.allocROB(0).bits.op, 0x63)
+  poke(c.io.allocROB(0).bits.funct3, 0x0) // equal
+  poke(c.io.allocROB(0).bits.rs1, 1)
+  poke(c.io.allocROB(0).bits.rs2, 2)
+  poke(c.io.allocROB(0).bits.rd, 0) // No rd
+  poke(c.io.allocROB(0).bits.immSB, -0x44)
+  poke(c.io.allocROB(0).bits.hasRd, false)
+  poke(c.io.allocROB(0).bits.isSt, false)
+  poke(c.io.allocROB(0).bits.predTaken, true)
+  poke(c.io.allocROB(0).bits.isMispredicted, false) // Don't know yet
+  poke(c.io.allocROB(0).bits.rs1Rename, 5) // Renamed
+  poke(c.io.allocROB(0).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(0).bits.rs1Val.valid, false) // Not Ready
+  poke(c.io.allocROB(0).bits.rs1Val.bits, 0) // Value from ROB
+  poke(c.io.allocROB(0).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(0).bits.rs2Val.bits, 0xDEAEBEEE) // R2 from RF
+  poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
+
+  // sw (store word) -0x100[r2] <- r3
+  poke(c.io.allocROB(1).valid, true)
+  poke(c.io.allocROB(1).bits.pc, 0xbc)
+  poke(c.io.allocROB(1).bits.tag, 0xa)
+  poke(c.io.allocROB(1).bits.op, 0x23)
+  poke(c.io.allocROB(1).bits.funct3, 0x2) // word, not byte, or double
+  poke(c.io.allocROB(1).bits.rs1, 2)
+  poke(c.io.allocROB(1).bits.rs2, 3)
+  poke(c.io.allocROB(1).bits.rd, 0) // No dest
+  poke(c.io.allocROB(1).bits.immS, -0x100)
+  poke(c.io.allocROB(1).bits.hasRd, false)
+  poke(c.io.allocROB(1).bits.isSt, true)
+  poke(c.io.allocROB(1).bits.predTaken, false)
+  poke(c.io.allocROB(1).bits.isMispredicted, false)
+  poke(c.io.allocROB(1).bits.rs1Rename, 0) // Not renamed
+  poke(c.io.allocROB(1).bits.rs2Rename, 6) // Renamed
+  poke(c.io.allocROB(1).bits.rs1Val.valid, true) // Ready
+  poke(c.io.allocROB(1).bits.rs1Val.bits, 0xDEAEBEEE) // Value from RF
+  poke(c.io.allocROB(1).bits.rs2Val.valid, false) // Not Ready
+  poke(c.io.allocROB(1).bits.rs2Val.bits, 0) // Value from ROB
+  poke(c.io.allocROB(1).bits.rdVal.valid, false) // NOT Ready
+
+  // r1 <- r1 + 0xFFFF
+  pokeROBAddRI(2, 0xb, 0xc0, 1, (true, 5), (true, 0xDEB2BEEC), 0xFFFF, 1)
+  pokeRemapping(2, 1, 0xb)
+
+  // NOTE: lw address is ready, begin cache access
+
   step(1)
 
-  expect(c.io.robFree, 63)
-  expect(c.io.robFirst, 7)
+  pokeROBInvalid(Array(0, 1))
+  pokeRemappingInvalid(Array(2))
+
+  expect(c.io.robFree, 59)
+  expect(c.io.robFirst, 0xb)
 
   expectRemapMappingValid(Array(0 -> false, 3 -> true))
   expectRemapMappingBits(Array(3 -> 6))
@@ -690,10 +810,40 @@ class ROBTests(c: ROB) extends Tester(c) {
   // RF should have been written
   expect(c.io.rfValues(0), 0xDEB2BEEC)
 
-  // TODO: Try
-  // - a store
-  // - a mispredicted jump
-  // - a correctly predicted jump
+  // NOTE: bne executes OoO in this cycle
+  // NOTE: beq executes OoO in this cycle
+  // NOTE: add executes OoO in this cycle
+
+  step(1)
+
+  // TODO: load writes back
+  // TODO: bne writes back
+  // TODO: beq writes back
+  // TODO: add writes back
+
+  step(1)
+
+  // TODO: load commits
+  // TODO: bne commits
+
+  // NOTE: first sw begins address computation OoO this cycle
+  // NOTE: second sw begins address computation OoO this cycle
+  
+  step(1)
+
+  // TODO: first sw writesback
+  // TODO: second sw writesback
+  
+  step(1)
+
+  // TODO: first sw commits
+  // TODO: beq commits... oh no! mispredicted!
+  // TODO: second sw and add are squashed
+  // TODO: remap table is squashed
+  
+  step(1)
+
+  // TODO: check squashing
 }
 
 class ROBGenerator extends TestGenerator {
