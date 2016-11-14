@@ -58,7 +58,7 @@ class ROB extends Module {
     val robFirst = UInt(OUTPUT, 6) // Index of the first free entry
 
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()).flip }
-    val allocROB = Vec.fill(4) { Valid(new AllocROB()).flip }
+    val allocROB = Vec.fill(4) { Valid(new ROBEntry()).flip }
 
     // Get signals from the FOO for WB
     // - ALU 0-3
@@ -605,11 +605,34 @@ class ROBTests(c: ROB) extends Tester(c) {
   expect(c.io.rfValues(0), 0xDEAFBEED)
   expect(c.io.rfValues(1), 0xDEAFBEED)
 
+  // Try some other types of instructions now
+
+  // lw (load word) rd <- r1 + 0x100
+  poke(c.io.allocROB(0).valid, true)
+  poke(c.io.allocROB(0).bits.pc, 0xb8)
+  poke(c.io.allocROB(0).bits.tag, 0x6)
+  poke(c.io.allocROB(0).bits.op, 0x3)
+  poke(c.io.allocROB(0).bits.funct3, 0x2) // word load, not byte, or double
+  poke(c.io.allocROB(0).bits.rs1, 1)
+  poke(c.io.allocROB(0).bits.rd, 3)
+  poke(c.io.allocROB(0).bits.immI, 0x100)
+  poke(c.io.allocROB(0).bits.hasRd, true)
+  poke(c.io.allocROB(0).bits.isSt, false)
+  poke(c.io.allocROB(0).bits.predTaken, false)
+  poke(c.io.allocROB(0).bits.isMispredicted, false)
+  poke(c.io.allocROB(0).bits.rs1Rename, 0) // Not renamed
+  poke(c.io.allocROB(0).bits.rs2Rename, 0) // Not renamed
+  poke(c.io.allocROB(0).bits.rs1Val.valid, true) // Ready
+  poke(c.io.allocROB(0).bits.rs1Val.bits, 0xDEAFBEED) // Value from RF
+  poke(c.io.allocROB(0).bits.rs2Val.valid, true) // Ready
+  poke(c.io.allocROB(0).bits.rs2Val.bits, 0x100) // No RS2, use Imm
+  poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
+
+
   // TODO: Try
   // - a store
   // - a mispredicted jump
   // - a correctly predicted jump
-
 }
 
 class ROBGenerator extends TestGenerator {
@@ -617,35 +640,3 @@ class ROBGenerator extends TestGenerator {
   def genTest[T <: Module](c: T): Tester[T] =
     (new ROBTests(c.asInstanceOf[ROB])).asInstanceOf[Tester[T]]
 }
-
-//  // The ROB storage structure
-//  class CirculrBufferIterator[T](buffer:Array[T], start:Int) extends Iterator[T]{
-//    var idx=0
-//    override def hasNext = idx<buffer.size
-//    override def next()={
-//      val i=idx
-//      idx=idx+1
-//      buffer(i)
-//    }
-//  }
-//
-//  class CircularBuffer[T](size:Int)(implicit m:Manifest[T]) extends Seq[T]{
-//    val buffer=new Array[T](size)
-//    var bIdx=0
-//
-//    override def apply (idx: Int): T = buffer((bIdx+idx) % size)
-//
-//    override def length = size
-//
-//    override def iterator= new CirculrBufferIterator[T](buffer, bIdx)
-//
-//    def add(e:T)= {
-//      buffer(bIdx)=e
-//      bIdx=(bIdx +1) % size
-//    }
-//  }
-//
-//  val rob = new CircularBuffer(64) { new ROBEntry() }
-//  val head = Reg(next = UInt(width = 6))
-
-
