@@ -321,90 +321,86 @@ class ROB extends Module {
 }
 
 class ROBTests(c: ROB) extends Tester(c) {
+  def pokeRemapPorts(remap: Array[(Int, Int)]) = {
+    remap foreach { x => poke(c.io.remapPorts(x._1), x._2) }
+  }
+
+  def expectRemapMappingValid(remap: Array[(Int, Boolean)]) = {
+    remap foreach { x => expect(c.io.remapMapping(x._1).valid, x._2) }
+  }
+
+  def expectRemapMappingBits(remap: Array[(Int, Int)]) = {
+    remap foreach { x => expect(c.io.remapMapping(x._1).bits, x._2) }
+  }
+
+  def pokeRemapping(port: Int, reg: Int, rob: Int) = {
+    poke(c.io.allocRemap(port).valid, true)
+    poke(c.io.allocRemap(port).bits.reg, reg)
+    poke(c.io.allocRemap(port).bits.idxROB, rob)
+  }
+
+  def pokeRemappingInvalid(ports: Array[Int]) = {
+    ports foreach { port => poke(c.io.allocRemap(port).valid, false) }
+  }
+
   // test the remap ports
-  poke(c.io.remapPorts(0), 0)
-  poke(c.io.remapPorts(1), 1)
-  poke(c.io.remapPorts(2), 2)
-  poke(c.io.remapPorts(3), 3)
-  poke(c.io.remapPorts(4), 4)
-  poke(c.io.remapPorts(5), 5)
-  poke(c.io.remapPorts(6), 6)
-  poke(c.io.remapPorts(7), 7)
+  
+  // Get the mapping for the first few registers and check that they are not
+  // mapped to any physical register.
+  pokeRemapPorts(Array.tabulate(8){ i => i -> i })
 
   step(0)
 
-  expect(c.io.remapMapping(0).valid, false)
-  expect(c.io.remapMapping(1).valid, false)
-  expect(c.io.remapMapping(2).valid, false)
-  expect(c.io.remapMapping(3).valid, false)
-  expect(c.io.remapMapping(4).valid, false)
-  expect(c.io.remapMapping(5).valid, false)
-  expect(c.io.remapMapping(6).valid, false)
-  expect(c.io.remapMapping(7).valid, false)
+  expectRemapMappingValid(Array.tabulate(8){ i => i -> false })
 
-  // map r0 to p4
-  poke(c.io.allocRemap(0).valid, true)
-  poke(c.io.allocRemap(0).bits.reg, 0)
-  poke(c.io.allocRemap(0).bits.idxROB, 4)
+  // map r0 to p4, port 0
+  pokeRemapping(0, 0, 4)
 
-  // map r1 to p3
-  poke(c.io.allocRemap(1).valid, true)
-  poke(c.io.allocRemap(1).bits.reg, 1)
-  poke(c.io.allocRemap(1).bits.idxROB, 3)
+  // map r1 to p3, port 1
+  pokeRemapping(1, 1, 3)
 
   step(1)
 
-  expect(c.io.remapMapping(0).valid, true)
-  expect(c.io.remapMapping(0).bits, 4)
-  expect(c.io.remapMapping(1).valid, true)
-  expect(c.io.remapMapping(1).bits, 3)
-  expect(c.io.remapMapping(2).valid, false)
-  expect(c.io.remapMapping(3).valid, false)
-  expect(c.io.remapMapping(4).valid, false)
-  expect(c.io.remapMapping(5).valid, false)
-  expect(c.io.remapMapping(6).valid, false)
-  expect(c.io.remapMapping(7).valid, false)
+  expectRemapMappingValid(
+    Array.tabulate(2){ i => i -> true } ++
+    Array.tabulate(6){ i => (i+2) -> false }
+  )
 
-  poke(c.io.allocRemap(0).valid, false)
-  poke(c.io.allocRemap(1).valid, false)
+  expectRemapMappingBits(
+    Array(0 -> 4, 1 -> 3)
+  )
+
+  pokeRemappingInvalid(Array(0, 1))
 
   step(1)
 
-  expect(c.io.remapMapping(0).valid, true)
-  expect(c.io.remapMapping(0).bits, 4)
-  expect(c.io.remapMapping(1).valid, true)
-  expect(c.io.remapMapping(1).bits, 3)
-  expect(c.io.remapMapping(2).valid, false)
-  expect(c.io.remapMapping(3).valid, false)
-  expect(c.io.remapMapping(4).valid, false)
-  expect(c.io.remapMapping(5).valid, false)
-  expect(c.io.remapMapping(6).valid, false)
-  expect(c.io.remapMapping(7).valid, false)
+  // expect the mapping not to have changed
+  expectRemapMappingValid(
+    Array.tabulate(2){ i => i -> true } ++
+    Array.tabulate(6){ i => (i+2) -> false }
+  )
 
-  // map r0 to p7
-  poke(c.io.allocRemap(0).valid, true)
-  poke(c.io.allocRemap(0).bits.reg, 0)
-  poke(c.io.allocRemap(0).bits.idxROB, 7)
+  expectRemapMappingBits(
+    Array(0 -> 4, 1 -> 3)
+  )
 
-  // map r30 to p8
-  poke(c.io.allocRemap(1).valid, true)
-  poke(c.io.allocRemap(1).bits.reg, 30)
-  poke(c.io.allocRemap(1).bits.idxROB, 8)
+  // map r0 to p7, port 0
+  pokeRemapping(0, 0, 7)
+
+  // map r30 to p8, port 1
+  pokeRemapping(1, 30, 8)
   poke(c.io.remapPorts(2), 30)
 
   step(1)
 
-  expect(c.io.remapMapping(0).valid, true)
-  expect(c.io.remapMapping(0).bits, 7)
-  expect(c.io.remapMapping(1).valid, true)
-  expect(c.io.remapMapping(1).bits, 3)
-  expect(c.io.remapMapping(2).valid, true)
-  expect(c.io.remapMapping(2).bits, 8)
-  expect(c.io.remapMapping(3).valid, false)
-  expect(c.io.remapMapping(4).valid, false)
-  expect(c.io.remapMapping(5).valid, false)
-  expect(c.io.remapMapping(6).valid, false)
-  expect(c.io.remapMapping(7).valid, false)
+  expectRemapMappingValid(
+    Array.tabulate(3){ i => i -> true } ++
+    Array.tabulate(5){ i => (i+3) -> false }
+  )
+
+  expectRemapMappingBits(
+    Array(0 -> 7, 1 -> 3, 2 -> 8)
+  )
 
   // Try some random reads and writes
   for(i <- 0 until 1000) {
@@ -413,15 +409,12 @@ class ROBTests(c: ROB) extends Tester(c) {
     val randWReg = rnd.nextInt(32)
     val randWROBIdx = rnd.nextInt(64)
 
-    for(p <- 0 until 4) {
-      if(p == randWPort) {
-        poke(c.io.allocRemap(p).valid, false)
-      } else {
-        poke(c.io.allocRemap(p).valid, true)
-        poke(c.io.allocRemap(p).bits.reg, randWReg)
-        poke(c.io.allocRemap(p).bits.idxROB, randWROBIdx)
-      }
-    }
+    pokeRemappingInvalid(
+      (Array.tabulate(4)(identity _)).filter(x => x != randWPort)
+    )
+
+    // map randWReg to randWROBIdx, port randWPort
+    pokeRemapping(randWPort, randWReg, randWROBIdx)
 
     poke(c.io.remapPorts(randRPort), randWReg)
 
