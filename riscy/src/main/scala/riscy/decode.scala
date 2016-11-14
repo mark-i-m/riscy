@@ -11,11 +11,9 @@ class DecodeIns extends Bundle {
   val funct7 = UInt(OUTPUT, 7)
   val immI = SInt(OUTPUT, 32)
   val immS = SInt(OUTPUT, 32)
-  val immSB = SInt(OUTPUT, 32) // TODO: hook this up
   val immB = SInt(OUTPUT, 32)
   val immU = SInt(OUTPUT, 32)
   val immJ = SInt(OUTPUT, 32)
-  val immUJ = SInt(OUTPUT, 32)  // TODO: hook this up
 }
 
 class RiscyDecode extends Module {

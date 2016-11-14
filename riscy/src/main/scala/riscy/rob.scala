@@ -693,7 +693,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   poke(c.io.allocROB(0).bits.rs1, 1)
   poke(c.io.allocROB(0).bits.rs2, 2)
   poke(c.io.allocROB(0).bits.rd, 0) // No rd
-  poke(c.io.allocROB(0).bits.immSB, 0x44)
+  poke(c.io.allocROB(0).bits.immB, 0x44)
   poke(c.io.allocROB(0).bits.hasRd, false)
   poke(c.io.allocROB(0).bits.isSt, false)
   poke(c.io.allocROB(0).bits.predTaken, true)
@@ -752,7 +752,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   poke(c.io.allocROB(0).bits.rs1, 1)
   poke(c.io.allocROB(0).bits.rs2, 2)
   poke(c.io.allocROB(0).bits.rd, 0) // No rd
-  poke(c.io.allocROB(0).bits.immSB, -0x44)
+  poke(c.io.allocROB(0).bits.immB, -0x44)
   poke(c.io.allocROB(0).bits.hasRd, false)
   poke(c.io.allocROB(0).bits.isSt, false)
   poke(c.io.allocROB(0).bits.predTaken, true)
@@ -798,11 +798,11 @@ class ROBTests(c: ROB) extends Tester(c) {
   pokeROBInvalid(Array(0, 1))
   pokeRemappingInvalid(Array(2))
 
-  expect(c.io.robFree, 59)
-  expect(c.io.robFirst, 0xb)
+  expect(c.io.robFree, 58)
+  expect(c.io.robFirst, 0xc)
 
-  expectRemapMappingValid(Array(0 -> false, 3 -> true))
-  expectRemapMappingBits(Array(3 -> 6))
+  expectRemapMappingValid(Array(0 -> true, 3 -> true))
+  expectRemapMappingBits(Array(0 -> 0xb, 3 -> 6))
 
   // ROB5 committed
   expectROBDestValid(Array(5-> false, 6 -> false))

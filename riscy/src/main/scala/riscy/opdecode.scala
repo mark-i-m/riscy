@@ -16,11 +16,9 @@ class OpDecode extends Bundle {
   val hasFunct7 = Bool(OUTPUT)
   val hasImmI   = Bool(OUTPUT)
   val hasImmS   = Bool(OUTPUT)
-  val hasImmSB  = Bool(OUTPUT) // TODO: hook this up
   val hasImmB   = Bool(OUTPUT)
   val hasImmU   = Bool(OUTPUT)
   val hasImmJ   = Bool(OUTPUT)
-  val hasImmUJ  = Bool(OUTPUT) // TODO: hook this up
 }
 
 class RiscyOpDecode extends Module {
