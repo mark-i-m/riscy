@@ -8,10 +8,14 @@ class IssueQueue extends Module {
 		val totalEntries = UInt(INPUT, 2)
 		val issuedEntry = Valid(new ROBEntry).asOutput
 		val currentLen = UInt(OUTPUT, 4)
+		// Currently just assume that below signals contain insts
+		// issued in last 2 cycles as form of ROB entry
+		// At top level this structure has to be generated - TODO
+		val issuedPrev2 = Vec.fill(8) {Valid(UInt(INPUT, 6))}
 	}
 
 	//val eachEntry = Module ( new ShiftRegPP(() => new  ROBEntry))
-	val iqueue = Vec.fill(16) {Reg(outType = Valid(new AllocROB))}
+	val iqueue = Vec.fill(16) {Reg(outType = new AllocROB)}
 
 	val counter = new MultiCounter(16)
 	
@@ -19,11 +23,33 @@ class IssueQueue extends Module {
 	// New entries are assigned only if valid bit is set
 	for (i <- 0 until 4) {
 		when (io.newEntry(i).valid) {
-			iqueue(counter.value + UInt(i)).valid := Bool(true)
-			iqueue(counter.value + UInt(i)).bits := io.newEntry(i).bits
+			iqueue(counter.value + UInt(i)) := io.newEntry(i).bits
 		}
 	}
 	
+	// Logic for speculative wakeup
+	// There is no speculative wake up, here it is assumed that
+	// no stall happens within execution stage & 1 cycle execution
+	// directly setting valid bit of rs1 and rs2 valid to true
+	// No back to back execultion is supported for LSQ dependent
+	// instructions which can be supported by following method
+	// update issuedPrev array to 10 bits as ROB_WB structure
+	for (i <- 0 until 7) {
+		when (io.issuedPrev2(i).valid === Bool(true)) {
+			for (j <- 0 until 15) {
+				when (iqueue(j).rs1Val.valid === Bool(false) && 
+				      iqueue(j).rs1Rename === io.issuedPrev2(i).bits) {
+					iqueue(j).rs1Val.valid === Bool(true) 
+				}
+				when (iqueue(j).rs2Val.valid === Bool(false) && 
+				      iqueue(j).rs2Rename === io.issuedPrev2(i).bits) {
+					iqueue(j).rs2Val.valid === Bool(true) 
+				}
+			}
+		}
+	}
+
+
 	// Updating counter value based on issued instruction
 	// & number of new entries
 	// Top level has to make sure all entries are assigned
@@ -39,10 +65,8 @@ class IssueQueue extends Module {
 	io.currentLen := counter.value
 
 	val allReady = Vec.tabulate(16) {
-			// TODO: speculative wakeup
-		i => iqueue(i).valid &&
-		     iqueue(i).bits.rs1Val.valid && 
-		     iqueue(i).bits.rs2Val.valid
+		i => iqueue(i).rs1Val.valid && 
+		     iqueue(i).rs2Val.valid
 	}
 	
 	// Issuing the oldest ready instruction
