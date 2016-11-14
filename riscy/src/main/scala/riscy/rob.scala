@@ -321,17 +321,14 @@ class ROB extends Module {
 }
 
 class ROBTests(c: ROB) extends Tester(c) {
-  def pokeRemapPorts(remap: Array[(Int, Int)]) = {
+  def pokeRemapPorts(remap: Array[(Int, Int)]) = 
     remap foreach { x => poke(c.io.remapPorts(x._1), x._2) }
-  }
 
-  def expectRemapMappingValid(remap: Array[(Int, Boolean)]) = {
+  def expectRemapMappingValid(remap: Array[(Int, Boolean)]) = 
     remap foreach { x => expect(c.io.remapMapping(x._1).valid, x._2) }
-  }
 
-  def expectRemapMappingBits(remap: Array[(Int, Int)]) = {
+  def expectRemapMappingBits(remap: Array[(Int, Int)]) = 
     remap foreach { x => expect(c.io.remapMapping(x._1).bits, x._2) }
-  }
 
   def pokeRemapping(port: Int, reg: Int, rob: Int) = {
     poke(c.io.allocRemap(port).valid, true)
@@ -339,9 +336,8 @@ class ROBTests(c: ROB) extends Tester(c) {
     poke(c.io.allocRemap(port).bits.idxROB, rob)
   }
 
-  def pokeRemappingInvalid(ports: Array[Int]) = {
+  def pokeRemappingInvalid(ports: Array[Int]) = 
     ports foreach { port => poke(c.io.allocRemap(port).valid, false) }
-  }
 
   // Add Register Immediate
   // if rs1Rename._1 => get value from ROB
@@ -372,18 +368,26 @@ class ROBTests(c: ROB) extends Tester(c) {
     poke(c.io.allocROB(port).bits.rdVal.valid, false) // NOT Ready
   }
 
-  def pokeROBPorts(rob: Array[(Int, Int)]) = {
+  def pokeROBInvalid(ports: Array[Int]) = 
+    ports foreach { port => poke(c.io.allocROB(port).valid, false) }
+
+  def pokeROBPorts(rob: Array[(Int, Int)]) = 
     rob foreach { x => poke(c.io.robPorts(x._1), x._2) }
-  }
 
-  def expectROBDestValid(rob: Array[(Int, Boolean)]) = {
+  def expectROBDestValid(rob: Array[(Int, Boolean)]) = 
     rob foreach { x => expect(c.io.robDest(x._1).valid, x._2) }
-  }
 
-  def expectRemapMappingBits(rob: Array[(Int, Int)]) = {
+  def expectROBDestBits(rob: Array[(Int, Int)]) = 
     rob foreach { x => expect(c.io.robDest(x._1).bits, x._2) }
+
+  def pokeWB(port: Int, id: Int, value: Int) = {
+    poke(c.io.wbValues(port).id.valid, true)
+    poke(c.io.wbValues(port).id.bits, id)
+    poke(c.io.wbValues(port).value, value) 
   }
 
+  def pokeWBInvalid(ports: Array[Int]) =
+    ports foreach { port => poke(c.io.wbValues(port).id.valid, false) }
 
   // test the remap ports
   
@@ -540,86 +544,64 @@ class ROBTests(c: ROB) extends Tester(c) {
   expectROBDestValid(Array.tabulate(6){ i => i -> false }) // Rds not ready
 
   // Test writeback
-
-  poke(c.io.allocROB(0).valid, false)
-  poke(c.io.allocROB(1).valid, false)
-  poke(c.io.allocROB(2).valid, false)
-  poke(c.io.allocROB(3).valid, false)
-
-  poke(c.io.allocRemap(3).valid, false)
+  pokeROBInvalid(Array.tabulate(4)(identity _))
+  pokeRemappingInvalid(Array(3))
 
   // result of first add comes back
-  poke(c.io.wbValues(0).id.valid, true)
-  poke(c.io.wbValues(0).id.bits, 0)
-  poke(c.io.wbValues(0).value, 0xDEAEBEEE) // 0xDEADBEEF + 0xFFFF
+  pokeWB(0, 0, 0xDEAEBEEE) // 0xDEADBEEF + 0xFFFF
 
   step(1)
 
   expect(c.io.robFree, 58)
   expect(c.io.robFirst, 6)
 
-  expect(c.io.remapMapping(0).valid, true)
-  expect(c.io.remapMapping(0).bits, 5)
+  expectRemapMappingValid(Array(0 -> true, 1 -> true))
+  expectRemapMappingBits(Array(0 -> 5, 1 -> 1))
 
-  expect(c.io.remapMapping(1).valid, true)
-  expect(c.io.remapMapping(1).bits, 1)
-
-  expect(c.io.robDest(0).valid, true) // Rd ready
-  expect(c.io.robDest(0).bits, 0xDEAEBEEE) // WB value
+  // ROB0 is ready
+  expectROBDestValid(Array(0 -> true))
+  expectROBDestBits(Array(0 -> 0xDEAEBEEE))
 
   // result of next two instructions come back
-  poke(c.io.wbValues(0).id.valid, true)
-  poke(c.io.wbValues(0).id.bits, 1)
-  poke(c.io.wbValues(0).value, 0xDEAFBEED) // 0xDEAEBEEE + 0xFFFF
-
-  poke(c.io.wbValues(1).id.valid, true)
-  poke(c.io.wbValues(1).id.bits, 2)
-  poke(c.io.wbValues(1).value, 0xDEAFBEED) // 0xDEAEBEEE + 0xFFFF
+  pokeWB(0, 1, 0xDEAFBEED) // 0xDEAEBEEE + 0xFFFF
+  pokeWB(1, 2, 0xDEAFBEED) // 0xDEAEBEEE + 0xFFFF
 
   step(1)
 
   // Also, committed the first instruction
   poke(c.io.rfPorts(0), 1) // Read r1
 
-  expect(c.io.remapMapping(0).valid, true)
-  expect(c.io.remapMapping(0).bits, 5)
+  expectRemapMappingValid(Array(0 -> true, 1 -> true))
+  expectRemapMappingBits(Array(0 -> 5, 1 -> 1))
 
-  expect(c.io.remapMapping(1).valid, true)
-  expect(c.io.remapMapping(1).bits, 1)
-
-  expect(c.io.robDest(1).valid, true) // Rd ready
-  expect(c.io.robDest(1).bits, 0xDEAFBEED) // WB value
-
-  expect(c.io.robDest(2).valid, true) // Rd ready
-  expect(c.io.robDest(2).bits, 0xDEAFBEED) // WB value
+  // ROB0 committed
+  // ROB1, 2 are ready
+  expectROBDestValid(Array(1 -> true, 2 -> true, 0 -> false))
+  expectROBDestBits(Array(1 -> 0xDEAFBEED, 2 -> 0xDEAFBEED))
 
   expect(c.io.robFree, 59)
   expect(c.io.robFirst, 6)
 
-  expect(c.io.robDest(0).valid, false) // This instruction committed
-
+  // RF should have been written
   expect(c.io.rfValues(0), 0xDEAEBEEE)
 
-  poke(c.io.wbValues(0).id.valid, false)
-  poke(c.io.wbValues(1).id.valid, false)
+  pokeWBInvalid(Array(0, 1))
 
   step(1)
 
   // Two more instructions commit
   poke(c.io.rfPorts(1), 2) // Read r2
 
-  expect(c.io.remapMapping(0).valid, true)
-  expect(c.io.remapMapping(0).bits, 5)
+  expectRemapMappingValid(Array(0 -> true, 1 -> false))
+  expectRemapMappingBits(Array(0 -> 5))
 
-  expect(c.io.remapMapping(1).valid, false)
-
-  expect(c.io.robDest(0).valid, false) // committed
-  expect(c.io.robDest(1).valid, false) // committed
-  expect(c.io.robDest(2).valid, false) // committed
+  // ROB0-2 already committed
+  expectROBDestValid(Array(1 -> false, 2 -> false, 0 -> false))
 
   expect(c.io.robFree, 61)
   expect(c.io.robFirst, 6)
 
+  // RF should have been written
   expect(c.io.rfValues(0), 0xDEAFBEED)
   expect(c.io.rfValues(1), 0xDEAFBEED)
 
