@@ -372,6 +372,19 @@ class ROBTests(c: ROB) extends Tester(c) {
     poke(c.io.allocROB(port).bits.rdVal.valid, false) // NOT Ready
   }
 
+  def pokeROBPorts(rob: Array[(Int, Int)]) = {
+    rob foreach { x => poke(c.io.robPorts(x._1), x._2) }
+  }
+
+  def expectROBDestValid(rob: Array[(Int, Boolean)]) = {
+    rob foreach { x => expect(c.io.robDest(x._1).valid, x._2) }
+  }
+
+  def expectRemapMappingBits(rob: Array[(Int, Int)]) = {
+    rob foreach { x => expect(c.io.robDest(x._1).bits, x._2) }
+  }
+
+
   // test the remap ports
   
   // Get the mapping for the first few registers and check that they are not
@@ -512,33 +525,19 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   step(1)
 
-  poke(c.io.remapPorts(0), 1)
-  poke(c.io.remapPorts(1), 2)
+  pokeRemapPorts(Array(0 -> 1, 1 -> 2))
 
-  poke(c.io.robPorts(0), 0)
-  poke(c.io.robPorts(1), 1)
-  poke(c.io.robPorts(2), 2)
-  poke(c.io.robPorts(3), 3)
-  poke(c.io.robPorts(4), 4)
-  poke(c.io.robPorts(5), 5)
+  pokeROBPorts(Array.tabulate(6){i => i -> i})
 
   step(0)
 
   expect(c.io.robFree, 58)
   expect(c.io.robFirst, 6)
 
-  expect(c.io.remapMapping(0).valid, true)
-  expect(c.io.remapMapping(0).bits, 5)
+  expectRemapMappingValid(Array(0 -> true, 1 -> true))
+  expectRemapMappingBits(Array(0 -> 5, 1 -> 1))
 
-  expect(c.io.remapMapping(1).valid, true)
-  expect(c.io.remapMapping(1).bits, 1)
-
-  expect(c.io.robDest(0).valid, false) // Rd not ready
-  expect(c.io.robDest(1).valid, false) // Rd not ready
-  expect(c.io.robDest(2).valid, false) // Rd not ready
-  expect(c.io.robDest(3).valid, false) // Rd not ready
-  expect(c.io.robDest(4).valid, false) // Rd not ready
-  expect(c.io.robDest(5).valid, false) // Rd not ready
+  expectROBDestValid(Array.tabulate(6){ i => i -> false }) // Rds not ready
 
   // Test writeback
 
