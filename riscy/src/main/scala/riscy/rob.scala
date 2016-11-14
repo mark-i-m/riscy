@@ -230,7 +230,7 @@ class ROB extends Module {
     Array.tabulate(4) { i => UInt(i) -> front(i).pc})
   io.mispredTarget   := MuxLookup(firstMispred, UInt(0),
     Array.tabulate(4) { i => UInt(i) -> front(i).rdVal.bits})
-  
+
   // Clear remap table on misprediction
   remap.io.reset.valid := io.mispredPC.valid
   remap.io.reset.bits.valid := Bool(false)
@@ -258,9 +258,9 @@ class ROB extends Module {
     rf.io.wValues(i)     := front(i).rdVal.bits
 
     when(rf.io.wPorts(i).valid) {
-      printf("latch to rf committing ROB%d: %x\n", UInt(i), front(i).rdVal.bits)
+      printf("latch to rf committing ROB%d: %x\n", head.value + UInt(i), front(i).rdVal.bits)
     } .elsewhen(couldCommit(i) && !lastToRename(i) === UInt(i)) {
-      printf("not latching to rf front(%d), ROB%d, r%d: %x\n", 
+      printf("not latching to rf front(%d), ROB%d, r%d: %x\n",
         UInt(i), head.value + UInt(i), front(i).rd, front(i).rdVal.bits)
       printf("\tlastToRename(0) = %d\n", lastToRename(0))
       printf("\tlastToRename(1) = %d\n", lastToRename(1))
@@ -277,15 +277,15 @@ class ROB extends Module {
   val shouldUnmap = Vec.fill(4) { Valid(UInt(width = 5)) }
   for (i <- 0 until 4) {
     // Is an incoming instruction mapping the destination
-    val rdReRemapped = (Vec.tabulate(4) {j => 
-      io.allocROB(j).valid && 
-      io.allocROB(j).bits.rd === front(i).rd && 
+    val rdReRemapped = (Vec.tabulate(4) {j =>
+      io.allocROB(j).valid &&
+      io.allocROB(j).bits.rd === front(i).rd &&
       io.allocROB(j).bits.hasRd
     }).exists(identity[Bool] _)
 
-    shouldUnmap(i).valid := couldCommit(i) && 
-                            remap.io.rValues(i+8).valid && 
-                            remap.io.rValues(i+8).bits === head.value + UInt(i) && 
+    shouldUnmap(i).valid := couldCommit(i) &&
+                            remap.io.rValues(i+8).valid &&
+                            remap.io.rValues(i+8).bits === head.value + UInt(i) &&
                             !rdReRemapped
     shouldUnmap(i).bits  := front(i).rd
   }
@@ -321,13 +321,13 @@ class ROB extends Module {
 }
 
 class ROBTests(c: ROB) extends Tester(c) {
-  def pokeRemapPorts(remap: Array[(Int, Int)]) = 
+  def pokeRemapPorts(remap: Array[(Int, Int)]) =
     remap foreach { x => poke(c.io.remapPorts(x._1), x._2) }
 
-  def expectRemapMappingValid(remap: Array[(Int, Boolean)]) = 
+  def expectRemapMappingValid(remap: Array[(Int, Boolean)]) =
     remap foreach { x => expect(c.io.remapMapping(x._1).valid, x._2) }
 
-  def expectRemapMappingBits(remap: Array[(Int, Int)]) = 
+  def expectRemapMappingBits(remap: Array[(Int, Int)]) =
     remap foreach { x => expect(c.io.remapMapping(x._1).bits, x._2) }
 
   def pokeRemapping(port: Int, reg: Int, rob: Int) = {
@@ -336,15 +336,15 @@ class ROBTests(c: ROB) extends Tester(c) {
     poke(c.io.allocRemap(port).bits.idxROB, rob)
   }
 
-  def pokeRemappingInvalid(ports: Array[Int]) = 
+  def pokeRemappingInvalid(ports: Array[Int]) =
     ports foreach { port => poke(c.io.allocRemap(port).valid, false) }
 
   // Add Register Immediate
   // if rs1Rename._1 => get value from ROB
   // else            => get value from RF
   //
-  def pokeROBAddRI(port: Int, tag: Int, pc: Int, 
-    rs1: Int, rs1Rename: (Boolean, Int), rs1Val: (Boolean, Int), 
+  def pokeROBAddRI(port: Int, tag: Int, pc: Int,
+    rs1: Int, rs1Rename: (Boolean, Int), rs1Val: (Boolean, Int),
     imm: Int, rd: Int) = {
 
     poke(c.io.allocROB(port).valid, true)
@@ -368,29 +368,29 @@ class ROBTests(c: ROB) extends Tester(c) {
     poke(c.io.allocROB(port).bits.rdVal.valid, false) // NOT Ready
   }
 
-  def pokeROBInvalid(ports: Array[Int]) = 
+  def pokeROBInvalid(ports: Array[Int]) =
     ports foreach { port => poke(c.io.allocROB(port).valid, false) }
 
-  def pokeROBPorts(rob: Array[(Int, Int)]) = 
+  def pokeROBPorts(rob: Array[(Int, Int)]) =
     rob foreach { x => poke(c.io.robPorts(x._1), x._2) }
 
-  def expectROBDestValid(rob: Array[(Int, Boolean)]) = 
+  def expectROBDestValid(rob: Array[(Int, Boolean)]) =
     rob foreach { x => expect(c.io.robDest(x._1).valid, x._2) }
 
-  def expectROBDestBits(rob: Array[(Int, Int)]) = 
+  def expectROBDestBits(rob: Array[(Int, Int)]) =
     rob foreach { x => expect(c.io.robDest(x._1).bits, x._2) }
 
   def pokeWB(port: Int, id: Int, value: Int) = {
     poke(c.io.wbValues(port).id.valid, true)
     poke(c.io.wbValues(port).id.bits, id)
-    poke(c.io.wbValues(port).value, value) 
+    poke(c.io.wbValues(port).value, value)
   }
 
   def pokeWBInvalid(ports: Array[Int]) =
     ports foreach { port => poke(c.io.wbValues(port).id.valid, false) }
 
   // test the remap ports
-  
+
   // Get the mapping for the first few registers and check that they are not
   // mapped to any physical register.
   pokeRemapPorts(Array.tabulate(8){ i => i -> i })
@@ -435,7 +435,7 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   // map r30 to p8, port 1
   pokeRemapping(1, 30, 8)
-  poke(c.io.remapPorts(2), 30)
+  pokeRemapPorts(Array(2 -> 30))
 
   step(1)
 
@@ -471,7 +471,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   }
 
   // Try latching some instructions
-  
+
   // add r1 <- r1 + 0xFFFF
   pokeROBAddRI(0, 0, 0xa0, 1, (false, 0), (true, 0xDEADBEEF), 0xFFFF, 1)
 
@@ -491,11 +491,9 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   step(1)
 
-  poke(c.io.remapPorts(0), 1)
-  poke(c.io.remapPorts(1), 2)
+  pokeRemapPorts(Array(0 -> 1, 1 -> 2))
 
-  poke(c.io.robPorts(0), 0)
-  poke(c.io.robPorts(1), 1)
+  pokeROBPorts(Array.tabulate(6){i => i -> i})
 
   step(0)
 
@@ -507,9 +505,8 @@ class ROBTests(c: ROB) extends Tester(c) {
   expectRemapMappingBits(Array(0 -> 0, 1 -> 1))
 
   // expect that result are not ready
-  expect(c.io.robDest(0).valid, false) // Rd not ready
-  expect(c.io.robDest(1).valid, false) // Rd not ready
-  
+  expectROBDestValid(Array(0 -> false, 1 -> false))
+
   // add r1 <- r1 + 0xFFFF
   pokeROBAddRI(0, 2, 0xa8, 1, (true, 0), (false, 0), 0xFFFF, 1)
 
@@ -529,12 +526,6 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   step(1)
 
-  pokeRemapPorts(Array(0 -> 1, 1 -> 2))
-
-  pokeROBPorts(Array.tabulate(6){i => i -> i})
-
-  step(0)
-
   expect(c.io.robFree, 58)
   expect(c.io.robFirst, 6)
 
@@ -544,6 +535,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   expectROBDestValid(Array.tabulate(6){ i => i -> false }) // Rds not ready
 
   // Test writeback
+
   pokeROBInvalid(Array.tabulate(4)(identity _))
   pokeRemappingInvalid(Array(3))
 
@@ -607,7 +599,7 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   // Try some other types of instructions now
 
-  // lw (load word) rd <- r1 + 0x100
+  // lw (load word) r3 <- r1 + 0x100
   poke(c.io.allocROB(0).valid, true)
   poke(c.io.allocROB(0).bits.pc, 0xb8)
   poke(c.io.allocROB(0).bits.tag, 0x6)
@@ -620,14 +612,83 @@ class ROBTests(c: ROB) extends Tester(c) {
   poke(c.io.allocROB(0).bits.isSt, false)
   poke(c.io.allocROB(0).bits.predTaken, false)
   poke(c.io.allocROB(0).bits.isMispredicted, false)
-  poke(c.io.allocROB(0).bits.rs1Rename, 0) // Not renamed
+  poke(c.io.allocROB(0).bits.rs1Rename, 5) // Renamed
   poke(c.io.allocROB(0).bits.rs2Rename, 0) // Not renamed
-  poke(c.io.allocROB(0).bits.rs1Val.valid, true) // Ready
-  poke(c.io.allocROB(0).bits.rs1Val.bits, 0xDEAFBEED) // Value from RF
+  poke(c.io.allocROB(0).bits.rs1Val.valid, false) // Ready
+  poke(c.io.allocROB(0).bits.rs1Val.bits, 0) // Value from RF
   poke(c.io.allocROB(0).bits.rs2Val.valid, true) // Ready
   poke(c.io.allocROB(0).bits.rs2Val.bits, 0x100) // No RS2, use Imm
   poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
 
+  // remap r3 to ROB6, port 0
+  pokeRemapping(0, 3, 6)
+  pokeRemapPorts(Array(3 -> 3))
+
+  // write back ROB3
+  pokeWB(0, 3, 0xDEB0BEEC) // 0xDEAFBEED + 0xFFFF
+
+  step(1)
+
+  pokeROBInvalid(Array(0))
+
+  expect(c.io.robFree, 60)
+  expect(c.io.robFirst, 7)
+
+  expectRemapMappingValid(Array(0 -> true, 3 -> true))
+  expectRemapMappingBits(Array(0 -> 5, 3 -> 6))
+
+  expectROBDestValid(Array(3 -> true, 6 -> false))
+  expectROBDestBits(Array(3 -> 0xDEB0BEEC))
+
+  // write back ROB4
+  pokeWB(0, 4, 0xDEB1BEEB) // 0xDEB0BEEC + 0xFFFF
+
+  step(1)
+
+  expect(c.io.robFree, 61)
+  expect(c.io.robFirst, 7)
+
+  expectRemapMappingValid(Array(0 -> true, 3 -> true))
+  expectRemapMappingBits(Array(0 -> 5, 3 -> 6))
+
+  // ROB3 committed
+  expectROBDestValid(Array(3 -> false, 4-> true, 6 -> false))
+  expectROBDestBits(Array(4 -> 0xDEB1BEEB))
+
+  // RF should have been written
+  expect(c.io.rfValues(0), 0xDEB0BEEC)
+
+  // write back ROB5
+  pokeWB(0, 5, 0xDEB2BEEC) // 0xDEB1BEEB + 0xFFFF
+
+  step(1)
+
+  expect(c.io.robFree, 62)
+  expect(c.io.robFirst, 7)
+
+  expectRemapMappingValid(Array(0 -> true, 3 -> true))
+  expectRemapMappingBits(Array(0 -> 5, 3 -> 6))
+
+  // ROB4 committed
+  expectROBDestValid(Array(4-> false, 5-> true, 6 -> false))
+  expectROBDestBits(Array(5 -> 0xDEB2BEEC))
+
+  // RF should have been written
+  expect(c.io.rfValues(0), 0xDEB1BEEB)
+
+  step(1)
+
+  expect(c.io.robFree, 63)
+  expect(c.io.robFirst, 7)
+
+  expectRemapMappingValid(Array(0 -> false, 3 -> true))
+  expectRemapMappingBits(Array(3 -> 6))
+
+  // ROB5 committed
+  expectROBDestValid(Array(5-> false, 6 -> false))
+
+  // RF should have been written
+  expect(c.io.rfValues(0), 0xDEB2BEEC)
 
   // TODO: Try
   // - a store
