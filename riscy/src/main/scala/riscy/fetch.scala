@@ -7,28 +7,29 @@ import Chisel._
  */
 
 // The output signals for Decode stage are:
-// 1. Four 32b instructions: Fetch.icache.io.resp.inst(i)
+// 1. Four 32b instructions: Fetch.io.output.insts(i).bits
 // 2. Four instruction valid bits: Fetch.io.instValid(i)
-//
+
+class FetchOutput extends Bundle {
+  val insts = Vec.fill(4) { Valid(UInt(OUTPUT, 32)) }
+  val pc = UInt(OUTPUT, 64)
+}
+
 class Fetch extends Module {
   val io = new Bundle {
     /* INPUTS */
-    val btbAddr = UInt(INPUT, 32)
-    val rasAddr = UInt(INPUT, 32)
+    val btbAddr = UInt(INPUT, 64)
+    val rasAddr = UInt(INPUT, 64)
     val isBranchTaken = Bool(INPUT)
-    val branchMispredAddr = UInt(INPUT, 32)
+    val branchMispredAddr = UInt(INPUT, 64)
     val isBranchMispred = Bool(INPUT)
     // Is this instruction a return from a subroutine call?
     val isReturn = Bool(INPUT)
     val stall = Bool(INPUT)
 
     /* OUTPUTS */
-    // Instructions to be passed to the decode stage
-    val insts = Vec.fill(4) { UInt(OUTPUT, 32) }
-    // Are the instructions to be passed over to the decode valid?
-    val instValid = Vec.fill(4) { Bool(OUTPUT) }
-    // PC to be passed down the pipeline
-    val fetchBlockPC = UInt(OUTPUT, 32)
+    // Instructions and PC to be passed to the decode stage
+    val output = (new FetchOutput).asOutput
   }
   val icache = Module(new ICache())
 
@@ -103,47 +104,47 @@ class Fetch extends Module {
   /* Figure out which instructions are valid if we fetched close to a cache
    * line boundary */
   when (icache.io.resp.valid && (addr(4,0) === UInt(20))) {
-    io.instValid(0) := Bool(true)
-    io.instValid(1) := Bool(true)
-    io.instValid(2) := Bool(true)
-    io.instValid(3) := Bool(false)
+    io.output.insts(0).valid := Bool(true)
+    io.output.insts(1).valid := Bool(true)
+    io.output.insts(2).valid := Bool(true)
+    io.output.insts(3).valid := Bool(false)
   } .elsewhen (icache.io.resp.valid && (addr(4,0) === UInt(24))) {
-    io.instValid(0) := Bool(true)
-    io.instValid(1) := Bool(true)
-    io.instValid(2) := Bool(false)
-    io.instValid(3) := Bool(false)
+    io.output.insts(0).valid := Bool(true)
+    io.output.insts(1).valid := Bool(true)
+    io.output.insts(2).valid := Bool(false)
+    io.output.insts(3).valid := Bool(false)
   } .elsewhen (icache.io.resp.valid && (addr(4,0) === UInt(28))) {
-    io.instValid(0) := Bool(true)
-    io.instValid(1) := Bool(false)
-    io.instValid(2) := Bool(false)
-    io.instValid(3) := Bool(false)
+    io.output.insts(0).valid := Bool(true)
+    io.output.insts(1).valid := Bool(false)
+    io.output.insts(2).valid := Bool(false)
+    io.output.insts(3).valid := Bool(false)
   } .elsewhen (icache.io.resp.valid) {
-    io.instValid(0) := Bool(true)
-    io.instValid(1) := Bool(true)
-    io.instValid(2) := Bool(true)
-    io.instValid(3) := Bool(true)
+    io.output.insts(0).valid := Bool(true)
+    io.output.insts(1).valid := Bool(true)
+    io.output.insts(2).valid := Bool(true)
+    io.output.insts(3).valid := Bool(true)
   } .otherwise {
-    io.instValid(0) := Bool(false)
-    io.instValid(1) := Bool(false)
-    io.instValid(2) := Bool(false)
-    io.instValid(3) := Bool(false)
+    io.output.insts(0).valid := Bool(false)
+    io.output.insts(1).valid := Bool(false)
+    io.output.insts(2).valid := Bool(false)
+    io.output.insts(3).valid := Bool(false)
   }
 
   // Pass the PC value down the pipeline
-  io.fetchBlockPC := icache.io.resp.addr
+  io.output.pc := icache.io.resp.addr
 
   for (i <- 0 until 4) {
-    io.insts(i) := icache.io.resp.inst(i)
+    io.output.insts(i).bits := icache.io.resp.inst(i)
   }
 }
 
 class FetchTests(c: Fetch) extends Tester(c) { 
   // Utility functions
   def expect_all_inst_validity(c : Fetch, value : Boolean) = {
-    expect(c.io.instValid(0), value)
-    expect(c.io.instValid(1), value)
-    expect(c.io.instValid(2), value)
-    expect(c.io.instValid(3), value)
+    expect(c.io.output.insts(0).valid, value)
+    expect(c.io.output.insts(1).valid, value)
+    expect(c.io.output.insts(2).valid, value)
+    expect(c.io.output.insts(3).valid, value)
   }
   def peek_regs(c : Fetch) = {
     // Peek important registers. Feel free to comment out anything unimportant
