@@ -4,7 +4,7 @@ import Chisel._
 
 class IssueQueue extends Module {
 	val io = new Bundle {
-		val newEntry = Vec.fill(4) {Valid(new AllocROB).asInput}
+		val newEntry = Vec.fill(4) {Valid(new ROBEntry).asInput}
 		val totalEntries = UInt(INPUT, 2)
 		// Currently just assume that below signals contain insts
 		// issued in last 2 cycles as form of ROB entry
@@ -17,7 +17,7 @@ class IssueQueue extends Module {
 	}
 
 	//val eachEntry = Module ( new ShiftRegPP(() => new  ROBEntry))
-	val iqueue = Vec.fill(16) {Reg(outType = new AllocROB)}
+	val iqueue = Vec.fill(16) {Reg(outType = new ROBEntry)}
 	
 	//Counter to maintain length of IQ
 	val counter = new MultiCounter(16)
