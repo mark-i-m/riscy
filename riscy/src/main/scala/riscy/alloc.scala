@@ -24,7 +24,7 @@ class RiscyAlloc extends Module {
   val io = new Bundle {
     // Input from the rotator and decode logic with 4 decoded instructions
     val inst = Vec.fill(4) { Valid(new DecodeIns()).flip }
-
+		val pc = Vec.fill(4) {UInt(INPUT, 64)}
     // Access the Remap table to find out what the current mappings are (so we
     // can rename)
     val remapPorts = Vec.fill(8) { UInt(OUTPUT, 5) }
@@ -129,7 +129,8 @@ class RiscyAlloc extends Module {
     robEntry.op := pipelinedInst(i).bits.op
     robEntry.funct3 := pipelinedInst(i).bits.funct3
     robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
-
+		robEntry.isSt := pipelinedOpDecode(i).isSt
+		robEntry.isLd := pipelinedOpDecode(i).isLd
     // First operand
     when (renamedRs1(i).valid) {
       // Getting from ROB

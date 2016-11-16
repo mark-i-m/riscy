@@ -26,6 +26,7 @@ class ROBEntry extends DecodeIns {
   // - is this instruction a jump
   val hasRd = Bool(OUTPUT)
   val isSt = Bool(OUTPUT)
+	val isLd = Bool(OUTPUT)
 
   // From BP:
   // - was this branch predicted taken? 1 => T, 0 => NT
