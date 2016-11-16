@@ -16,7 +16,7 @@ class DecodeIns extends Bundle {
   val immJ = SInt(OUTPUT, 32)
 }
 
-class RiscyDecode extends Module {
+class RiscyDecodeSingle extends Module {
   val io = new Bundle {
     // Input from I$
     val ins = UInt(INPUT, 32)

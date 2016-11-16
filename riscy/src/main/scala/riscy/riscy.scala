@@ -10,7 +10,7 @@ class Riscy extends Module {
 
   val bp = Module(new BP)
   var fetch = Module(new Fetch)
-  val decode = Array.fill(4)(Module(new RiscyDecode))
+  val decode = Array.fill(4)(Module(new RiscyDecodeSingle))
   val alloc = Module(new RiscyAlloc)
   val rob = Module(new ROB)
   val issue = Module(new IssueStage)
