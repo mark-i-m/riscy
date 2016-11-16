@@ -8,16 +8,6 @@ class AllocRemap extends Bundle {
   val idxROB = UInt(OUTPUT, 6) // ROB entry number to map to
 }
 
-// Information from the Allocate/Rename stage to the ROB and IQs.
-class AllocROB extends ROBEntry {
-  // Which ROB entry to latch
-  val entry = UInt(OUTPUT, 6)
-
-  // Is the operand coming from the ROB? T => Y, F => N
-  //val rs1Map = Bool(OUTPUT)
-  //val rs2Map = Bool(OUTPUT)
-}
-
 // The Control Magic to rename instructions and send signals to update the
 // Remap table, the ROB, and the Issue Queues.
 class RiscyAlloc extends Module {
@@ -43,7 +33,7 @@ class RiscyAlloc extends Module {
     // Outputs to the Remap table and the ROB with the correct values to update
     // for this cycle. 
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()) }
-    val allocROB = Vec.fill(4) { Valid(new AllocROB()) }
+    val allocROB = Vec.fill(4) { Valid(new ROBEntry()) }
   }
 
   // TODO: stall if ROB is full
@@ -121,9 +111,6 @@ class RiscyAlloc extends Module {
     io.allocROB(i).valid := pipelinedInst(i).valid
 
     val robEntry = io.allocROB(i).bits // convenience
-
-    // Which ROB entry
-    robEntry.entry := renamedDest(i)
 
     // Operation
     robEntry.op := pipelinedInst(i).bits.op

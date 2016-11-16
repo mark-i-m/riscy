@@ -9,22 +9,28 @@ import Chisel._
 //
 // @entryWidth - The width of each entry that will be matched by the CAM
 //
-class CAM(numEntries : Int, entryWidth : Int) extends Module {
+class CAM(numCompare : Int, numEntries : Int, entryWidth : Int) extends Module {
   val io = new Bundle {
     // The value with which all the input values will be compared
-    val compare_bits = Bits(INPUT, width=entryWidth)
+		// It is an N ported CAM 
+    val compare_bits = Vec(numCompare, Bits(INPUT, width=entryWidth))
     // Plug in multiple values which will be compared in parallel with one
     // particular value
     val input_bits = Vec(numEntries, Bits(INPUT, width=entryWidth))
     // The hit bit will be set for any entry i if it matches with the compared
     // value.
-    val hit = Vec(numEntries, Bits(OUTPUT, width=1))
+    val hit = Vec(numCompare, (Vec(numEntries, Bool(OUTPUT))))
   }
 
-  // Seems too simplistic, doesn't it?
-  for (i <- 0 until numEntries) {
-    io.hit(i) := (io.input_bits(i) === io.compare_bits)
-  }
+  // Every compare value will be compared across all inputs
+	// hit(j)(i)
+	// j -> compare number
+	// i -> input entry number
+  for (j <- 0 until numCompare) {
+	  for (i <- 0 until numEntries) {
+    	io.hit(j)(i) := (io.compare_bits(j) === io.input_bits(i))
+  	}
+	}
 }
 
 class CAMTests(c: CAM) extends Tester(c) { 
@@ -32,7 +38,7 @@ class CAMTests(c: CAM) extends Tester(c) {
   // matches.
   println("Testcase 1")
   val compare_entry = 1
-  poke(c.io.compare_bits, compare_entry)
+  poke(c.io.compare_bits(0), compare_entry)
 
   // Set the input values to be matched from 0 to 3
   for (i <- 0 until 4) {
@@ -41,9 +47,9 @@ class CAMTests(c: CAM) extends Tester(c) {
   // The hit bit should only be set for one matched entry 
   for (i <- 0 until 4) {
     if (i == compare_entry) {
-      expect(c.io.hit(i), 1)
+      expect(c.io.hit(0)(i), 1)
     } else {
-      expect(c.io.hit(i), 0)
+      expect(c.io.hit(0)(i), 0)
     }
   }
 
@@ -55,7 +61,7 @@ class CAMTests(c: CAM) extends Tester(c) {
   }
   // The hit bit should be set for all entries
   for (i <- 0 until 4) {
-    expect(c.io.hit(i), 1)
+    expect(c.io.hit(0)(i), 1)
   }
 
   // Testcase 3: Verify that CAM reports zero hits when no entries match
@@ -66,7 +72,7 @@ class CAMTests(c: CAM) extends Tester(c) {
   }
   // The hit bits should not be set for any entry
   for (i <- 0 until 4) {
-    expect(c.io.hit(i), 0)
+    expect(c.io.hit(0)(i), 0)
   }
 
   // Testcase 4: Multiple hits testcase. Verify that CAM works when some
@@ -82,16 +88,16 @@ class CAMTests(c: CAM) extends Tester(c) {
   // The hit bits should be set only for the matching entries
   for (i <- 0 until 4) {
     if (i < 2) {
-      expect(c.io.hit(i), 1)
+      expect(c.io.hit(0)(i), 1)
     } else {
-      expect(c.io.hit(i), 0)
+      expect(c.io.hit(0)(i), 0)
     }
   }
   
 }
 
 class CAMGenerator extends TestGenerator {
-  def genMod(): Module = Module(new CAM(4, 2))
+  def genMod(): Module = Module(new CAM(1, 4, 2))
   def genTest[T <: Module](c: T): Tester[T] = 
     (new CAMTests(c.asInstanceOf[CAM])).asInstanceOf[Tester[T]]
 }
