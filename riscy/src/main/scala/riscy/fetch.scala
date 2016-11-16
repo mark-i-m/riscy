@@ -21,7 +21,7 @@ class Fetch extends Module {
     val btbAddr = UInt(INPUT, 64)
     val rasAddr = UInt(INPUT, 64)
     val isBranchTaken = Bool(INPUT)
-    val branchMispredAddr = UInt(INPUT, 64)
+    val branchMispredTarget = UInt(INPUT, 64)
     val isBranchMispred = Bool(INPUT)
     // Is this instruction a return from a subroutine call?
     val isReturn = Bool(INPUT)
@@ -51,9 +51,9 @@ class Fetch extends Module {
   } .elsewhen (addrSelect === UInt(1)) {
     addr := io.rasAddr
   } .elsewhen (addrSelect === UInt(2)) {
-    addr := io.branchMispredAddr
+    addr := io.branchMispredTarget
   } .elsewhen (addrSelect === UInt(3)) {
-    addr := io.branchMispredAddr
+    addr := io.branchMispredTarget
   }
 
   /* Register which holds the address to be sent to Icache. PC value appears here
@@ -158,7 +158,7 @@ class FetchTests(c: Fetch) extends Tester(c) {
   poke(c.io.btbAddr, 0xbbbbbbbb)
   poke(c.io.rasAddr, 0xdddddddd)
   poke(c.io.isBranchTaken, false)
-  poke(c.io.branchMispredAddr, 0xeeeeeeee)
+  poke(c.io.branchMispredTarget, 0xeeeeeeee)
   poke(c.io.isBranchMispred, false)
   poke(c.io.isReturn, false)
   poke(c.io.stall, false)
