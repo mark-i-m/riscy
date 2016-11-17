@@ -5,7 +5,7 @@ import Chisel._
 class IssueQueue extends Module {
 	val io = new Bundle {
 		val newEntry = Vec.fill(4) {Valid(new ROBEntry).asInput}
-		val totalEntries = UInt(INPUT, 2)
+		//val totalEntries = UInt(INPUT, 2)
 		// Currently just assume that below signals contain insts
 		// issued in last 2 cycles as form of ROB entry
 		// At top level this structure has to be generated - TODO
@@ -34,25 +34,35 @@ class IssueQueue extends Module {
 		wbCamRs1.io.compare_bits(i) := io.robWb.operand_s1(i)
 		wbCamRs2.io.compare_bits(i) := io.robWb.operand_s1(i)
 	}
-
+  
+	val isAssigned = Vec.fill(4) {UInt(width = 2)}
 	// Assigning entries to current issue queue entries
 	// New entries are assigned only if valid bit is set
 	for (i <- 0 until 4) {
 		when (io.newEntry(i).valid) {
 			iqueue(counter.value + UInt(i)) := io.newEntry(i).bits
+			isAssigned(i) := UInt(1)
+		} .otherwise {
+			isAssigned(i) := UInt(0)
 		}
 	}
+
+	val totalEntries = isAssigned(0) + isAssigned(1) + isAssigned(2) + isAssigned(3)
+  val isIssued = ( io.newEntry(0).valid || 
+									 io.newEntry(1).valid || 
+							 	   io.newEntry(2).valid || 
+						  	   io.newEntry(3).valid )
 
 	// Updating counter value based on issued instruction
 	// & number of new entries
 	// Top level has to make sure all entries are assigned
 	// in chronological order
-	when (io.newEntry(0).valid && !io.issuedEntry.valid) {
-  		counter.inc(io.totalEntries)
- 	} .elsewhen (io.newEntry(0).valid && !io.issuedEntry.valid) {
-		counter.inc(io.totalEntries - UInt(1))
-  	} .elsewhen (!io.newEntry(0).valid && io.issuedEntry.valid) {
-   	 	counter.dec(1)
+	when (isIssued && !io.issuedEntry.valid) {
+  	counter.inc(totalEntries)
+ 	} .elsewhen (isIssued && io.issuedEntry.valid) {
+		counter.inc(totalEntries - UInt(1))
+  } .elsewhen (!isIssued && io.issuedEntry.valid) {
+   	counter.dec(1)
 	}
 
 	io.currentLen := counter.value
