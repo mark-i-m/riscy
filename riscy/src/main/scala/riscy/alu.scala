@@ -65,6 +65,7 @@ class ALU(xLen : Int) extends Module {
 
   // Determine the function the ALU needs to perform
   val fn = UInt(width=6)
+  fn := FN_UNKNOWN
   when (io.inst.op === UInt(0x33)) {
       // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
       when (io.inst.funct3 === UInt(0x0)) {
@@ -147,11 +148,18 @@ class ALU(xLen : Int) extends Module {
       }
     }
   } .elsewhen (io.inst.op === UInt(0x3)) {
-    // LB, LH, LW, LBU, LHU
-    fn := FN_ADD
+    // RV32I: LB, LH, LW, LBU, LHU
+    // RV64I: LWU, LD
+    when (io.inst.funct3 != UInt(0x7)) {
+      fn := FN_ADD
+    }
   } .elsewhen (io.inst.op === UInt(0x23)) {
-    // SB, SH, SW
-    fn := FN_ADD
+    // RV32I: SB, SH, SW
+    // RV64I: SD
+    when (!io.inst.funct3(2)) {
+      // Funct3 values should be between 0x0 to 0x3. The third bit must be zero
+      fn := FN_ADD
+    }
   } .elsewhen (io.inst.op === UInt(0x63)) {
     // BEQ, BNE, BLT, BGE, BLTU, BGEU
     when (io.inst.funct3 === UInt(0x0)) {
@@ -360,8 +368,8 @@ class ALUTests(c: ALU) extends Tester(c) {
     "LB" -> (0x3, 0x0, 0x0),
     "LH" -> (0x3, 0x1, 0x0),
     "LW" -> (0x3, 0x2, 0x0),
-    "LBU" -> (0x3, 0x3, 0x0),
-    "LBH" -> (0x3, 0x4, 0x0),
+    "LBU" -> (0x3, 0x4, 0x0),
+    "LBH" -> (0x3, 0x5, 0x0),
 
     "SB" -> (0x23, 0x0, 0x0),
     "SH" -> (0x23, 0x1, 0x0),
@@ -378,7 +386,12 @@ class ALUTests(c: ALU) extends Tester(c) {
     "JALR" -> (0x67, 0x0, 0x0),
 
     "LUI" -> (0x37, 0x0, 0x0),
-    "AUIPC" -> (0x17, 0x0, 0x0)
+    "AUIPC" -> (0x17, 0x0, 0x0),
+
+    "LD" -> (0x3, 0x3, 0x0),
+    "LWU" -> (0x3, 0x6, 0x0),
+
+    "SD" -> (0x23, 0x3, 0x0)
   )
   // Utility function for setting opcode, funct3 and funct7 values
   def set_instruction(inst_name : String) = {
@@ -1391,6 +1404,49 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immU, 10)
   step(1)
   expect(c.io.out, 1000 + (10 << 12))
+
+  // 118. Test LD instruction - Positive IMMI value
+  set_instruction("LD")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 119. Test LD instruction - Negative IMMI value
+  set_instruction("LD")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 120. Test LWU instruction - Positive IMMI value
+  set_instruction("LWU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 121. Test LWU instruction - Negative IMMI value
+  set_instruction("LWU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 122. Test SD instruction - Positive IMMS value
+  set_instruction("SD")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immS, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 123. Test SD instruction - Negative IMMS value
+  set_instruction("SD")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immS, -50)
+  step(1)
+  expect(c.io.out, 50)
+
 }
 
 class ALUGenerator extends TestGenerator {
