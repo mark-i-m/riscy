@@ -318,8 +318,19 @@ class ALU(xLen : Int) extends Module {
   val slt_out = UInt(width=xLen)
   slt_out := Mux(fn === FN_SLT || fn === FN_SLTU, io.cmp_out, UInt(0))
 
-  // SLL, SRL, SRA
-  val sh_amt = in2(5,0)
+  // SLL, SRL, SRA, SLLI, SRLI, SRAI
+  // SLLW, SRLW, SRAW, SLLIW, SRLIW, SRAIW
+  val sh_amt = UInt(width=6)
+  when (io.inst.op === UInt(0x33) |
+        io.inst.op === UInt(0x13)) {
+    // SLL, SRL, SRA, SLLI, SRLI, SRAI
+    // They consider the low 6 bits for deciding the shift amount
+    sh_amt := in2(5,0)
+  } .otherwise {
+    // SLLW, SRLW, SRAW, SLLIW, SRLIW, SRAIW
+    // Only consider the low 5 bits for deciding shift amount
+    sh_amt := Cat(Bits(0, width=1), in2(4,0))
+  }
   val sh_out_l = (in1 << sh_amt)(xLen-1,0)
   // Sign bits are extended only for SRA
   val sh_out_r = (Cat(fn === FN_SRA & in1(xLen-1),
@@ -391,7 +402,15 @@ class ALUTests(c: ALU) extends Tester(c) {
     "LD" -> (0x3, 0x3, 0x0),
     "LWU" -> (0x3, 0x6, 0x0),
 
-    "SD" -> (0x23, 0x3, 0x0)
+    "SD" -> (0x23, 0x3, 0x0),
+
+    "SLLW" -> (0x3B, 0x1, 0x0),
+    "SRLW" -> (0x3B, 0x5, 0x0),
+    "SRAW" -> (0x3B, 0x5, 0x20),
+
+    "SLLIW" -> (0x1B, 0x1, 0x0),
+    "SRLIW" -> (0x1B, 0x5, 0x0),
+    "SRAIW" -> (0x1B, 0x5, 0x20)
   )
   // Utility function for setting opcode, funct3 and funct7 values
   def set_instruction(inst_name : String) = {
@@ -462,9 +481,10 @@ class ALUTests(c: ALU) extends Tester(c) {
   // taken. 
   set_instruction("SLL")
   poke(c.io.rs1_val, 1)
-  // The lower five bits are all zero for rs2_val. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for rs2_val. We expect the result to be equal
+  // to rs1_val
   poke(c.io.rs2_val, 64)
+  peek(c.sh_amt)
   step(1)
   expect(c.io.out, 1)
 
@@ -532,12 +552,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 50 >> 1)
 
-  // 19. Test SRL instruction - Verify that only 5 lower bits of rs2_val are
+  // 19. Test SRL instruction - Verify that only the 6 low bits of rs2_val are
   // considered.
   set_instruction("SRL")
   poke(c.io.rs1_val, 50)
-  // The lower five bits are all zero for rs2_val. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for rs2_val. We expect the result to be equal to
+  // rs1_val
   poke(c.io.rs2_val, 64)
   step(1)
   expect(c.io.out, 50)
@@ -566,12 +586,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, -1L)
 
-  // 23. Test SRA instruction - Verify that only 5 lower bits of rs2_val are
+  // 23. Test SRA instruction - Verify that only the 6 low bits of rs2_val are
   // considered.
   set_instruction("SRA")
   poke(c.io.rs1_val, 50)
-  // The lower five bits are all zero for rs2_val. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for rs2_val. We expect the result to be equal to
+  // rs1_val
   poke(c.io.rs2_val, 64)
   step(1)
   expect(c.io.out, 50)
@@ -618,12 +638,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 400)
 
-  // 30. Test SLLI instruction - Verify that only the lower 5 bits in IMMI
-  // value are considered
+  // 30. Test SLLI instruction - Verify that only the low 6 bits of IMMI are
+  // considered
   set_instruction("SLLI")
   poke(c.io.rs1_val, 100)
-  // The lower five bits are all zero for IMMI. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
   poke(c.io.inst.immI, 64)
   step(1)
   expect(c.io.out, 100)
@@ -700,12 +720,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 25)
 
-  // 41. Test SRLI instruction - Verify that only 5 lower bits of IMMI are
+  // 41. Test SRLI instruction - Verify that only the low 6 bits of IMMI are
   // considered.
   set_instruction("SRLI")
   poke(c.io.rs1_val, 50)
-  // The lower five bits are all zero for IMMI. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
   poke(c.io.inst.immI, 64)
   step(1)
   expect(c.io.out, 50)
@@ -734,12 +754,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, -1L)
 
-  // 45. Test SRAI instruction - Verify that only 5 lower bits of IMMI are
+  // 45. Test SRAI instruction - Verify that only the low 6 bits of IMMI are
   // considered.
   set_instruction("SRAI")
   poke(c.io.rs1_val, 50)
-  // The lower five bits are all zero for IMMI. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
   poke(c.io.inst.immI, 64)
   step(1)
   expect(c.io.out, 50)
@@ -1447,6 +1467,74 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 50)
 
+  // 124. Test SLLW instruction - sanity
+  set_instruction("SLLW")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 2)
+  step(1)
+  expect(c.io.out, 400)
+
+  // 125. Test SLLW instruction - Verify that only the 5 lower bits in rs2_val are
+  // taken. 
+  set_instruction("SLLW")
+  poke(c.io.rs1_val, 1)
+  // The low 5 bits are all zero for rs2_val. We expect the result to be equal
+  // to rs1_val
+  poke(c.io.rs2_val, 32)
+  peek(c.sh_amt)
+  step(1)
+  expect(c.io.out, 1)
+
+  // 126. Test SRLW instruction - sanity
+  set_instruction("SRLW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 1)
+  step(1)
+  expect(c.io.out, 50 >> 1)
+
+  // 127. Test SRLW instruction - Verify that only the 5 low bits of rs2_val are
+  // considered.
+  set_instruction("SRLW")
+  poke(c.io.rs1_val, 50)
+  // The low 5 bits are all zero for rs2_val. We expect the result to be equal to
+  // rs1_val
+  poke(c.io.rs2_val, 32)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 128. Test SRLW instruction - Verify that sign extended bit is ignored
+  set_instruction("SRLW")
+  // Set to -4 ie. 0xfffffffffffffffc
+  poke(c.io.rs1_val, -4L)
+  poke(c.io.rs2_val, 2)
+  step(1)
+  // Since SRL ignores the sign bit and just brings in zeroes, we expect it to
+  // convert to 0x3fffffffffffffff
+  expect(c.io.out, 0x3fffffffffffffffL)
+
+  // 129. Test SRAW instruction - Sanity
+  set_instruction("SRAW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 1)
+  step(1)
+  expect(c.io.out, 50 >> 1)
+
+  // 130. Test SRAW instruction - Verify that sign extended bit is not ignored
+  set_instruction("SRAW")
+  poke(c.io.rs1_val, -4L)
+  poke(c.io.rs2_val, 2)
+  step(1)
+  expect(c.io.out, -1L)
+
+  // 131. Test SRAW instruction - Verify that only the 5 low bits of rs2_val are
+  // considered.
+  set_instruction("SRAW")
+  poke(c.io.rs1_val, 50)
+  // The low 5 bits are all zero for rs2_val. We expect the result to be equal to
+  // rs1_val
+  poke(c.io.rs2_val, 32)
+  step(1)
+  expect(c.io.out, 50)
 }
 
 class ALUGenerator extends TestGenerator {
