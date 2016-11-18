@@ -32,7 +32,7 @@ class LSQ extends Module {
   val addrqW = Vec.fill(DEPTH) { Valid(new LSQEntry) }
   val addrq = Vec.tabulate(DEPTH) { i => RegEnable(addrqW(i).bits, addrqW(i).valid) }
 
-  val counter = new CounterUpDown(DEPTH)
+  //val counter = new CounterUpDown(DEPTH)
 
   val resVector: UInt = Cat(io.resEntry(3).valid, io.resEntry(2).valid, io.resEntry(1).valid, io.resEntry(0).valid)
   // Number of entries being reserved in the queue
@@ -56,59 +56,59 @@ class LSQ extends Module {
     res(2) := io.resEntry(2)
     res(3) := io.resEntry(3)
   } .elsewhen (resVector === UInt(14)) {
-    res(0).valid := Bool(false)
-    res(1) := io.resEntry(0)
-    res(2) := io.resEntry(1)
-    res(3) := io.resEntry(2)
+    res(0) := io.resEntry(1)
+    res(1) := io.resEntry(2)
+    res(2) := io.resEntry(3)
+    res(3).valid := Bool(false)
   } .elsewhen (resVector === UInt(13)) {
     res(0) := io.resEntry(0)
-    res(1).valid := Bool(false)
-    res(2) := io.resEntry(1)
-    res(3) := io.resEntry(2)
+    res(3).valid := Bool(false)
+    res(1) := io.resEntry(2)
+    res(2) := io.resEntry(3)
   } .elsewhen (resVector === UInt(12)) {
-    res(0).valid := Bool(false)
-    res(1).valid := Bool(false)
-    res(2) := io.resEntry(0)
-    res(3) := io.resEntry(1)
+    res(2).valid := Bool(false)
+    res(3).valid := Bool(false)
+    res(0) := io.resEntry(2)
+    res(1) := io.resEntry(3)
   } .elsewhen (resVector === UInt(11)) {
     res(0) := io.resEntry(0)
     res(1) := io.resEntry(1)
-    res(2).valid := Bool(false)
-    res(3) := io.resEntry(2)
+    res(3).valid := Bool(false)
+    res(2) := io.resEntry(3)
   } .elsewhen (resVector === UInt(10)) {
-    res(0).valid := Bool(false)
-    res(1) := io.resEntry(0)
     res(2).valid := Bool(false)
-    res(3) := io.resEntry(1)
+    res(0) := io.resEntry(1)
+    res(3).valid := Bool(false)
+    res(1) := io.resEntry(3)
   } .elsewhen (resVector === UInt(9)) {
     res(0) := io.resEntry(0)
-    res(1).valid := Bool(false)
     res(2).valid := Bool(false)
-    res(3) := io.resEntry(1)
+    res(3).valid := Bool(false)
+    res(1) := io.resEntry(3)
   } .elsewhen (resVector === UInt(8)) {
-    res(0).valid := Bool(false)
+    res(3).valid := Bool(false)
     res(1).valid := Bool(false)
     res(2).valid := Bool(false)
-    res(3) := io.resEntry(0)
+    res(0) := io.resEntry(3)
   } .elsewhen (resVector === UInt(7)) {
     res(0) := io.resEntry(0)
     res(1) := io.resEntry(1)
     res(2) := io.resEntry(2)
     res(3).valid := Bool(false)
   } .elsewhen (resVector === UInt(6)) {
-    res(0).valid := Bool(false)
-    res(1) := io.resEntry(0)
-    res(2) := io.resEntry(1)
+    res(2).valid := Bool(false)
+    res(0) := io.resEntry(1)
+    res(1) := io.resEntry(2)
     res(3).valid := Bool(false)
   } .elsewhen (resVector === UInt(5)) {
     res(0) := io.resEntry(0)
-    res(1).valid := Bool(false)
-    res(2) := io.resEntry(1)
+    res(2).valid := Bool(false)
+    res(1) := io.resEntry(2)
     res(3).valid := Bool(false)
   } .elsewhen (resVector === UInt(4)) {
-    res(0).valid := Bool(false)
+    res(2).valid := Bool(false)
     res(1).valid := Bool(false)
-    res(2) := io.resEntry(0)
+    res(0) := io.resEntry(2)
     res(3).valid := Bool(false)
   } .elsewhen (resVector === UInt(3)) {
     res(0) := io.resEntry(0)
@@ -116,8 +116,8 @@ class LSQ extends Module {
     res(2).valid := Bool(false)
     res(3).valid := Bool(false)
   } .elsewhen (resVector === UInt(2)) {
-    res(0).valid := Bool(false)
-    res(1) := io.resEntry(0)
+    res(1).valid := Bool(false)
+    res(0) := io.resEntry(1)
     res(2).valid := Bool(false)
     res(3).valid := Bool(false)
   } .elsewhen (resVector === UInt(1)) {
