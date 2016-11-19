@@ -89,25 +89,36 @@ class Issue extends Module {
 	issuedInstTag(2) 		:= issueQ2.io.issuedEntry.bits.tag
 	issuedInstTag(3) 		:= issueQ3.io.issuedEntry.bits.tag
 
+	val issuedInstValid = Vec.fill(4) {Bool()}
+	issuedInstValid(0) 		:= issueQ0.io.issuedEntry.valid
+	issuedInstValid(1) 		:= issueQ1.io.issuedEntry.valid
+	issuedInstValid(2) 		:= issueQ2.io.issuedEntry.valid
+	issuedInstValid(3) 		:= issueQ3.io.issuedEntry.valid
+
 	val pipelinedIssuedInstTag = Vec.tabulate(4) {
     i => Reg(next = issuedInstTag(i))
+  }
+	val pipelinedIssuedInstValid = Vec.tabulate(4) {
+    i => Reg(next = issuedInstValid(i))
   }
 
   val issuedPrev2 = Vec.fill(8) {Valid(UInt(width = 6))}
 
 	for (i <- 0 until 4) {
-		issuedPrev2(i) := issuedInstTag(i)
+		issuedPrev2(i).bits  := issuedInstTag(i)
+		issuedPrev2(i).valid := issuedInstValid(i)
 	}
 	for (i <- 4 until 8) {
-		issuedPrev2(i) := pipelinedIssuedInstTag(i-4)
+		issuedPrev2(i).bits := pipelinedIssuedInstTag(i-4)
+		issuedPrev2(i).valid := pipelinedIssuedInstValid(i-4)
 	}
 
 	// Providing tags of last 2 instructions to all
-	// issue queues for wakeup
-	issueQ0.io.issuedPrev2	:= issuedPrev2
-	issueQ1.io.issuedPrev2	:= issuedPrev2
-	issueQ2.io.issuedPrev2	:= issuedPrev2
-	issueQ3.io.issuedPrev2	:= issuedPrev2
+	// issue queues for wakeup - TODO
+//	issueQ0.io.issuedPrev2	:= issuedPrev2
+//	issueQ1.io.issuedPrev2	:= issuedPrev2
+//	issueQ2.io.issuedPrev2	:= issuedPrev2
+//	issueQ3.io.issuedPrev2	:= issuedPrev2
 }
 
 class IssueTests(c: Issue) extends Tester(c) {
