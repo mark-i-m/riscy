@@ -10,10 +10,10 @@ class Riscy extends Module {
 
   val bp = Module(new BP)
   var fetch = Module(new Fetch)
-  val decode = Array.fill(4)(Module(new RiscyDecodeSingle))
+  val decode = Array.fill(4)(Module(new DecodeSingle))
   val alloc = Module(new RiscyAlloc)
   val rob = Module(new ROB)
-  val issue = Module(new IssueStage)
+  val issue = Module(new Issue)
   val lsq = Module(new LSQ)
   val exec = Array.fill(4)(Module(new Execute))
   val stall = Module(new Stall)
@@ -30,17 +30,22 @@ class Riscy extends Module {
 
   for(i <- 0 until 4) {
     // instructions from Fetch to Decode
-    decode(i).io.ins := fetch.io.insts(i)
+    decode(i).io.ins := fetch.io.output.insts(i)
+    decode(i).io.pc  := fetch.io.output.pc(i)
 
     // decoded instructions to Allocation
+    // NOTE: decode and alloc are part of a single pipeline stage, so passing
+    // PC from fetch directly to alloc is ok.
     alloc.io.inst(i) := decode(i).io.decoded
+    alloc.io.pc(i)   := fetch.io.output.pc(i)
   }
 
   // Hook up all signals between Allocation and ROB
   alloc <> rob
 
-  // TODO: Hook up Allocation and IssueStage
-  alloc <> issue
+  // Hook up Allocation and IssueStage
+  // ROB entries come directly from Alloc
+  alloc.io.allocROB := issue.io.inst
 
   // TODO: Hook up IssueStage and LSQ (Addr Q)
   issue <> lsq

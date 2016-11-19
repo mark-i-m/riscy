@@ -7,7 +7,6 @@ class Issue extends Module {
 		val inst = Vec.fill(4) {Valid (new ROBEntry).flip}
 		// Values from rob_wb with valid signal
 		val robWb = new RobWbStore(6).flip
-		val pc = Vec.fill(4) {UInt(INPUT, 64)}
 		val addBufLen = UInt(INPUT, 5)
  		val stall = Bool(OUTPUT)
 		val issuedEntry = Vec.fill(4) {Valid(new ROBEntry).asOutput}

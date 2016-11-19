@@ -14,7 +14,8 @@ class RiscyAlloc extends Module {
   val io = new Bundle {
     // Input from the rotator and decode logic with 4 decoded instructions
     val inst = Vec.fill(4) { Valid(new DecodeIns()).flip }
-		val pc = Vec.fill(4) {UInt(INPUT, 64)}
+    val pc = Vec.fill(4) {UInt(INPUT, 64)}
+
     // Access the Remap table to find out what the current mappings are (so we
     // can rename)
     val remapPorts = Vec.fill(8) { UInt(OUTPUT, 5) }

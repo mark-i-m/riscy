@@ -16,17 +16,18 @@ class DecodeIns extends Bundle {
   val immJ = SInt(OUTPUT, 32)
 }
 
-class RiscyDecodeSingle extends Module {
+class DecodeSingle extends Module {
   val io = new Bundle {
     // Input from I$
     val ins = Valid(UInt(INPUT, 32)).asInput
-		val pc = Vec.fill(4) {UInt(INPUT, 64)}
+    val pc = Vec.fill(4) {UInt(INPUT, 64)}
     // Decoded output signals
-    var decoded = Valid(new DecodeIns())
+    val decoded = Valid(new DecodeIns())
   }
   
-	// Passing on valid signal 
-	io.decoded.valid 			 := io.ins.valid
+  // Passing on valid signal 
+  io.decoded.valid 	     := io.ins.valid
+
   // Split up wires from the instruction
   io.decoded.bits.op     := io.ins.bits(6, 0)
   io.decoded.bits.rd     := io.ins.bits(11, 7)
@@ -44,7 +45,7 @@ class RiscyDecodeSingle extends Module {
   io.decoded.bits.immJ   := Cat(Fill(11, io.ins.bits(31)), io.ins.bits(31), io.ins.bits(19, 12), io.ins.bits(20), io.ins.bits(30, 25), io.ins.bits(24, 21), UInt(0, 1))
 }
 
-class RiscyDecodeTests(c: RiscyDecode) extends Tester(c) {
+class DecodeSingleTests(c: DecodeSingle) extends Tester(c) {
   // Try decoding an instruction
   poke(c.io.ins.valid, 1)
 	poke(c.io.ins.bits, 0xAAAAAAAA)
@@ -64,8 +65,8 @@ class RiscyDecodeTests(c: RiscyDecode) extends Tester(c) {
   expect(c.io.decoded.bits.immJ, 0xFFFAA2AA)
 }
 
-class DecodeGenerator extends TestGenerator {
-  def genMod(): Module = Module(new RiscyDecode())
+class DecodeSingleGenerator extends TestGenerator {
+  def genMod(): Module = Module(new DecodeSingle())
   def genTest[T <: Module](c: T): Tester[T] =
-    (new RiscyDecodeTests(c.asInstanceOf[RiscyDecode])).asInstanceOf[Tester[T]]
+    (new DecodeSingleTests(c.asInstanceOf[DecodeSingle])).asInstanceOf[Tester[T]]
 }
