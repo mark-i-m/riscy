@@ -17,15 +17,15 @@ class Execute extends Module {
     // executed by the ALU was a branch. If valid, the `bits` attribute will
     // indicate whether the branch was taken.
     val is_branch_taken = Vec(4, Valid(Bool(OUTPUT)))
-
     // The computed branch targets. Use in conjunction with is_branch_taken ie.
     // only if the valid bit is set.
     val branch_target = Vec(4, UInt(OUTPUT, 64))
-
-    // Written back values
-    // TODO: Taken bit
-    // TODO: Correct target addr
-    // TODO: PC which caused misprediction
+    // The tags for the branch instructions. Use only if valid bit is set for
+    // is_branch_taken
+    val branch_tag = Vec(4, UInt(OUTPUT, 6))
+    // The PCs of the branch instructions. Use only if valid bit is set for
+    // is_branch_taken
+    val branch_PC = Vec(4, UInt(OUTPUT, 64))
   }
 
   val alu = Array.fill(4)(Module(new ALU(64)))
@@ -60,6 +60,8 @@ class Execute extends Module {
     io.is_branch_taken(i).valid := alu(i).io.is_branch
     io.is_branch_taken(i).bits  := alu(i).io.cmp_out
     io.branch_target(i)         := alu(i).io.out
+    io.branch_tag(i)            := io.issued_inst(i).bits.tag
+    io.branch_PC(i)             := io.issued_inst(i).bits.pc
   }
 
   // Hookup the output of ROB writeback structure to the outside world
@@ -73,64 +75,10 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   // "INST_NAME" -> (opcode, funct3, funct7)
   val inst_map = Map(
     "ADD" -> (0x33, 0x0, 0x0),
-    "SUB" -> (0x33, 0x0, 0x20),
-    "SLL" -> (0x33, 0x1, 0x0),
-    "SLT" -> (0x33, 0x2, 0x0),
-    "SLTU" -> (0x33, 0x3, 0x0),
-    "XOR" -> (0x33, 0x4, 0x0),
-    "SRL" -> (0x33, 0x5, 0x0),
-    "SRA" -> (0x33, 0x5, 0x20),
-    "OR" -> (0x33, 0x6, 0x0),
-    "AND" -> (0x33, 0x7, 0x0),
-
     "ADDI" -> (0x13, 0x0, 0x0),
-    "SLLI" -> (0x13, 0x1, 0x0),
-    "SLTI" -> (0x13, 0x2, 0x0),
-    "SLTIU" -> (0x13, 0x3, 0x0),
-    "XORI" -> (0x13, 0x4, 0x0),
-    "SRLI" -> (0x13, 0x5, 0x0),
-    "SRAI" -> (0x13, 0x5, 0x20),
-    "ORI" -> (0x13, 0x6, 0x0),
-    "ANDI" -> (0x13, 0x7, 0x0),
-
-    "LB" -> (0x3, 0x0, 0x0),
-    "LH" -> (0x3, 0x1, 0x0),
-    "LW" -> (0x3, 0x2, 0x0),
-    "LBU" -> (0x3, 0x4, 0x0),
-    "LBH" -> (0x3, 0x5, 0x0),
-
-    "SB" -> (0x23, 0x0, 0x0),
-    "SH" -> (0x23, 0x1, 0x0),
-    "SW" -> (0x23, 0x2, 0x0),
-
     "BEQ" -> (0x63, 0x0, 0x0),
     "BNE" -> (0x63, 0x1, 0x0),
-    "BLT" -> (0x63, 0x4, 0x0),
-    "BGE" -> (0x63, 0x5, 0x0),
-    "BLTU" -> (0x63, 0x6, 0x0),
-    "BGEU" -> (0x63, 0x7, 0x0),
-
-    "JAL" -> (0x6F, 0x0, 0x0),
-    "JALR" -> (0x67, 0x0, 0x0),
-
-    "LUI" -> (0x37, 0x0, 0x0),
-    "AUIPC" -> (0x17, 0x0, 0x0),
-
-    "LD" -> (0x3, 0x3, 0x0),
-    "LWU" -> (0x3, 0x6, 0x0),
-
-    "SD" -> (0x23, 0x3, 0x0),
-
-    "ADDW" -> (0x3B, 0x0, 0x0),
-    "SUBW" -> (0x3B, 0x0, 0x20),
-    "SLLW" -> (0x3B, 0x1, 0x0),
-    "SRLW" -> (0x3B, 0x5, 0x0),
-    "SRAW" -> (0x3B, 0x5, 0x20),
-
-    "ADDIW" -> (0x1B, 0x0, 0x0),
-    "SLLIW" -> (0x1B, 0x1, 0x0),
-    "SRLIW" -> (0x1B, 0x5, 0x0),
-    "SRAIW" -> (0x1B, 0x5, 0x20)
+    "BLT" -> (0x63, 0x4, 0x0)
   )
   // Utility function for setting opcode, funct3 and funct7 values
   def set_instruction(index : Int, inst_name : String) = {
@@ -192,6 +140,8 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   expect(c.io.rob_wb_store.operand_s1(2), 3)
   expect(c.io.is_branch_taken(2).valid, true)
   expect(c.io.is_branch_taken(2).bits, false)
+  expect(c.io.branch_tag(2), 3)
+  expect(c.io.branch_PC(2), 10000)
 
   // Check BNE result
   expect(c.io.rob_wb_store.valid_s1(3), true)
@@ -200,6 +150,8 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   expect(c.io.rob_wb_store.operand_s1(3), 4)
   expect(c.io.is_branch_taken(3).valid, true)
   expect(c.io.is_branch_taken(3).bits, true)
+  expect(c.io.branch_tag(3), 4)
+  expect(c.io.branch_PC(3), 10000)
 
   // Add 2 valid instructions and 2 invalid instructions
   set_instruction(0, "ADD")
@@ -235,6 +187,8 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   expect(c.io.rob_wb_store.operand_s1(1), 6)
   expect(c.io.is_branch_taken(1).valid, true)
   expect(c.io.is_branch_taken(1).bits, true)
+  expect(c.io.branch_tag(1), 6)
+  expect(c.io.branch_PC(1), 20000)
 
   // Check invalid instructions
   expect(c.io.rob_wb_store.valid_s1(2), false)
