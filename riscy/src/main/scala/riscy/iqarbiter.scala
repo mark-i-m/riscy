@@ -9,7 +9,7 @@ class IssuedInst extends Bundle {
 
 class AddBufEntry extends Bundle {
 	val robLoc = UInt(OUTPUT, 6)
-	val lsType = Bool(OUTPUT)
+	val st_nld = Bool(OUTPUT)
 }
 
 class IqArbiter extends Module {
@@ -120,15 +120,15 @@ class IqArbiter extends Module {
 		when (io.inst(i).bits.op === UInt(0x03)) {
 			io.addBuf(i).valid := Bool(true)
 			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addBuf(i).bits.lsType := Bool(true)
+			io.addBuf(i).bits.st_nld := Bool(false)
 		} .elsewhen (io.inst(i).bits.op === UInt(0x0b)) {
 			io.addBuf(i).valid := Bool(true)
 			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addBuf(i).bits.lsType := Bool(false)
+			io.addBuf(i).bits.st_nld := Bool(true)
 		} .otherwise {
 			io.addBuf(i).valid := Bool(false)
 			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addBuf(i).bits.lsType := Bool(false)
+			io.addBuf(i).bits.st_nld := Bool(false)
 		}
 	}
 }
@@ -285,9 +285,9 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	expect(c.io.allocIQ(1).iqNum, 0x2)
 	expect(c.io.allocIQ(2).iqNum, 0x2)
 	expect(c.io.allocIQ(3).iqNum, 0x2)
-	expect(c.io.addBuf(0).bits.lsType, 1)
-	expect(c.io.addBuf(1).bits.lsType, 0)
-	expect(c.io.addBuf(2).bits.lsType, 1)
+	expect(c.io.addBuf(0).bits.st_nld, 0)
+	expect(c.io.addBuf(1).bits.st_nld, 1)
+	expect(c.io.addBuf(2).bits.st_nld, 0)
 	expect(c.io.addBuf(0).valid, 1)
 	expect(c.io.addBuf(1).valid, 1)
 	expect(c.io.addBuf(2).valid, 1)
