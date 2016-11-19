@@ -12,6 +12,7 @@ import Chisel._
 class CAM(numCompare : Int, numEntries : Int, entryWidth : Int) extends Module {
   val io = new Bundle {
     // The value with which all the input values will be compared
+		// It is an N ported CAM 
     val compare_bits = Vec(numCompare, Bits(INPUT, width=entryWidth))
     // Plug in multiple values which will be compared in parallel with one
     // particular value
@@ -21,7 +22,10 @@ class CAM(numCompare : Int, numEntries : Int, entryWidth : Int) extends Module {
     val hit = Vec(numCompare, (Vec(numEntries, Bool(OUTPUT))))
   }
 
-  // Seems too simplistic, doesn't it?
+  // Every compare value will be compared across all inputs
+	// hit(j)(i)
+	// j -> compare number
+	// i -> input entry number
   for (j <- 0 until numCompare) {
 	  for (i <- 0 until numEntries) {
     	io.hit(j)(i) := (io.compare_bits(j) === io.input_bits(i))

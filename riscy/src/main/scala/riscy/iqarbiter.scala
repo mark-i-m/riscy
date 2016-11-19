@@ -3,7 +3,7 @@ package riscy
 import Chisel._
 
 class IssuedInst extends Bundle {
-	val inst = {Valid (new AllocROB())}
+	val inst = {Valid (new ROBEntry)}
 	val iqNum = UInt(OUTPUT,2)
 }
 
@@ -14,13 +14,13 @@ class AddBufEntry extends Bundle {
 
 class IqArbiter extends Module {
 	val io = new Bundle {
-		val inst = Vec.fill(4) {Valid (new AllocROB()).flip}
+		val inst = Vec.fill(4) {Valid (new ROBEntry).flip}
 		val iqLen = Vec.fill(4) { UInt(INPUT, 4)}
 		val addBufLen = UInt(INPUT, 5)
 		// Instruction issue to address Queue
-		val allocIQ = Vec.fill(4) (new IssuedInst())
+		val allocIQ = Vec.fill(4) (new IssuedInst)
 		// Address buf entry and load store info
-		val addBuf = Vec.fill(4) {Valid (new AddBufEntry())}
+		val addBuf = Vec.fill(4) {Valid (new AddBufEntry)}
 		val stall = Bool(OUTPUT)
 	}
 	// Logic to generate initial stalls in design
@@ -117,17 +117,17 @@ class IqArbiter extends Module {
 		}
 
 		// Logic to generate the entry for LS Buffer
-		when (io.inst(i).bits.op === UInt(0x00)) {
+		when (io.inst(i).bits.op === UInt(0x03)) {
 			io.addBuf(i).valid := Bool(true)
-			io.addBuf(i).bits.robLoc := io.inst(i).bits.entry
+			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addBuf(i).bits.lsType := Bool(true)
-		} .elsewhen (io.inst(i).bits.op === UInt(0x08)) {
+		} .elsewhen (io.inst(i).bits.op === UInt(0x0b)) {
 			io.addBuf(i).valid := Bool(true)
-			io.addBuf(i).bits.robLoc := io.inst(i).bits.entry
+			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addBuf(i).bits.lsType := Bool(false)
 		} .otherwise {
 			io.addBuf(i).valid := Bool(false)
-			io.addBuf(i).bits.robLoc := io.inst(i).bits.entry
+			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addBuf(i).bits.lsType := Bool(false)
 		}
 	}
@@ -239,10 +239,10 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.inst(1).valid, 1)
 	poke(c.io.inst(2).valid, 1)
 	poke(c.io.inst(3).valid, 1)
-	poke(c.io.inst(0).bits.op, 0x00)
-	poke(c.io.inst(1).bits.op, 0x08)
-	poke(c.io.inst(2).bits.op, 0x00)
-	poke(c.io.inst(3).bits.op, 0x3)
+	poke(c.io.inst(0).bits.op, 0x03)
+	poke(c.io.inst(1).bits.op, 0x0b)
+	poke(c.io.inst(2).bits.op, 0x03)
+	poke(c.io.inst(3).bits.op, 0x4)
   	poke(c.io.iqLen(0), 0x9)
 	poke(c.io.iqLen(1), 0x6)
   	poke(c.io.iqLen(2), 0x2)

@@ -8,23 +8,13 @@ class AllocRemap extends Bundle {
   val idxROB = UInt(OUTPUT, 6) // ROB entry number to map to
 }
 
-// Information from the Allocate/Rename stage to the ROB and IQs.
-class AllocROB extends ROBEntry {
-  // Which ROB entry to latch
-  val entry = UInt(OUTPUT, 6)
-
-  // Is the operand coming from the ROB? T => Y, F => N
-  //val rs1Map = Bool(OUTPUT)
-  //val rs2Map = Bool(OUTPUT)
-}
-
 // The Control Magic to rename instructions and send signals to update the
 // Remap table, the ROB, and the Issue Queues.
 class RiscyAlloc extends Module {
   val io = new Bundle {
     // Input from the rotator and decode logic with 4 decoded instructions
     val inst = Vec.fill(4) { Valid(new DecodeIns()).flip }
-
+		val pc = Vec.fill(4) {UInt(INPUT, 64)}
     // Access the Remap table to find out what the current mappings are (so we
     // can rename)
     val remapPorts = Vec.fill(8) { UInt(OUTPUT, 5) }
@@ -43,7 +33,7 @@ class RiscyAlloc extends Module {
     // Outputs to the Remap table and the ROB with the correct values to update
     // for this cycle. 
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()) }
-    val allocROB = Vec.fill(4) { Valid(new AllocROB()) }
+    val allocROB = Vec.fill(4) { Valid(new ROBEntry()) }
   }
 
   // TODO: stall if ROB is full
@@ -122,14 +112,12 @@ class RiscyAlloc extends Module {
 
     val robEntry = io.allocROB(i).bits // convenience
 
-    // Which ROB entry
-    robEntry.entry := renamedDest(i)
-
     // Operation
     robEntry.op := pipelinedInst(i).bits.op
     robEntry.funct3 := pipelinedInst(i).bits.funct3
     robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
-
+		robEntry.isSt := pipelinedOpDecode(i).isSt
+		robEntry.isLd := pipelinedOpDecode(i).isLd
     // First operand
     when (renamedRs1(i).valid) {
       // Getting from ROB
