@@ -23,19 +23,21 @@ object ALU {
   val FN_SGEU = UInt(14)
 
   // ALU Input 1 selection options
-  val A1_RS1  = UInt(0)
-  val A1_RS2  = UInt(1)
-  val A1_PC   = UInt(2)
-  val A1_ZERO = UInt(3)
+  val A1_RS1    = UInt(0)
+  val A1_RS2    = UInt(1)
+  val A1_PC     = UInt(2)
+  val A1_ZERO   = UInt(3)
+  val A1_RS1_32 = UInt(4)
 
   // ALU Input 2 selection options
-  val A2_RS2   = UInt(0)
-  val A2_RS1   = UInt(1)
-  val A2_IMM_I = UInt(2)
-  val A2_IMM_S = UInt(3)
-  val A2_IMM_B = UInt(4)
-  val A2_IMM_J = UInt(5)
-  val A2_IMM_U = UInt(6)
+  val A2_RS2    = UInt(0)
+  val A2_RS1    = UInt(1)
+  val A2_IMM_I  = UInt(2)
+  val A2_IMM_S  = UInt(3)
+  val A2_IMM_B  = UInt(4)
+  val A2_IMM_J  = UInt(5)
+  val A2_IMM_U  = UInt(6)
+  val A2_RS2_32 = UInt(7)
 
   // Instructions needing the subtractor: UInt(8) - UInt(15)
   def isSub(cmd: UInt) = cmd(3)
@@ -65,6 +67,7 @@ class ALU(xLen : Int) extends Module {
 
   // Determine the function the ALU needs to perform
   val fn = UInt(width=6)
+  fn := FN_UNKNOWN
   when (io.inst.op === UInt(0x33)) {
       // ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
       when (io.inst.funct3 === UInt(0x0)) {
@@ -147,11 +150,18 @@ class ALU(xLen : Int) extends Module {
       }
     }
   } .elsewhen (io.inst.op === UInt(0x3)) {
-    // LB, LH, LW, LBU, LHU
-    fn := FN_ADD
+    // RV32I: LB, LH, LW, LBU, LHU
+    // RV64I: LWU, LD
+    when (io.inst.funct3 != UInt(0x7)) {
+      fn := FN_ADD
+    }
   } .elsewhen (io.inst.op === UInt(0x23)) {
-    // SB, SH, SW
-    fn := FN_ADD
+    // RV32I: SB, SH, SW
+    // RV64I: SD
+    when (!io.inst.funct3(2)) {
+      // Funct3 values should be between 0x0 to 0x3. The third bit must be zero
+      fn := FN_ADD
+    }
   } .elsewhen (io.inst.op === UInt(0x63)) {
     // BEQ, BNE, BLT, BGE, BLTU, BGEU
     when (io.inst.funct3 === UInt(0x0)) {
@@ -197,12 +207,12 @@ class ALU(xLen : Int) extends Module {
     sel_a2 := A2_IMM_I
   } .elsewhen (io.inst.op === UInt(0x1B)) {
     // ADDIW, SLLIW, SRLIW, SRAIW
-    sel_a1 := A1_RS1
+    sel_a1 := A1_RS1_32
     sel_a2 := A2_IMM_I
   } .elsewhen (io.inst.op === UInt(0x3B)) {
     // ADDW, SUBW, SLLW, SRLW, SRAW
-    sel_a1 := A1_RS1
-    sel_a2 := A2_RS2
+    sel_a1 := A1_RS1_32
+    sel_a2 := A2_RS2_32
   } .elsewhen (io.inst.op === UInt(0x3)) {
     // LB, LH, LW, LBU, LHU
     sel_a1 := A1_RS1
@@ -253,23 +263,24 @@ class ALU(xLen : Int) extends Module {
 
   // Select the inputs for ALU operations
   val in1 = MuxLookup(sel_a1, UInt(0), Seq(
-    A1_RS1  -> io.rs1_val,
-    A1_RS2  -> io.rs2_val,
-    A1_PC   -> io.PC,
-    A1_ZERO -> UInt(0, width=xLen)))
+    A1_RS1    -> io.rs1_val,
+    A1_RS2    -> io.rs2_val,
+    A1_PC     -> io.PC,
+    A1_ZERO   -> UInt(0, width=xLen),
+    A1_RS1_32 -> Cat(Fill(32, io.rs1_val(31)), io.rs1_val(31,0)) ))
 
-  // XXX-kbavishi: Do we care about the sign of immU? Assume no for now.
   // We are interested in putting 20 bits of immU followed by 12 bits of zeroes
-  // in the 32-bit registers for LUI and AUIPC. I'm assuming that they are only
-  // interested in filling the lower 32 bits of our 64 bit registers.
+  // to get 32-bit values for LUI and AUIPC. These values are then
+  // sign-extended to 64 bits before getting used.
   val in2 = MuxLookup(sel_a2, UInt(0), Seq(
-    A2_RS2   -> io.rs2_val,
-    A2_RS1   -> io.rs1_val,
-    A2_IMM_I -> immI_ext.asUInt,
-    A2_IMM_S -> immS_ext.asUInt,
-    A2_IMM_B -> immB_ext.asUInt,
-    A2_IMM_J -> immJ_ext.asUInt,
-    A2_IMM_U -> Cat(Cat(Fill(32, UInt(0)), immU_ext.asUInt()(20,0)),
+    A2_RS2    -> io.rs2_val,
+    A2_RS2_32 -> Cat(Fill(32, io.rs1_val(31)), io.rs2_val(31,0)),
+    A2_RS1    -> io.rs1_val,
+    A2_IMM_I  -> immI_ext.asUInt,
+    A2_IMM_S  -> immS_ext.asUInt,
+    A2_IMM_B  -> immB_ext.asUInt,
+    A2_IMM_J  -> immJ_ext.asUInt,
+    A2_IMM_U  -> Cat(Cat(Fill(32, immU_ext(19)), immU_ext.asUInt()(19,0)),
                     Fill(12, UInt(0))) ))
 
   // ADD, SUB - Use an adder to derive results
@@ -277,11 +288,20 @@ class ALU(xLen : Int) extends Module {
   // JAL, JALR - Use adder to compute target address (offset + PC + 4)
   // LUI, AUIPC
   val adder_out = UInt(width=xLen)
+  val final_adder_out = UInt(width=xLen)
   val in2_inv = Mux(isSub(fn), ~in2, in2)
   val in1_xor_in2 = in1 ^ in2
   val isJmp = io.inst.op === UInt(0x6F) || io.inst.op === UInt(0x67)
   adder_out := (in1 + in2_inv +
                 Mux(isSub(fn), UInt(1), Mux(isJmp, UInt(4), UInt(0))))
+  when (io.inst.op === UInt(0x3B) |
+        io.inst.op === UInt(0x1B)) {
+    // ADDW, SUBW, ADDIW instructions - Need to consider only 32 bits of the
+    // result and sign-extend it
+    final_adder_out := Cat(Fill(32, adder_out(31)), adder_out(31,0))
+  } .otherwise {
+    final_adder_out := adder_out
+  }
 
   // Use another adder for computing branch target since the prev adder will be
   // busy doing the subtraction for checking the condition
@@ -310,15 +330,37 @@ class ALU(xLen : Int) extends Module {
   val slt_out = UInt(width=xLen)
   slt_out := Mux(fn === FN_SLT || fn === FN_SLTU, io.cmp_out, UInt(0))
 
-  // SLL, SRL, SRA
-  val sh_amt = in2(5,0)
+  // Shifter component - used for the following instructions
+  // SLL, SRL, SRA, SLLI, SRLI, SRAI
+  // SLLW, SRLW, SRAW, SLLIW, SRLIW, SRAIW
+  val sh_amt = UInt(width=6)
+  when (io.inst.op === UInt(0x3B) |
+        io.inst.op === UInt(0x1B)) {
+    // SLLW, SRLW, SRAW, SLLIW, SRLIW, SRAIW
+    // Only consider the low 5 bits for deciding shift amount
+    sh_amt := Cat(Bits(0, width=1), in2(4,0))
+  } .otherwise {
+    // SLL, SRL, SRA, SLLI, SRLI, SRAI
+    // They consider the low 6 bits for deciding the shift amount
+    sh_amt := in2(5,0)
+  }
   val sh_out_l = (in1 << sh_amt)(xLen-1,0)
   // Sign bits are extended only for SRA
-  val sh_out_r = (Cat(fn === FN_SRA & in1(xLen-1),
+  val sign_bit = in1(xLen-1)
+  val sh_out_r = (Cat(fn === FN_SRA & sign_bit,
                   in1(xLen-1,0)).asSInt >> sh_amt)(xLen-1,0)
-  //val sh_out_r = (Cat(Bits(1), in1).asSInt >> sh_amt)
   val sh_out = Mux(fn === FN_SRL || fn === FN_SRA, sh_out_r, UInt(0)) |
                Mux(fn === FN_SLL, sh_out_l, UInt(0))
+  val final_sh_out = UInt(width=xLen)
+
+  when (io.inst.op === UInt(0x3B) |
+        io.inst.op === UInt(0x1B)) {
+    // SLLW, SRLW, SRAW, SLLIW, SRLIW, SRAIW instructions - Need to consider
+    // only 32 bits of the result and sign-extend it
+    final_sh_out := Cat(Fill(32, sh_out(31)), sh_out(31,0))
+  } .otherwise {
+    final_sh_out := sh_out
+  }
 
   // AND, OR, XOR
   val logic = MuxLookup(fn, UInt(0), Seq(
@@ -326,10 +368,10 @@ class ALU(xLen : Int) extends Module {
     FN_OR -> UInt(in1(xLen-1,0) | in2(xLen-1,0)),
     FN_AND -> UInt(in1(xLen-1,0) & in2(xLen-1,0))))
 
-  val non_arith_out = slt_out | logic | sh_out
+  val non_arith_out = slt_out | logic | final_sh_out
   val isBranch = io.inst.op === UInt(0x63)
   io.out := Mux(isBranch, branch_addr_out,
-            Mux(fn === FN_ADD || fn === FN_SUB, adder_out, non_arith_out))
+            Mux(fn === FN_ADD || fn === FN_SUB, final_adder_out, non_arith_out))
 }
 
 class ALUTests(c: ALU) extends Tester(c) {
@@ -360,8 +402,8 @@ class ALUTests(c: ALU) extends Tester(c) {
     "LB" -> (0x3, 0x0, 0x0),
     "LH" -> (0x3, 0x1, 0x0),
     "LW" -> (0x3, 0x2, 0x0),
-    "LBU" -> (0x3, 0x3, 0x0),
-    "LBH" -> (0x3, 0x4, 0x0),
+    "LBU" -> (0x3, 0x4, 0x0),
+    "LBH" -> (0x3, 0x5, 0x0),
 
     "SB" -> (0x23, 0x0, 0x0),
     "SH" -> (0x23, 0x1, 0x0),
@@ -378,7 +420,23 @@ class ALUTests(c: ALU) extends Tester(c) {
     "JALR" -> (0x67, 0x0, 0x0),
 
     "LUI" -> (0x37, 0x0, 0x0),
-    "AUIPC" -> (0x17, 0x0, 0x0)
+    "AUIPC" -> (0x17, 0x0, 0x0),
+
+    "LD" -> (0x3, 0x3, 0x0),
+    "LWU" -> (0x3, 0x6, 0x0),
+
+    "SD" -> (0x23, 0x3, 0x0),
+
+    "ADDW" -> (0x3B, 0x0, 0x0),
+    "SUBW" -> (0x3B, 0x0, 0x20),
+    "SLLW" -> (0x3B, 0x1, 0x0),
+    "SRLW" -> (0x3B, 0x5, 0x0),
+    "SRAW" -> (0x3B, 0x5, 0x20),
+
+    "ADDIW" -> (0x1B, 0x0, 0x0),
+    "SLLIW" -> (0x1B, 0x1, 0x0),
+    "SRLIW" -> (0x1B, 0x5, 0x0),
+    "SRAIW" -> (0x1B, 0x5, 0x20)
   )
   // Utility function for setting opcode, funct3 and funct7 values
   def set_instruction(inst_name : String) = {
@@ -389,12 +447,12 @@ class ALUTests(c: ALU) extends Tester(c) {
     poke(c.io.inst.funct7, value._3)
   }
 
-  // 1. Test ADD instruction - Sanity
+  // 1. Test ADD instruction - Sanity and larger than 32 bit values
   set_instruction("ADD")
-  poke(c.io.rs1_val, 50)
-  poke(c.io.rs2_val, 50)
+  poke(c.io.rs1_val, 0x0ffffffffffffffeL)
+  poke(c.io.rs2_val, 1)
   step(1)
-  expect(c.io.out, 100)
+  expect(c.io.out, 0x0fffffffffffffffL)
 
   // 2. Test ADD instruction - 1 negative value
   set_instruction("ADD")
@@ -410,12 +468,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, -200L)
 
-  // 4. Test SUB instruction - Sanity
+  // 4. Test SUB instruction - Sanity and larger than 32-bit values
   set_instruction("SUB")
-  poke(c.io.rs1_val, 50)
-  poke(c.io.rs2_val, 50)
+  poke(c.io.rs1_val, 0x0fffffffffffffffL)
+  poke(c.io.rs2_val, 1)
   step(1)
-  expect(c.io.out, 0)
+  expect(c.io.out, 0x0ffffffffffffffeL)
 
   // 5. Test SUB instruction - Sanity 2
   set_instruction("SUB")
@@ -449,9 +507,10 @@ class ALUTests(c: ALU) extends Tester(c) {
   // taken. 
   set_instruction("SLL")
   poke(c.io.rs1_val, 1)
-  // The lower five bits are all zero for rs2_val. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for rs2_val. We expect the result to be equal
+  // to rs1_val
   poke(c.io.rs2_val, 64)
+  peek(c.sh_amt)
   step(1)
   expect(c.io.out, 1)
 
@@ -519,12 +578,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 50 >> 1)
 
-  // 19. Test SRL instruction - Verify that only 5 lower bits of rs2_val are
+  // 19. Test SRL instruction - Verify that only the 6 low bits of rs2_val are
   // considered.
   set_instruction("SRL")
   poke(c.io.rs1_val, 50)
-  // The lower five bits are all zero for rs2_val. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for rs2_val. We expect the result to be equal to
+  // rs1_val
   poke(c.io.rs2_val, 64)
   step(1)
   expect(c.io.out, 50)
@@ -553,12 +612,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, -1L)
 
-  // 23. Test SRA instruction - Verify that only 5 lower bits of rs2_val are
+  // 23. Test SRA instruction - Verify that only the 6 low bits of rs2_val are
   // considered.
   set_instruction("SRA")
   poke(c.io.rs1_val, 50)
-  // The lower five bits are all zero for rs2_val. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for rs2_val. We expect the result to be equal to
+  // rs1_val
   poke(c.io.rs2_val, 64)
   step(1)
   expect(c.io.out, 50)
@@ -605,12 +664,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 400)
 
-  // 30. Test SLLI instruction - Verify that only the lower 5 bits in IMMI
-  // value are considered
+  // 30. Test SLLI instruction - Verify that only the low 6 bits of IMMI are
+  // considered
   set_instruction("SLLI")
   poke(c.io.rs1_val, 100)
-  // The lower five bits are all zero for IMMI. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
   poke(c.io.inst.immI, 64)
   step(1)
   expect(c.io.out, 100)
@@ -687,12 +746,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 25)
 
-  // 41. Test SRLI instruction - Verify that only 5 lower bits of IMMI are
+  // 41. Test SRLI instruction - Verify that only the low 6 bits of IMMI are
   // considered.
   set_instruction("SRLI")
   poke(c.io.rs1_val, 50)
-  // The lower five bits are all zero for IMMI. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
   poke(c.io.inst.immI, 64)
   step(1)
   expect(c.io.out, 50)
@@ -721,12 +780,12 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, -1L)
 
-  // 45. Test SRAI instruction - Verify that only 5 lower bits of IMMI are
+  // 45. Test SRAI instruction - Verify that only the low 6 bits of IMMI are
   // considered.
   set_instruction("SRAI")
   poke(c.io.rs1_val, 50)
-  // The lower five bits are all zero for IMMI. We expect the result to be
-  // equal to rs1_val
+  // The low 6 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
   poke(c.io.inst.immI, 64)
   step(1)
   expect(c.io.out, 50)
@@ -1391,6 +1450,375 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immU, 10)
   step(1)
   expect(c.io.out, 1000 + (10 << 12))
+
+  // 118. Test LD instruction - Positive IMMI value
+  set_instruction("LD")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 119. Test LD instruction - Negative IMMI value
+  set_instruction("LD")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 120. Test LWU instruction - Positive IMMI value
+  set_instruction("LWU")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 121. Test LWU instruction - Negative IMMI value
+  set_instruction("LWU")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 122. Test SD instruction - Positive IMMS value
+  set_instruction("SD")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immS, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 123. Test SD instruction - Negative IMMS value
+  set_instruction("SD")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immS, -50)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 124. Test SLLW instruction - sanity
+  set_instruction("SLLW")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.rs2_val, 2)
+  step(1)
+  expect(c.io.out, 400)
+
+  // 125. Test SLLW instruction - Verify that only the 5 lower bits in rs2_val are
+  // taken. 
+  set_instruction("SLLW")
+  poke(c.io.rs1_val, 1)
+  // The low 5 bits are all zero for rs2_val. We expect the result to be equal
+  // to rs1_val
+  poke(c.io.rs2_val, 32)
+  peek(c.sh_amt)
+  step(1)
+  expect(c.io.out, 1)
+
+  // 126. Test SLLW instruction - Verify that only the low 32 bits of inputs
+  // are considered.
+  set_instruction("SLLW")
+  poke(c.io.rs1_val, 0x800000000L)
+  poke(c.io.rs2_val, 0)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 127. Test SLLW instruction - Verify that only the low 32 bits of output
+  // are generated
+  set_instruction("SLLW")
+  poke(c.io.rs1_val, 0x80000000)
+  poke(c.io.rs2_val, 1)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 128. Test SLLW instruction - Verify that only the low 32 bits are
+  // generated with the correct sign extension
+  set_instruction("SLLW")
+  poke(c.io.rs1_val, 0xc0000000)
+  poke(c.io.rs2_val, 1)
+  step(1)
+  expect(c.io.out, 0xffffffff80000000L)
+
+  // 129. Test SRLW instruction - sanity
+  set_instruction("SRLW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 1)
+  step(1)
+  expect(c.io.out, 50 >> 1)
+
+  // 130. Test SRLW instruction - Verify that only the 5 low bits of rs2_val are
+  // considered.
+  set_instruction("SRLW")
+  poke(c.io.rs1_val, 50)
+  // The low 5 bits are all zero for rs2_val. We expect the result to be equal to
+  // rs1_val
+  poke(c.io.rs2_val, 32)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 131. Test SRLW instruction - Verify that only the low 32 bits of inputs
+  // are considered.
+  set_instruction("SRLW")
+  poke(c.io.rs1_val, 0x800000000L)
+  poke(c.io.rs2_val, 0)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 132. Test SRAW instruction - Sanity
+  set_instruction("SRAW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 1)
+  step(1)
+  expect(c.io.out, 50 >> 1)
+
+  // 133. Test SRAW instruction - Verify that sign extended bit is not ignored
+  set_instruction("SRAW")
+  poke(c.io.rs1_val, 0xfffffffc)
+  poke(c.io.rs2_val, 2)
+  step(1)
+  // XXX-kbavishi: What is the SRAW instruction supposed to do here?
+  // Is it supposed to consider the sign bit of the 32-bit value?
+  expect(c.io.out, 0xffffffffffffffffL)
+
+  // 134. Test SRAW instruction - Verify that only the 5 low bits of rs2_val are
+  // considered.
+  set_instruction("SRAW")
+  poke(c.io.rs1_val, 50)
+  // The low 5 bits are all zero for rs2_val. We expect the result to be equal to
+  // rs1_val
+  poke(c.io.rs2_val, 32)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 135. Test SRAW instruction - Verify that only the low 32 bits of inputs
+  // are considered.
+  set_instruction("SRAW")
+  poke(c.io.rs1_val, 0x800000000L)
+  poke(c.io.rs2_val, 0)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 136. Test SLLIW instruction - Sanity
+  set_instruction("SLLIW")
+  poke(c.io.rs1_val, 100)
+  poke(c.io.inst.immI, 2)
+  step(1)
+  expect(c.io.out, 400)
+
+  // 137. Test SLLIW instruction - Verify that only the low 5 bits of IMMI are
+  // considered
+  set_instruction("SLLIW")
+  poke(c.io.rs1_val, 100)
+  // The low 5 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
+  poke(c.io.inst.immI, 32)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 138. Test SLLIW instruction - Verify that only the low 32 bits of inputs
+  // are considered.
+  set_instruction("SLLIW")
+  poke(c.io.rs1_val, 0x800000000L)
+  poke(c.io.inst.immI, 0)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 139. Test SLLIW instruction - Verify that only the low 32 bits of output
+  // are generated
+  set_instruction("SLLIW")
+  poke(c.io.rs1_val, 0x80000000)
+  poke(c.io.inst.immI, 1)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 140. Test SLLIW instruction - Verify that only the low 32 bits are
+  // generated with the correct sign extension
+  set_instruction("SLLIW")
+  poke(c.io.rs1_val, 0xc0000000)
+  poke(c.io.inst.immI, 1)
+  step(1)
+  expect(c.io.out, 0xffffffff80000000L)
+
+  // 141. Test SRLIW instruction - sanity
+  set_instruction("SRLIW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 1)
+  step(1)
+  expect(c.io.out, 25)
+
+  // 142. Test SRLIW instruction - Verify that only the low 5 bits of IMMI are
+  // considered.
+  set_instruction("SRLIW")
+  poke(c.io.rs1_val, 50)
+  // The low 5 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
+  poke(c.io.inst.immI, 32)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 143. Test SRAIW instruction - Sanity
+  set_instruction("SRAIW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 1)
+  step(1)
+  expect(c.io.out, 25)
+
+  // 144. Test SRAIW instruction - Verify that sign extended bit is not ignored
+  set_instruction("SRAIW")
+  poke(c.io.rs1_val, 0xfffffffc)
+  poke(c.io.inst.immI, 2)
+  step(1)
+  // XXX-kbavishi: What is the SRAIW instruction supposed to do here?
+  // Is it supposed to consider the sign bit of the 32-bit value?
+  expect(c.io.out, 0xffffffffffffffffL)
+
+  // 145. Test SRAIW instruction - Verify that only the low 5 bits of IMMI are
+  // considered.
+  set_instruction("SRAIW")
+  poke(c.io.rs1_val, 50)
+  // The low 5 bits are all zero for IMMI. We expect the result to be equal to
+  // rs1_val
+  poke(c.io.inst.immI, 32)
+  step(1)
+  expect(c.io.out, 50)
+
+  // 146. Test SRAIW instruction - Verify that only the low 32 bits of inputs
+  // are considered.
+  set_instruction("SRAIW")
+  poke(c.io.rs1_val, 0x800000000L)
+  poke(c.io.inst.immI, 0)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 147. Test ADDW instruction - Sanity
+  set_instruction("ADDW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 148. Test ADDW instruction - one 32-bit negative value and sign extension
+  // of lower 32 bits
+  set_instruction("ADDW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, -100)
+  step(1)
+  expect(c.io.out, -50L)
+
+  // 149. Test ADDW instruction - two 32-bit negative values and sign extension
+  set_instruction("ADDW")
+  poke(c.io.rs1_val, -100)
+  poke(c.io.rs2_val, -100)
+  step(1)
+  expect(c.io.out, -200L)
+
+  // 150. Test ADDW instruction - Verify that only the low 32 bits of inputs
+  // are considered
+  set_instruction("ADDW")
+  poke(c.io.rs1_val, 0x800000001L)
+  poke(c.io.rs2_val, 0x800000001L)
+  step(1)
+  expect(c.io.out, 0x2)
+
+  // 151. Test ADDW instruction - Also verify that only the low 32 bits of output
+  // generated
+  set_instruction("ADDW")
+  poke(c.io.rs1_val, 0xffffffff)
+  poke(c.io.rs2_val, 1)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 152. Test SUBW instruction - Sanity
+  set_instruction("SUBW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 50)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 153. Test SUBW instruction - Sanity 2 and sign extension
+  set_instruction("SUBW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  step(1)
+  expect(c.io.out, -50L)
+
+  // 154. Test SUBW instruction - one 32-bit negative value and sign extension
+  set_instruction("SUBW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, -50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 155. Test SUBW instruction - two 32-bit negative values
+  set_instruction("SUBW")
+  poke(c.io.rs1_val, -50)
+  poke(c.io.rs2_val, -60)
+  step(1)
+  expect(c.io.out, 10L)
+
+  // 156. Test SUBW instruction - Verify that only the low 32 bits of inputs
+  // are considered
+  set_instruction("SUBW")
+  poke(c.io.rs1_val, 0x8000000002L)
+  poke(c.io.rs2_val, 0x7000000001L)
+  step(1)
+  expect(c.io.out, 0x1)
+
+  // 157. Test SUBW instruction - Verify that only the low 32 bits of result
+  // are considered and correctly sign extended
+  set_instruction("SUBW")
+  poke(c.io.rs1_val, 0xffffffff)
+  poke(c.io.rs2_val, -1)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 158. Test ADDIW instruction - Sanity
+  set_instruction("ADDIW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, 50)
+  step(1)
+  expect(c.io.out, 100)
+
+  // 159. Test ADDIW instruction - one 32-bit negative value and sign extension
+  // of lower 32 bits
+  set_instruction("ADDIW")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.inst.immI, -100)
+  step(1)
+  expect(c.io.out, -50L)
+
+  // 160. Test ADDIW instruction - two 32-bit negative values and sign extension
+  set_instruction("ADDIW")
+  poke(c.io.rs1_val, -100)
+  poke(c.io.inst.immI, -100)
+  step(1)
+  expect(c.io.out, -200L)
+
+  // 161. Test ADDIW instruction - Verify that only the low 32 bits of inputs
+  // are considered
+  set_instruction("ADDIW")
+  poke(c.io.rs1_val, 0x800000001L)
+  poke(c.io.inst.immI, 0x1)
+  step(1)
+  expect(c.io.out, 0x2)
+
+  // 162. Test ADDIW instruction - Also verify that only the low 32 bits of output
+  // generated
+  set_instruction("ADDIW")
+  poke(c.io.rs1_val, 0xffffffff)
+  poke(c.io.inst.immI, 1)
+  step(1)
+  expect(c.io.out, 0)
+
+  // 163. Test LUI instruction - Sign-extension testcase
+  set_instruction("LUI")
+  poke(c.io.inst.immU, 0x80000)
+  step(1)
+  expect(c.io.out, 0xffffffff80000000L)
+
+  // 164. Test AUIPC instruction - Sign-extension testcase
+  set_instruction("AUIPC")
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immU, 0x80000)
+  step(1)
+  expect(c.io.out, 0xffffffff800003e8L)
+
 }
 
 class ALUGenerator extends TestGenerator {

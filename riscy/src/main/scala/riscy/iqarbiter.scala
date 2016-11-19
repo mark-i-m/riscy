@@ -15,7 +15,7 @@ class AddBufEntry extends Bundle {
 class IqArbiter extends Module {
 	val io = new Bundle {
 		val inst = Vec.fill(4) {Valid (new ROBEntry).flip}
-		val iqLen = Vec.fill(4) { UInt(INPUT, 4)}
+		val iqLen = Vec.fill(4) { UInt(INPUT, 5)}
 		val addBufLen = UInt(INPUT, 5)
 		// Instruction issue to address Queue
 		val allocIQ = Vec.fill(4) (new IssuedInst)
@@ -26,12 +26,12 @@ class IqArbiter extends Module {
 	// Logic to generate initial stalls in design
 	// Currently stalling the processor if there are less than 4 
 	// entries available all 4 Issue Queues combined
-	// to make iqLen 5 width this new variable as scala does not 
-	val iqLen5W = Vec.fill(4) {UInt(width = 5)}
-	iqLen5W := io.iqLen
-	val totalLen = iqLen5W(0) + iqLen5W(1) + iqLen5W(2) + iqLen5W(3)
+	// to make iqLen 7(max 64) width this new variable as scala does not 
+	val iqLen7W = Vec.fill(4) {UInt(width = 7)}
+	iqLen7W := io.iqLen
+	val totalLen = iqLen7W(0) + iqLen7W(1) + iqLen7W(2) + iqLen7W(3)
 	when ((io.addBufLen > UInt(0x1b)) ||
-	      (totalLen > UInt(0x16))) {
+	      (totalLen > UInt(0x3c))) {
 		      io.stall := Bool(true)
 	      } .otherwise {
 		      io.stall := Bool(false)
@@ -117,11 +117,11 @@ class IqArbiter extends Module {
 		}
 
 		// Logic to generate the entry for LS Buffer
-		when (io.inst(i).bits.op === UInt(0x00)) {
+		when (io.inst(i).bits.op === UInt(0x03)) {
 			io.addBuf(i).valid := Bool(true)
 			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addBuf(i).bits.lsType := Bool(true)
-		} .elsewhen (io.inst(i).bits.op === UInt(0x08)) {
+		} .elsewhen (io.inst(i).bits.op === UInt(0x0b)) {
 			io.addBuf(i).valid := Bool(true)
 			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addBuf(i).bits.lsType := Bool(false)
@@ -158,15 +158,45 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	expect(c.io.allocIQ(3).inst.valid, 0x1)
 	expect(c.io.stall, 0x0)
 
-	// Test - 2 check if stall is getting generated if all iqs are full
+	// Test - 2a check if stall is getting generated if all iqs are full
 	poke(c.io.inst(0).valid, 1)
 	poke(c.io.inst(1).valid, 1)
 	poke(c.io.inst(2).valid, 1)
 	poke(c.io.inst(3).valid, 1)
-  	poke(c.io.iqLen(0), 0xf)
+  poke(c.io.iqLen(0), 0xf)
 	poke(c.io.iqLen(1), 0xf)
-  	poke(c.io.iqLen(2), 0xf)
+  poke(c.io.iqLen(2), 0xf)
 	poke(c.io.iqLen(3), 0xf)
+	poke(c.io.addBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.stall, 0x0)
+
+	// Test - 2b check if stall is getting generated if all iqs are full
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  poke(c.io.iqLen(0), 0x10)
+	poke(c.io.iqLen(1), 0x10)
+  poke(c.io.iqLen(2), 0x10)
+	poke(c.io.iqLen(3), 0x10)
+	poke(c.io.addBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.stall, 0x1)
+
+	// Test - 2c check if stall is getting generated if all iqs are full
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  poke(c.io.iqLen(0), 0xf)
+	poke(c.io.iqLen(1), 0xf)
+  poke(c.io.iqLen(2), 0xf)
+	poke(c.io.iqLen(3), 0x10)
 	poke(c.io.addBufLen, 0x7)
 
 	step(1)
@@ -178,10 +208,10 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.inst(1).valid, 1)
 	poke(c.io.inst(2).valid, 1)
 	poke(c.io.inst(3).valid, 1)
-  	poke(c.io.iqLen(0), 0x10)
-	poke(c.io.iqLen(1), 0x10)
-  	poke(c.io.iqLen(2), 0x10)
-	poke(c.io.iqLen(3), 0x10)
+  	poke(c.io.iqLen(0), 0x1)
+	poke(c.io.iqLen(1), 0x1)
+  	poke(c.io.iqLen(2), 0x1)
+	poke(c.io.iqLen(3), 0x1)
 	poke(c.io.addBufLen, 0x1c)
 
 	step(1)
@@ -239,10 +269,10 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.inst(1).valid, 1)
 	poke(c.io.inst(2).valid, 1)
 	poke(c.io.inst(3).valid, 1)
-	poke(c.io.inst(0).bits.op, 0x00)
-	poke(c.io.inst(1).bits.op, 0x08)
-	poke(c.io.inst(2).bits.op, 0x00)
-	poke(c.io.inst(3).bits.op, 0x3)
+	poke(c.io.inst(0).bits.op, 0x03)
+	poke(c.io.inst(1).bits.op, 0x0b)
+	poke(c.io.inst(2).bits.op, 0x03)
+	poke(c.io.inst(3).bits.op, 0x4)
   	poke(c.io.iqLen(0), 0x9)
 	poke(c.io.iqLen(1), 0x6)
   	poke(c.io.iqLen(2), 0x2)
