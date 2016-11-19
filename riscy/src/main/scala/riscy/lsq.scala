@@ -13,7 +13,7 @@ class LSQEntry extends AddBufEntry {
 class LSQ extends Module {
   val io = new Bundle {
     // TODO
-    val stCommit = Bool(INPUT)
+    val stCommit = Vec(4, Bool(INPUT))
     val robWb = new RobWbStore(6).flip
     val resEntry = Vec.fill(4) { Valid(new AddBufEntry).flip }
     //val fillEntry = Valid(new LSQEntry)
@@ -229,7 +229,7 @@ class LSQ extends Module {
 
   io.stAddr.bits := addrq(0).addr.bits
   io.stValue := addrq(0).value.bits
-  when (io.stCommit) {
+  when (io.stCommit(0)) { // TODO: this should be done for all stCommit signals, not just 0
     io.stAddr.valid := Bool(true)
     for ( i <- 0 until DEPTH) {
       depMatrix(0)(i) := UInt(0)

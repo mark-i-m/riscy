@@ -23,7 +23,7 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
     readValue(i).bits := memBank(io.readPorts(i).bits)
 
     if(latency > 0) {
-      io.readData(i) := Pipe(readValue(i), latency).io.deq
+      io.readData(i) := Pipe(readValue(i), latency)
     } else {
       io.readData(i) := readValue(i)
     }
@@ -32,15 +32,15 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
   // Hook up write ports
   val wPipes = Array.tabulate(numWPorts) { i => {
     val wdata = Valid(new WriteData)
-    wdata(i).valid := io.writePorts(i).valid
-    wdata(i).bits.addr := io.writePorts(i).bits
-    wdata(i).bits.data := io.writeData(i)
-    Pipe(wdata(i)).io.deq
+    wdata.valid := io.writePorts(i).valid
+    wdata.bits.addr := io.writePorts(i).bits
+    wdata.bits.data := io.writeData(i)
+    Pipe(wdata)
   }}
 
   for(i <- 0 until numWPorts) {
-    when(wPipes(i).io.deq.valid) {
-      memBank(wPipes(i).io.deq.bits.addr) := wPipes(i).io.deq.bits.data
+    when(wPipes(i).valid) {
+      memBank(wPipes(i).bits.addr) := wPipes(i).bits.data
     }
   }
 }

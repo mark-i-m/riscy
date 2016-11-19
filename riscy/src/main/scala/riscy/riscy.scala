@@ -6,9 +6,10 @@ import Chisel._
 class Riscy extends Module {
   val io = new Bundle { /* No system, just a processor! */ }
 
-  var memory = Module(new BigMemory(64, 1 << 24, 2, 2, 100)) // 1 gB memory
+  //var memory = Module(new BigMemory(64, 1 << 24, 2, 2, 100)) // 1 gB memory
 
-  val bp = Module(new BP)
+  // TODO add BP
+  //val bp = Module(new BP)
   var fetch = Module(new Fetch)
   val decode = Array.fill(4)(Module(new DecodeSingle))
   val alloc = Module(new RiscyAlloc)
@@ -19,10 +20,10 @@ class Riscy extends Module {
   val stall = Module(new Stall)
 
   // TODO: hook up ICache and Memory
-  fetch <> memory
+  // fetch <> memory
 
   // TODO: hook up BP and Fetch
-  fetch <> bp
+  //fetch <> bp
 
   // branch misprediction signals from ROB to Fetch
   fetch.io.isBranchMispred := rob.io.mispredPC.valid
@@ -45,17 +46,32 @@ class Riscy extends Module {
 
   // Hook up Allocation and IssueStage
   // ROB entries come directly from Alloc
-  alloc.io.allocROB := issue.io.inst
+  issue.io.inst := alloc.io.allocROB
 
-  // TODO: Hook up IssueStage and LSQ (Addr Q)
-  issue <> lsq
+  // Hook up IssueStage and LSQ (Addr Q)
+  lsq.io.resEntry     := issue.io.addBuf
+  issue.io.addBufLen  := lsq.io.currentLen
 
-  // TODO: Hook up ROB WB and ROB
-  exec <> rob
+  // TODO: Hook up Exec and ROB
+
+  // TODO: LSQ and Exec
+
+  // TODO: Issue and Exec
 
   // Hook up LSQ to ROB, so we can commit stores
   lsq.io.stCommit := rob.io.stCommit
 
   // TODO: hook up DCache and Memory
-  lsq <> memory
+  //lsq <> memory
+
+  // TODO Hook up Stall module
+}
+
+class TopLevelTests(c: Riscy) extends Tester(c) {
+}
+
+class TopLevelGenerator extends TestGenerator {
+  def genMod(): Module = Module(new Riscy)
+  def genTest[T <: Module](c: T): Tester[T] =
+    (new TopLevelTests(c.asInstanceOf[Riscy])).asInstanceOf[Tester[T]]
 }

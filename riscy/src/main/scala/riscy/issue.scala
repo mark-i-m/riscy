@@ -4,14 +4,17 @@ import Chisel._
 
 class Issue extends Module {
 	val io = new Bundle {
-		val inst = Vec.fill(4) {Valid (new ROBEntry).flip}
-		// Values from rob_wb with valid signal
-		val robWb = new RobWbStore(6).flip
-		val addBufLen = UInt(INPUT, 5)
- 		val stall = Bool(OUTPUT)
-		val issuedEntry = Vec.fill(4) {Valid(new ROBEntry).asOutput}
-		// Address buf entry and load store info
-		val addBuf = Vec.fill(4) {Valid (new AddBufEntry)}
+      // ROB entries
+      val inst = Vec.fill(4) {Valid (new ROBEntry).flip} // Input
+
+      // Values from rob_wb with valid signal
+      val robWb = new RobWbStore(6).flip // Input
+      val addBufLen = UInt(INPUT, 5)
+      val stall = Bool(OUTPUT)
+      val issuedEntry = Vec.fill(4) {Valid(new ROBEntry).asOutput}
+
+      // Address buf entry and load store info
+      val addBuf = Vec.fill(4) {Valid (new AddBufEntry)} // Output
 	}
 
 	val arbiter = Module (new IqArbiter())

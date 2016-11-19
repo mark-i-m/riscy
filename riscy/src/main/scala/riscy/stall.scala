@@ -2,7 +2,7 @@ package riscy
 
 import Chisel._
 
-class RiscyStall extends Module {
+class Stall extends Module {
   val io = new Bundle {
     // ROB and Arbiter should set their StallReq flag to signal that they would
     // like previous stages to stall while they continue to run.
@@ -22,7 +22,7 @@ class RiscyStall extends Module {
   io.robStall   := io.arbiterStallReq
 }
 
-class RiscyStallTests(c: RiscyStall) extends Tester(c) {
+class StallTests(c: Stall) extends Tester(c) {
   def pokeFlags(rob: Boolean, arb: Boolean) = {
     poke(c.io.robStallReq, rob)
     poke(c.io.arbiterStallReq, arb)
@@ -58,7 +58,7 @@ class RiscyStallTests(c: RiscyStall) extends Tester(c) {
 }
 
 class StallGenerator extends TestGenerator {
-  def genMod(): Module = Module(new RiscyStall())
+  def genMod(): Module = Module(new Stall())
   def genTest[T <: Module](c: T): Tester[T] =
-    (new RiscyStallTests(c.asInstanceOf[RiscyStall])).asInstanceOf[Tester[T]]
+    (new StallTests(c.asInstanceOf[Stall])).asInstanceOf[Tester[T]]
 }
