@@ -3,8 +3,6 @@ package riscy
 import Chisel._
 
 object ALU {
-  val SZ_ALU_FN = 4
-  //val FN_X    = BitPat("b????")
   val FN_UNKNOWN = UInt(0)
   val FN_ADD  = UInt(1)
   val FN_SLL   = UInt(2)
@@ -41,10 +39,6 @@ object ALU {
 
   // Instructions needing the subtractor: UInt(8) - UInt(15)
   def isSub(cmd: UInt) = cmd(3)
-
-  def cmpUnsigned(cmd: UInt) = cmd(1)
-  def cmpInverted(cmd: UInt) = cmd(0)
-  def cmpEq(cmd: UInt) = !cmd(3)
 }
 import ALU._
 
@@ -56,11 +50,18 @@ class ALU(xLen : Int) extends Module {
     // The PC of the instruction to be executed
     val PC = UInt(INPUT, xLen)
     // The decoded information of the current instruction
-    val inst = new DecodeIns().flip
+    val inst = new DecodeIns().flip // Input
 
     // The output of the ALU. Can be a 64-bit data value or a 64-bit address
     // depending on the type of the instruction
     val out = UInt(OUTPUT, xLen)
+    // Indicates whether the output is a 64-bit address
+    val is_out_addr = Bool(OUTPUT)
+
+    // Indicates whether the output instruction was a branch instruction. 
+    // If this is true, use the `out` value for the branch target address and
+    // the `cmp_out` value for the branch taken condition.
+    val is_branch = Bool(OUTPUT)
     // Output of the branch condition. Useful only for branch instructions
     val cmp_out = Bool(OUTPUT)
   }
@@ -214,11 +215,13 @@ class ALU(xLen : Int) extends Module {
     sel_a1 := A1_RS1_32
     sel_a2 := A2_RS2_32
   } .elsewhen (io.inst.op === UInt(0x3)) {
-    // LB, LH, LW, LBU, LHU
+    // RV32I: LB, LH, LW, LBU, LHU
+    // RV64I: LD, LWU
     sel_a1 := A1_RS1
     sel_a2 := A2_IMM_I
   } .elsewhen (io.inst.op === UInt(0x23)) {
-    // SB, SH, SW
+    // RV32I: SB, SH, SW
+    // RV64I: SD
     sel_a1 := A1_RS1
     sel_a2 := A2_IMM_S
   } .elsewhen (io.inst.op === UInt(0x63)) {
@@ -292,8 +295,10 @@ class ALU(xLen : Int) extends Module {
   val in2_inv = Mux(isSub(fn), ~in2, in2)
   val in1_xor_in2 = in1 ^ in2
   val isJmp = io.inst.op === UInt(0x6F) || io.inst.op === UInt(0x67)
+
   adder_out := (in1 + in2_inv +
                 Mux(isSub(fn), UInt(1), Mux(isJmp, UInt(4), UInt(0))))
+
   when (io.inst.op === UInt(0x3B) |
         io.inst.op === UInt(0x1B)) {
     // ADDW, SUBW, ADDIW instructions - Need to consider only 32 bits of the
@@ -303,11 +308,32 @@ class ALU(xLen : Int) extends Module {
     final_adder_out := adder_out
   }
 
+  when (io.inst.op === UInt(0x3) |
+        io.inst.op === UInt(0x23) |
+        io.inst.op === UInt(0x63) |
+        io.inst.op === UInt(0x6F) |
+        io.inst.op === UInt(0x67)) {
+    // Load instructions   - LB, LH, LW, LBU, LBH, LD, LWU
+    // Store instructions  - SB, SH, SW, SD
+    // Branch instructions - BEQ, BNE, BLT, BGE, BLTU, BGEU
+    // Jump instructions   - JAL, JALR
+    io.is_out_addr := Bool(true)
+  } .otherwise {
+    io.is_out_addr := Bool(false)
+  }
+
   // Use another adder for computing branch target since the prev adder will be
   // busy doing the subtraction for checking the condition
   // BEQ, BNE, BLT, BLTU, BGE, BGEU
   val branch_addr_out = UInt(width=xLen)
-  branch_addr_out := io.PC + immB_ext.asUInt
+  val isBranch = io.inst.op === UInt(0x63)
+  when (isBranch) {
+    branch_addr_out := io.PC + immB_ext.asUInt
+    io.is_branch    := Bool(true)
+  } .otherwise {
+    branch_addr_out := Bits(0)
+    io.is_branch    := Bool(false)
+  }
 
   // SLT, SLTU, BEQ, BNE, BLT, BLTU, BGE, BGEU
   // These instructions rely on the subtraction result on the Adder above
@@ -369,7 +395,6 @@ class ALU(xLen : Int) extends Module {
     FN_AND -> UInt(in1(xLen-1,0) & in2(xLen-1,0))))
 
   val non_arith_out = slt_out | logic | final_sh_out
-  val isBranch = io.inst.op === UInt(0x63)
   io.out := Mux(isBranch, branch_addr_out,
             Mux(fn === FN_ADD || fn === FN_SUB, final_adder_out, non_arith_out))
 }
@@ -453,6 +478,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.rs2_val, 1)
   step(1)
   expect(c.io.out, 0x0fffffffffffffffL)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, false)
 
   // 2. Test ADD instruction - 1 negative value
   set_instruction("ADD")
@@ -481,6 +508,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.rs2_val, 100)
   step(1)
   expect(c.io.out, -50L)
+  expect(c.io.is_branch, false)
 
   // 6. Test SUB instruction - 1 negative value
   set_instruction("SUB")
@@ -502,6 +530,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.rs2_val, 2)
   step(1)
   expect(c.io.out, 400)
+  expect(c.io.is_branch, false)
 
   // 9. Test SLL instruction - Verify that only the 5 lower bits in rs2_val are
   // taken. 
@@ -520,6 +549,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.rs2_val, 50)
   step(1)
   expect(c.io.out, 0)
+  expect(c.io.is_branch, false)
   
   // 11. Test SLT instruction - sanity 2 (less than)
   set_instruction("SLT")
@@ -548,6 +578,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.rs2_val, 50)
   step(1)
   expect(c.io.out, 0)
+  expect(c.io.is_branch, false)
   
   // 15. Test SLTU instruction - sanity 2 (less than)
   set_instruction("SLTU")
@@ -642,6 +673,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 100)
   step(1)
   expect(c.io.out, 200)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, false)
 
   // 27. Test ADDI instruction - Negative IMMI value
   set_instruction("ADDI")
@@ -810,6 +843,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, true)
 
   // 50. Test LB instruction - Negative IMMI value
   set_instruction("LB")
@@ -838,6 +873,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_out_addr, true)
 
   // 52. Test LH instruction - Negative IMMI value
   set_instruction("LH")
@@ -852,6 +888,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_out_addr, true)
 
   // 54. Test LW instruction - Negative IMMI value
   set_instruction("LW")
@@ -866,6 +903,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_out_addr, true)
 
   // 56. Test LBU instruction - Negative IMMI value
   set_instruction("LBU")
@@ -880,6 +918,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_out_addr, true)
 
   // 58. Test LBH instruction - Negative IMMI value
   set_instruction("LBH")
@@ -894,6 +933,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immS, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, true)
 
   // 60. Test SB instruction - Negative IMMS value
   set_instruction("SB")
@@ -908,6 +949,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immS, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_out_addr, true)
 
   // 62. Test SH instruction - Negative IMMS value
   set_instruction("SH")
@@ -922,6 +964,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immS, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_out_addr, true)
 
   // 64. Test SW instruction - Negative IMMS value
   set_instruction("SW")
@@ -939,6 +982,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
+  expect(c.io.is_out_addr, true)
 
   // 66. Test BEQ instruction - Unequal values, Positive IMMB value
   set_instruction("BEQ")
@@ -949,6 +994,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 67. Test BEQ instruction - Equal values, Negative IMMB value
   set_instruction("BEQ")
@@ -959,6 +1005,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 68. Test BEQ instruction - Unequal values, Negative IMMB value
   set_instruction("BEQ")
@@ -969,6 +1016,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 69. Test BNE instruction - Equal values, Positive IMMB value
   set_instruction("BNE")
@@ -979,6 +1027,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
+  expect(c.io.is_out_addr, true)
 
   // 70. Test BNE instruction - Unequal values, Positive IMMB value
   set_instruction("BNE")
@@ -989,6 +1039,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 71. Test BNE instruction - Equal values, Negative IMMB value
   set_instruction("BNE")
@@ -999,6 +1050,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 72. Test BNE instruction - Unequal values, Negative IMMB value
   set_instruction("BNE")
@@ -1009,6 +1061,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 73. Test BLT instruction - Positive less than, Positive IMMB value
   set_instruction("BLT")
@@ -1019,6 +1072,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
+  expect(c.io.is_out_addr, true)
 
   // 74. Test BLT instruction - Positive not less than, Positive IMMB value
   set_instruction("BLT")
@@ -1029,6 +1084,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 75. Test BLT instruction - Negative less than, Positive IMMB value
   set_instruction("BLT")
@@ -1039,6 +1095,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 76. Test BLT instruction - Negative not less than, Positive IMMB value
   set_instruction("BLT")
@@ -1049,6 +1106,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 77. Test BLT instruction - Positive less than, Negative IMMB value
   set_instruction("BLT")
@@ -1059,6 +1117,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 78. Test BLT instruction - Positive not less than, Negative IMMB value
   set_instruction("BLT")
@@ -1069,6 +1128,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 79. Test BLT instruction - Negative less than, Negative IMMB value
   set_instruction("BLT")
@@ -1079,6 +1139,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 80. Test BLT instruction - Negative not less than, Negative IMMB value
   set_instruction("BLT")
@@ -1089,6 +1150,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 81. Test BLTU instruction - Positive less than, Positive IMMB value
   set_instruction("BLTU")
@@ -1099,6 +1161,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
+  expect(c.io.is_out_addr, true)
 
   // 82. Test BLTU instruction - Positive not less than, Positive IMMB value
   set_instruction("BLTU")
@@ -1109,6 +1173,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 83. Test BLTU instruction - Negative less than, Positive IMMB value
   set_instruction("BLTU")
@@ -1120,6 +1185,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   // BLTU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 84. Test BLTU instruction - Negative not less than, Positive IMMB value
   set_instruction("BLTU")
@@ -1131,6 +1197,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   // BLTU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 85. Test BLTU instruction - Positive less than, Negative IMMB value
   set_instruction("BLTU")
@@ -1141,6 +1208,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 86. Test BLTU instruction - Positive not less than, Negative IMMB value
   set_instruction("BLTU")
@@ -1151,6 +1219,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 87. Test BLTU instruction - Negative less than, Negative IMMB value
   set_instruction("BLTU")
@@ -1162,6 +1231,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   // BLTU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 88. Test BLTU instruction - Negative not less than, Negative IMMB value
   set_instruction("BLTU")
@@ -1173,6 +1243,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   // BLTU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 89. Test BGE instruction - Positive greater, Positive IMMB value
   set_instruction("BGE")
@@ -1183,6 +1254,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
+  expect(c.io.is_out_addr, true)
 
   // 90. Test BGE instruction - Positive equal, Positive IMMB value
   set_instruction("BGE")
@@ -1193,6 +1266,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 91. Test BGE instruction - Positive less than, Positive IMMB value
   set_instruction("BGE")
@@ -1203,6 +1277,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 92. Test BGE instruction - Negative greater, Positive IMMB value
   set_instruction("BGE")
@@ -1213,6 +1288,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 93. Test BGE instruction - Negative equal, Positive IMMB value
   set_instruction("BGE")
@@ -1223,6 +1299,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 94. Test BGE instruction - Negative less than, Positive IMMB value
   set_instruction("BGE")
@@ -1233,6 +1310,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 95. Test BGE instruction - Positive greater, Negative IMMB value
   set_instruction("BGE")
@@ -1243,6 +1321,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 96. Test BGE instruction - Positive equal, Negative IMMB value
   set_instruction("BGE")
@@ -1253,6 +1332,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 97. Test BGE instruction - Positive less than, Negative IMMB value
   set_instruction("BGE")
@@ -1263,6 +1343,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 98. Test BGE instruction - Negative greater, Negative IMMB value
   set_instruction("BGE")
@@ -1273,6 +1354,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 99. Test BGE instruction - Negative equal, Negative IMMB value
   set_instruction("BGE")
@@ -1283,6 +1365,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 100. Test BGE instruction - Negative less than, Negative IMMB value
   set_instruction("BGE")
@@ -1293,6 +1376,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 101. Test BGEU instruction - Positive greater, Positive IMMB value
   set_instruction("BGEU")
@@ -1303,6 +1387,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
+  expect(c.io.is_out_addr, true)
 
   // 102. Test BGEU instruction - Positive equal, Positive IMMB value
   set_instruction("BGEU")
@@ -1313,6 +1399,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 103. Test BGE instruction - Positive less than, Positive IMMB value
   set_instruction("BGEU")
@@ -1323,6 +1410,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 104. Test BGE instruction - Negative greater, Positive IMMB value
   set_instruction("BGEU")
@@ -1334,6 +1422,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   // BGEU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 105. Test BGEU instruction - Negative equal, Positive IMMB value
   set_instruction("BGEU")
@@ -1344,6 +1433,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 106. Test BGEU instruction - Negative less than, Positive IMMB value
   set_instruction("BGEU")
@@ -1355,6 +1445,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   // BGEU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
 
   // 107. Test BGEU instruction - Positive greater, Negative IMMB value
   set_instruction("BGEU")
@@ -1365,6 +1456,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 108. Test BGEU instruction - Positive equal, Negative IMMB value
   set_instruction("BGEU")
@@ -1375,6 +1467,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 109. Test BGEU instruction - Positive less than, Negative IMMB value
   set_instruction("BGEU")
@@ -1385,6 +1478,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 0)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 110. Test BGEU instruction - Negative greater, Negative IMMB value
   set_instruction("BGEU")
@@ -1395,6 +1489,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 111. Test BGEU instruction - Negative equal, Negative IMMB value
   set_instruction("BGEU")
@@ -1405,6 +1500,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 112. Test BGEU instruction - Negative less than, Negative IMMB value
   set_instruction("BGEU")
@@ -1416,6 +1512,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   // BGEU ignores the sign bit, hence we get the opposite result
   expect(c.io.cmp_out, 1)
   expect(c.io.out, 900)
+  expect(c.io.is_branch, true)
 
   // 113. Test JAL instruction - Positive IMMJ value
   set_instruction("JAL")
@@ -1423,6 +1520,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immJ, 100)
   step(1)
   expect(c.io.out, 1104)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, true)
 
   // 114. Test JAL instruction - Negative IMMJ value
   set_instruction("JAL")
@@ -1437,12 +1536,16 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 100)
   step(1)
   expect(c.io.out, 1104)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, true)
 
   // 116. Test LUI instruction
   set_instruction("LUI")
   poke(c.io.inst.immU, 10)
   step(1)
   expect(c.io.out, 10 << 12)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, false)
 
   // 117. Test AUIPC instruction
   set_instruction("AUIPC")
@@ -1450,6 +1553,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immU, 10)
   step(1)
   expect(c.io.out, 1000 + (10 << 12))
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, false)
 
   // 118. Test LD instruction - Positive IMMI value
   set_instruction("LD")
@@ -1457,6 +1562,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, true)
 
   // 119. Test LD instruction - Negative IMMI value
   set_instruction("LD")
@@ -1471,6 +1578,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_out_addr, true)
 
   // 121. Test LWU instruction - Negative IMMI value
   set_instruction("LWU")
@@ -1485,6 +1593,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immS, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, true)
 
   // 123. Test SD instruction - Negative IMMS value
   set_instruction("SD")
@@ -1499,6 +1609,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.rs2_val, 2)
   step(1)
   expect(c.io.out, 400)
+  expect(c.io.is_branch, false)
 
   // 125. Test SLLW instruction - Verify that only the 5 lower bits in rs2_val are
   // taken. 
@@ -1600,6 +1711,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 2)
   step(1)
   expect(c.io.out, 400)
+  expect(c.io.is_branch, false)
 
   // 137. Test SLLIW instruction - Verify that only the low 5 bits of IMMI are
   // considered
@@ -1692,6 +1804,8 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.rs2_val, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_branch, false)
+  expect(c.io.is_out_addr, false)
 
   // 148. Test ADDW instruction - one 32-bit negative value and sign extension
   // of lower 32 bits
@@ -1774,6 +1888,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   poke(c.io.inst.immI, 50)
   step(1)
   expect(c.io.out, 100)
+  expect(c.io.is_out_addr, false)
 
   // 159. Test ADDIW instruction - one 32-bit negative value and sign extension
   // of lower 32 bits
