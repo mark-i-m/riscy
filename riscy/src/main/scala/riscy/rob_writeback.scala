@@ -7,6 +7,8 @@ import Chisel._
 class RobWbInput(numEntries: Int) extends Bundle {
   // The data values to be stored
   val data = Vec(numEntries, Bits(INPUT, width=64))
+  // Indicates whether the data value is actually a 64-bit address
+  val is_addr = Vec(numEntries, Bool(INPUT))
   // The operand identifiers for the data values
   val operand = Vec(numEntries, Bits(INPUT, width=6))
   // Indicates whether the data value is valid
@@ -18,21 +20,26 @@ class RobWbInput(numEntries: Int) extends Bundle {
 class RobWbOutput(numEntries: Int) extends Bundle {
   // The data values to be stored
   val data = Vec(numEntries, Bits(OUTPUT, width=64))
+  // Indicates whether the data value is actually a 64-bit address
+  val is_addr = Vec(numEntries, Bool(OUTPUT))
   // The operand identifiers for the data values
   val operand = Vec(numEntries, Bits(OUTPUT, width=6))
   // Indicates whether the data value is valid
   val valid = Vec(numEntries, Bool(OUTPUT))
 }
 
-// Values stored for the previous two cycles which can be used for bypass
+// Results stored for the instructions issued in the previous two cycles which
+// can be used for bypass
 class RobWbStore(numEntries: Int) extends Bundle {
-  // Values that were stored 1 cycle ago
+  // Values stored for instructions issued 1 cycle ago
   val data_s1 = Vec(numEntries, UInt(OUTPUT, width=64))
+  val is_addr_s1 = Vec(numEntries, Bool(OUTPUT))
   val operand_s1 = Vec(numEntries, UInt(OUTPUT, width=6))
   val valid_s1 = Vec(numEntries, Bool(OUTPUT))
 
-  // Values that were stored 2 cycles ago
+  // Values stored for instructions issued 2 cycle ago
   val data_s2 = Vec(numEntries, UInt(OUTPUT, width=64))
+  val is_addr_s2 = Vec(numEntries, Bool(OUTPUT))
   val operand_s2 = Vec(numEntries, UInt(OUTPUT, width=6))
   val valid_s2 = Vec(numEntries, Bool(OUTPUT))
 }
@@ -53,42 +60,49 @@ class RobWriteback(numEntries : Int) extends Module {
     val output = new RobWbOutput(numEntries)
   }
 
-  // Values that were stored 1 cycle ago
+  // Results from instructions that were issued 1 cycle ago
   val data_s1 = Vec(numEntries, Reg(UInt(width=64)))
+  val is_addr_s1 = Vec(numEntries, Reg(init=Bool(false)))
   val operand_s1 = Vec(numEntries, Reg(UInt(width=6)))
   val valid_s1 = Vec(numEntries, Reg(init=Bool(false)))
 
-  // Values that were stored 2 cycles ago
+  // Results from instructions that were issued 2 cycle ago
   val data_s2 = Vec(numEntries, Reg(UInt(width=64)))
+  val is_addr_s2 = Vec(numEntries, Reg(init=Bool(false)))
   val operand_s2 = Vec(numEntries, Reg(UInt(width=6)))
   val valid_s2 = Vec(numEntries, Reg(init=Bool(false)))
 
   // Hook up wires so that values will be available for bypass
-  io.store.data_s1 := data_s1
+  io.store.data_s1    := data_s1
+  io.store.is_addr_s1 := is_addr_s1
   io.store.operand_s1 := operand_s1
-  io.store.valid_s1 := valid_s1
+  io.store.valid_s1   := valid_s1
 
-  io.store.data_s2 := data_s2
+  io.store.data_s2    := data_s2
+  io.store.is_addr_s2 := is_addr_s2
   io.store.operand_s2 := operand_s2
-  io.store.valid_s2 := valid_s2
+  io.store.valid_s2   := valid_s2
 
-  // Hand over the values that were stored 2 cycles ago. These values will be
-  // written to ROB
-  io.output.data := data_s2
+  // Hand over the results from instructions that were issued 2 cycles ago.
+  // These values will be written to ROB
+  io.output.data    := data_s2
+  io.output.is_addr := is_addr_s2
   io.output.operand := operand_s2
-  io.output.valid := valid_s2
+  io.output.valid   := valid_s2
 
   when(!io.stall) {
     // Shift data values so that they will be available for ROB writeback in
     // the next cycle
-    data_s2 := data_s1
+    data_s2    := data_s1
+    is_addr_s2 := is_addr_s1
     operand_s2 := operand_s1
-    valid_s2 := valid_s1
+    valid_s2   := valid_s1
 
     // Input values will be stored and available in the next cycle
-    data_s1 := io.input.data
+    data_s1    := io.input.data
+    is_addr_s1 := io.input.is_addr
     operand_s1 := io.input.operand
-    valid_s1 := io.input.valid
+    valid_s1   := io.input.valid
 
   } .otherwise {
     // Sit pretty because somebody asked us to stall
@@ -110,6 +124,11 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
       expect(c.io.output.data(i), values(i))
     }
   }
+  def expect_output_is_addr(c : RobWriteback, values : List[Boolean]) = {
+    for (i <- 0 until 6) {
+      expect(c.io.output.is_addr(i), values(i))
+    }
+  }
   def expect_output_operand(c : RobWriteback, values : List[Int]) = {
     for (i <- 0 until 6) {
       expect(c.io.output.operand(i), values(i))
@@ -125,6 +144,11 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
       poke(c.io.input.data(i), values(i))
     }
   }
+  def poke_input_is_addr(c : RobWriteback, values : List[Boolean]) = {
+    for (i <- 0 until 6) {
+      poke(c.io.input.is_addr(i), values(i))
+    }
+  }
   def poke_input_operand(c : RobWriteback, values : List[Int]) = {
     for (i <- 0 until 6) {
       poke(c.io.input.operand(i), values(i))
@@ -137,6 +161,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   // Cycle 0: Add some input data values to be stored
   poke_input_valid(c, List.fill(6)(true))
   poke_input_data(c, List.range(0, 6))
+  poke_input_is_addr(c, List.fill(6)(false))
   poke_input_operand(c, List.range(0, 6))
   // Initially we expect output valid bits to be unset
   expect_output_valid(c, List.fill(6)(false))
@@ -147,16 +172,19 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   // Add some new data values to be stored. Make entry #0 invalid
   poke_input_valid(c, List(false, true, true, true, true, true))
   poke_input_data(c, List.range(6, 12))
+  poke_input_is_addr(c, List(false, true, true, true, true, true))
   poke_input_operand(c, List.range(6, 12))
   step(1)
 
   // Cycle 2: The values stored in the cycle #0 should now be available.
   expect_output_valid(c, List.fill(6)(true))
   expect_output_data(c, List.range(0, 6))
+  expect_output_is_addr(c, List.fill(6)(false))
   expect_output_operand(c, List.range(0, 6))
   // Also add some new data values to be stored.
   poke_input_valid(c, List.fill(6)(true))
   poke_input_data(c, List.range(12, 18))
+  poke_input_is_addr(c, List.fill(6)(true))
   poke_input_operand(c, List.range(12, 18))
   step(1)
 
@@ -164,10 +192,12 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   // should be marked invalid
   expect_output_valid(c, List(false, true, true, true, true, true))
   expect_output_data(c, List.range(6, 12))
+  expect_output_is_addr(c, List(false, true, true, true, true, true))
   expect_output_operand(c, List.range(6, 12))
   // Also add some new data values to be stored.
   poke_input_valid(c, List.fill(6)(true))
   poke_input_data(c, List.range(18, 24))
+  poke_input_is_addr(c, List.fill(6)(true))
   poke_input_operand(c, List.range(18, 24))
   // Stall the ROB writeback. Verify that new values are not reported
   poke(c.io.stall, true)
@@ -176,6 +206,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   // Cycle 4: Should return the same values as in the previous cycle
   expect_output_valid(c, List(false, true, true, true, true, true))
   expect_output_data(c, List.range(6, 12))
+  expect_output_is_addr(c, List(false, true, true, true, true, true))
   expect_output_operand(c, List.range(6, 12))
 }
 
