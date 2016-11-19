@@ -12,7 +12,7 @@ import Chisel._
 
 class FetchOutput extends Bundle {
   val insts = Vec.fill(4) { Valid(UInt(OUTPUT, 32)) }
-  val pc = UInt(OUTPUT, 64)
+  val pc = Vec.fill(4) { UInt(OUTPUT, 64) }
 }
 
 class Fetch extends Module {
@@ -131,7 +131,10 @@ class Fetch extends Module {
   }
 
   // Pass the PC value down the pipeline
-  io.output.pc := icache.io.resp.addr
+  io.output.pc(0) := icache.io.resp.addr
+  io.output.pc(1) := icache.io.resp.addr + UInt(4)
+  io.output.pc(2) := icache.io.resp.addr + UInt(8)
+  io.output.pc(3) := icache.io.resp.addr + UInt(12)
 
   for (i <- 0 until 4) {
     io.output.insts(i).bits := icache.io.resp.inst(i)
