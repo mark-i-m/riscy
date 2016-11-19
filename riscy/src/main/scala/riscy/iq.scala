@@ -5,7 +5,6 @@ import Chisel._
 class IssueQueue extends Module {
 	val io = new Bundle {
 		val newEntry = Vec.fill(4) {Valid(new ROBEntry).asInput}
-		val iqueue0Tag = UInt(OUTPUT, 6)
 		// Currently just assume that below signals contain insts
 		// issued in last 2 cycles as form of ROB entry
 		// At top level this structure has to be generated - TODO
@@ -47,8 +46,6 @@ class IssueQueue extends Module {
 			isAssigned(i+1) := isAssigned(i) + UInt(0)
 		}
 	}
-
-	io.iqueue0Tag := iqueue(0).tag
  
 	//val totalEntries = isAssigned(0) + isAssigned(1) + isAssigned(2) + isAssigned(3)
   val isNewEntry = ( io.newEntry(0).valid || 
@@ -56,9 +53,6 @@ class IssueQueue extends Module {
 							 	   io.newEntry(2).valid || 
 						  	   io.newEntry(3).valid )
 	
-	val wakeUpRs1 = Vec.tabulate(16) {i => iqueue(i).rs1Val.valid}
-	val wakeUpRs2 = Vec.tabulate(16) {i => iqueue(i).rs2Val.valid}
-
 	// Logic for speculative wakeup
 	// There is no speculative wake up, here it is assumed that
 	// no stall happens within execution stage & 1 cycle execution
@@ -66,21 +60,44 @@ class IssueQueue extends Module {
 	// No back to back execultion is supported for LSQ dependent
 	// instructions which can be supported by following method
 	// update issuedPrev array to 10 bits as ROB_WB structure
-	for (j <- 0 to 15) {
-		for (i <- 0 to 7) {
-			when (io.issuedPrev2(i).valid === Bool(true)) {
-				when (iqueue(j).rs1Val.valid === Bool(false) && 
-				      iqueue(j).rs1Rename === io.issuedPrev2(i).bits) {
-					wakeUpRs1(j) := Bool(true) 
-				} 
-				when (iqueue(j).rs2Val.valid === Bool(false) && 
-				      iqueue(j).rs2Rename === io.issuedPrev2(i).bits) {
-					wakeUpRs2(j) := Bool(true) 
-				} 
-			}
-		} 
-	}
 	
+	val isWokenUpRs1 = Vec.fill(16) {Vec.fill(9) {Bool()}}
+	for (j <- 0 to 15) {
+		isWokenUpRs1(j)(0) := Bool(false)
+		for (i <- 0 to 7) {
+			isWokenUpRs1(j)(i+1) := isWokenUpRs1(j)(i) || 
+													(io.issuedPrev2(i).valid === Bool(true) && 
+					    						 iqueue(j).rs1Rename === io.issuedPrev2(i).bits)
+		}
+	}
+
+	val isWokenUpRs2 = Vec.fill(16) {Vec.fill(9) {Bool()}}
+	for (j <- 0 to 15) {
+		isWokenUpRs2(j)(0) := Bool(false)
+		for (i <- 0 to 7) {
+			isWokenUpRs2(j)(i+1) := isWokenUpRs2(j)(i) || 
+													(io.issuedPrev2(i).valid === Bool(true) && 
+					    						 iqueue(j).rs2Rename === io.issuedPrev2(i).bits)
+		}
+	}
+
+	val wakeUpRs1 = Vec.fill(16) {Bool()}
+	for (j <- 0 to 15) {
+		when (isWokenUpRs1(j)(8) === Bool(true)) {
+			wakeUpRs1(j) := Bool(true)
+		} .otherwise {
+			wakeUpRs1(j) := iqueue(j).rs1Val.valid
+		}
+	}
+
+	val wakeUpRs2 = Vec.fill(16) {Bool()}
+	for (j <- 0 to 15) {
+		when (isWokenUpRs2(j)(8) === Bool(true)) {
+			wakeUpRs2(j) := Bool(true)
+		} .otherwise {
+			wakeUpRs2(j) := iqueue(j).rs2Val.valid
+		}
+  }
 	
 	// this is to check which all insts are ready
 	val allReady = Vec.tabulate(16) {
@@ -285,7 +302,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	
 	println("// Test7a")
 	poke(c.io.issuedPrev2(0).bits,5)
-	poke(c.io.issuedPrev2(0).valid,0)
+	poke(c.io.issuedPrev2(0).valid,1)
 	for (i <- 1 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
