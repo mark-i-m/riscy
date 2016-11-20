@@ -7,6 +7,7 @@ class Riscy extends Module {
   val io = new Bundle { /* No system, just a processor! */ }
 
   //var memory = Module(new BigMemory(64, 1 << 24, 2, 2, 100)) // 1 gB memory
+  var memory = Module(new BigMemory(64, 1 << 12, 2, 2, 100)) // 256 kB memory
 
   // TODO add BP
   //val bp = Module(new BP)
