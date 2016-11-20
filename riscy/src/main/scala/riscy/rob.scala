@@ -484,7 +484,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   )
 
   // Try some random reads and writes
-  for(i <- 0 until 1000) {
+  for(i <- 0 until 100) {
     val randRPort = rnd.nextInt(8)
     val randWPort = rnd.nextInt(4)
     val randWReg = rnd.nextInt(32)
