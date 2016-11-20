@@ -16,7 +16,7 @@ class Riscy extends Module {
   val rob = Module(new ROB)
   val issue = Module(new Issue)
   val lsq = Module(new LSQ)
-  val exec = Array.fill(4)(Module(new Execute))
+  val exec = Module(new Execute)
   val stall = Module(new Stall)
 
   // TODO: hook up ICache and Memory
@@ -57,6 +57,7 @@ class Riscy extends Module {
   // TODO: LSQ and Exec
 
   // TODO: Issue and Exec
+  exec.io.issued_inst := issue.io.issuedEntry
 
   // Hook up LSQ to ROB, so we can commit stores
   lsq.io.stCommit := rob.io.stCommit
