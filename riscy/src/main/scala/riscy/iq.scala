@@ -360,6 +360,67 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 3)
 
+	println("// Test7e")
+	for (i <- 0 to 7) {
+		poke(c.io.issuedPrev2(i).valid,0)
+	}
+  poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+
+	step(1)
+	expect(c.io.currentLen, 0)
+	expect(c.io.issuedEntry.valid, 0)
+
+	println("// Test8 - Adding test to completely fill IQ")
+	println("// write back a value and issue one instruction at a time")
+
+	for (j <- 0 to 3) {
+		for (i <- 0 to 3) {
+			poke(c.io.newEntry(i).valid, 1)
+			poke(c.io.newEntry(i).bits.tag, (4*j)+i)
+			poke(c.io.newEntry(i).bits.rs1Val.valid, 1)
+			poke(c.io.newEntry(i).bits.rs2Val.valid, 0)
+			poke(c.io.newEntry(i).bits.rs2Rename, 5)
+		}
+		
+		step(1)
+		expect(c.io.currentLen, 4*(j+1))
+		expect(c.io.issuedEntry.valid, 0)
+	}
+
+//	poke(c.io.newEntry(0).valid, 0)
+//	poke(c.io.newEntry(1).valid, 0)
+//	poke(c.io.newEntry(2).valid, 0)
+//	poke(c.io.newEntry(3).valid, 0)
+//	poke(c.io.robWb.operand_s1(0), 5)
+//	poke(c.io.robWb.valid_s1(0), 1)
+//
+//	step(1)
+//	expect(c.io.currentLen, 4)
+//	expect(c.io.issuedEntry.valid, 0)
+//	
+//	for (i <- 0 to 15) {
+//		poke(c.io.newEntry(0).valid, 0)
+//		poke(c.io.newEntry(1).valid, 0)
+//		poke(c.io.newEntry(2).valid, 0)
+//		poke(c.io.newEntry(3).valid, 0)
+//
+//		step(1)
+//		expect(c.io.currentLen, (16-i))
+//		expect(c.io.issuedEntry.valid, 1)
+//		expect(c.io.issuedEntry.bits.tag, i)
+//	}
+//
+//	poke(c.io.newEntry(0).valid, 0)
+//	poke(c.io.newEntry(1).valid, 0)
+//	poke(c.io.newEntry(2).valid, 0)
+//	poke(c.io.newEntry(3).valid, 0)
+//
+//	step(1)
+//	expect(c.io.currentLen, 0)
+//	expect(c.io.issuedEntry.valid, 0)
 }
 
 class IssueQueueGenerator extends TestGenerator {
