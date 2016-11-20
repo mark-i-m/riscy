@@ -11,7 +11,7 @@ class SaturatingCounter(max: Int) {
     counter.inc(1)
   }
 
-  def down() = when(counter.value > 0) {
+  def down() = when(counter.value > UInt(0)) {
     counter.dec(1)
   }
 }

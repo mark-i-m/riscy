@@ -4,20 +4,20 @@ import Chisel._
 
 // RAS copied from the Rocket Chip
 class RAS(nras: Int) {
-  private val count = Reg(UInt(width = log2Up(nras+1)))
+  private val count = Reg(UInt(width = log2Up(nras + 1)))
   private val pos = Reg(UInt(width = log2Up(nras)))
   private val stack = Reg(Vec(nras, UInt()))
 
   def push(addr: UInt): Unit = {
-    when (count < nras) { count := count + 1 }
-    val nextPos = Mux(Bool(isPow2(nras)) || pos < nras-1, pos+1, UInt(0))
+    when (count < UInt(nras)) { count := count + UInt(1) }
+    val nextPos = Mux(Bool(isPow2(nras)) || pos < UInt(nras - 1), pos + UInt(1), UInt(0))
     stack(nextPos) := addr
     pos := nextPos
   }
   def peek: UInt = stack(pos)
   def pop(): Unit = when (!isEmpty) {
-    count := count - 1
-    pos := Mux(Bool(isPow2(nras)) || pos > 0, pos-1, UInt(nras-1))
+    count := count - UInt(1)
+    pos := Mux(Bool(isPow2(nras)) || pos > UInt(0), pos - UInt(1), UInt(nras - 1))
   }
   def clear(): Unit = count := UInt(0)
   def isEmpty: Bool = count === UInt(0)
@@ -32,7 +32,7 @@ class RAS(nras: Int) {
 class BHT(nbht: Int) {
   private val numhist = log2Up(nbht)
 
-  private val table = Array.fill(4) { new SaturatingCounter(3) }
+  private val table = Array.fill(nbht) { new SaturatingCounter(3) }
   private val history = Reg(UInt(width = numhist))
 
   // Hash takes the low-order bits of the PC and XORs with history
@@ -43,15 +43,15 @@ class BHT(nbht: Int) {
   // TODO: should we return the history too? How to do update?
   // TODO: should we keep some state about which branches were
   // predicted taken?
-  def get(pc: UInt): Bool = table(hash(pc)).value >= 2
+  //def get(pc: UInt): Bool = table(hash(pc)).value >= UInt(2)
 
   // TODO: we should not use the current hash! we should use the
   // hash at the time the jump was issued...
-  def update(pc: UInt, taken: Bool) = when(taken) {
-    table(hash(pc)).up
-  } .otherwise {
-    table(hash(pc)).down
-  }
+  //def update(pc: UInt, taken: Bool) = when(taken) {
+  //  table(hash(pc)).up
+  //} .otherwise {
+  //  table(hash(pc)).down
+  //}
 }
 
 // A BTB: keeps track of which PCs are predicted to be branches.
