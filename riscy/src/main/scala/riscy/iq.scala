@@ -88,6 +88,7 @@ class IssueQueue extends Module {
 		} .otherwise {
 			wakeUpRs1(j) := iqueue(j).rs1Val.valid
 		}
+		//printf("Rs1WakeUp ROB%d val: %x\n", UInt(j), wakeUpRs1(j))
 	}
 
 	val wakeUpRs2 = Vec.fill(16) {Bool()}
@@ -97,6 +98,7 @@ class IssueQueue extends Module {
 		} .otherwise {
 			wakeUpRs2(j) := iqueue(j).rs2Val.valid
 		}
+		//printf("Rs2WakeUp ROB%d val: %x\n", UInt(j), wakeUpRs2(j))
   }
 	
 	// this is to check which all insts are ready
@@ -134,6 +136,8 @@ class IssueQueue extends Module {
 	val issuedNumOH = UIntToOH(issuedNum)
 	val issuedPipelineBits = Reg(next = MuxLookup(issuedNum, iqueue(0), 
 	Array.tabulate(16) {i => UInt (i) -> iqueue(i)}))
+
+	printf("issuedNum val: %x\n issuedNumOH %x\n", issuedNum, issuedNumOH)
 	
 	io.issuedEntry.bits := issuedPipelineBits
 
@@ -163,6 +167,8 @@ class IssueQueue extends Module {
 							iqueue(j).rs2Val.valid := Bool(true)
 						} 	
 					}
+					iqueue(15).rs1Val.valid := Bool(false)
+					iqueue(15).rs2Val.valid := Bool(false)
 				}
 				for (l <- 0 to i-1) {
 					for (k <- 0 until 6) {
@@ -208,9 +214,6 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 		poke(c.io.newEntry(i).bits.rs1Val.valid, 1)
 		poke(c.io.newEntry(i).bits.rs2Val.valid, 1)
 	}
-	//poke(c.io.newEntry(1).valid, 1)
-	//poke(c.io.newEntry(2).valid, 1)
-	//poke(c.io.newEntry(3).valid, 1)
 	
 	step(1)
 	
@@ -375,7 +378,10 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 
 	println("// Test8 - Adding test to completely fill IQ")
 	println("// write back a value and issue one instruction at a time")
-
+	
+	poke(c.io.robWb.operand_s1(0), 4)
+	poke(c.io.robWb.valid_s1(0), 0)
+	
 	for (j <- 0 to 3) {
 		for (i <- 0 to 3) {
 			poke(c.io.newEntry(i).valid, 1)
@@ -385,42 +391,138 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 			poke(c.io.newEntry(i).bits.rs2Rename, 5)
 		}
 		
+		for (i <- 0 to 7) {
+			poke(c.io.issuedPrev2(i).valid,0)
+	  }
 		step(1)
 		expect(c.io.currentLen, 4*(j+1))
 		expect(c.io.issuedEntry.valid, 0)
+		expect(c.io.issuedEntry.bits.tag, 0)
 	}
+	
+	println("// Test8a")
+	
+	for (i <- 0 to 7) {
+			poke(c.io.issuedPrev2(i).valid,0)
+	}	
+	
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+	poke(c.io.robWb.operand_s1(0), 5)
+	poke(c.io.robWb.valid_s1(0), 1)
 
-//	poke(c.io.newEntry(0).valid, 0)
-//	poke(c.io.newEntry(1).valid, 0)
-//	poke(c.io.newEntry(2).valid, 0)
-//	poke(c.io.newEntry(3).valid, 0)
-//	poke(c.io.robWb.operand_s1(0), 5)
-//	poke(c.io.robWb.valid_s1(0), 1)
-//
-//	step(1)
-//	expect(c.io.currentLen, 4)
-//	expect(c.io.issuedEntry.valid, 0)
-//	
-//	for (i <- 0 to 15) {
-//		poke(c.io.newEntry(0).valid, 0)
-//		poke(c.io.newEntry(1).valid, 0)
-//		poke(c.io.newEntry(2).valid, 0)
-//		poke(c.io.newEntry(3).valid, 0)
-//
-//		step(1)
-//		expect(c.io.currentLen, (16-i))
-//		expect(c.io.issuedEntry.valid, 1)
-//		expect(c.io.issuedEntry.bits.tag, i)
-//	}
-//
-//	poke(c.io.newEntry(0).valid, 0)
-//	poke(c.io.newEntry(1).valid, 0)
-//	poke(c.io.newEntry(2).valid, 0)
-//	poke(c.io.newEntry(3).valid, 0)
-//
-//	step(1)
-//	expect(c.io.currentLen, 0)
-//	expect(c.io.issuedEntry.valid, 0)
+	step(1)
+	expect(c.io.currentLen, 16)
+	expect(c.io.issuedEntry.valid, 0)
+  
+	println("// Test8b")
+	
+	poke(c.io.robWb.operand_s1(0), 4)
+	poke(c.io.robWb.valid_s1(0), 0)
+	
+	for (i <- 0 to 15) {
+		for (i <- 0 to 7) {
+			poke(c.io.issuedPrev2(i).valid,0)
+		}
+		
+		poke(c.io.newEntry(0).valid, 0)
+		poke(c.io.newEntry(1).valid, 0)
+		poke(c.io.newEntry(2).valid, 0)
+		poke(c.io.newEntry(3).valid, 0)
+
+		step(1)
+		expect(c.io.currentLen, (15-i))
+		expect(c.io.issuedEntry.valid, 1)
+		expect(c.io.issuedEntry.bits.tag, i)
+	}
+	
+	println("// Test8c")
+	
+	for (i <- 0 to 7) {
+		poke(c.io.issuedPrev2(i).valid,0)
+	}
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+
+	step(1)
+	expect(c.io.currentLen, 0)
+	expect(c.io.issuedEntry.valid, 0)
+
+	println("// Test9 - 1st issue 2nd instruction, followed by 1st")
+	
+	for (i <- 0 to 7) {
+		poke(c.io.issuedPrev2(i).valid,0)
+	}
+	poke(c.io.newEntry(0).valid, 1)
+	poke(c.io.newEntry(0).bits.tag, 0)
+	poke(c.io.newEntry(0).bits.rs1Val.valid, 0)
+	poke(c.io.newEntry(0).bits.rs2Val.valid, 1)
+	poke(c.io.newEntry(0).bits.rs1Rename, 1)
+
+	poke(c.io.newEntry(1).valid, 1)
+	poke(c.io.newEntry(1).bits.tag, 1)
+	poke(c.io.newEntry(1).bits.rs1Val.valid, 1)
+	poke(c.io.newEntry(1).bits.rs2Val.valid, 1)
+
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+
+	step(1)
+	
+	expect(c.io.currentLen, 2)
+	expect(c.io.issuedEntry.valid, 0)
+
+	println("// Test9b")
+
+	for (i <- 0 to 7) {
+		poke(c.io.issuedPrev2(i).valid,0)
+	}
+	
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+
+	step(1)
+	expect(c.io.currentLen, 1)
+	expect(c.io.issuedEntry.valid, 1)
+	expect(c.io.issuedEntry.bits.tag, 1)
+
+	println("// Test9c")
+	
+	poke(c.io.issuedPrev2(7).valid,1)
+	poke(c.io.issuedPrev2(7).bits,1)
+	for (i <- 0 to 6) {
+		poke(c.io.issuedPrev2(i).valid,0)
+	}
+	
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+
+	step(1)
+	expect(c.io.currentLen, 0)
+	expect(c.io.issuedEntry.valid, 1)
+	expect(c.io.issuedEntry.bits.tag, 0)
+
+	println("// Test9c")
+	
+	for (i <- 0 to 7) {
+		poke(c.io.issuedPrev2(i).valid,0)
+	}
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+
+	step(1)
+	expect(c.io.currentLen, 0)
+	expect(c.io.issuedEntry.valid, 0)
 }
 
 class IssueQueueGenerator extends TestGenerator {
