@@ -26,7 +26,7 @@ class ROBEntry extends DecodeIns {
   // - is this instruction a jump
   val hasRd = Bool(OUTPUT)
   val isSt = Bool(OUTPUT)
-	val isLd = Bool(OUTPUT)
+  val isLd = Bool(OUTPUT)
 
   // From BP:
   // - was this branch predicted taken? 1 => T, 0 => NT
@@ -81,6 +81,12 @@ class ROB extends Module {
     // mispredTarget is the correct target of the mispredicted branch.
     val mispredPC = Valid(UInt(OUTPUT, 64))
     val mispredTarget = UInt(OUTPUT, 64)
+
+    // Should ROB produce a stall?
+    val stallReq = Bool(OUTPUT)
+
+    // Should ROB consume a stall?
+    val stall = Bool(INPUT) // TODO hook this up
   }
 
   // The register remap table
@@ -88,7 +94,11 @@ class ROB extends Module {
   // (1) or in the ROB (0).
   //
   // The remaining bits denote which ROB entry if the register is in the ROB
-  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6)), "remap", (x: ValidIO[UInt]) => x.bits))
+  //
+  // NOTE: writing regs is idempotent, so we need no special handling here for
+  // stalls as long as we continue to present the same input signals :)
+  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6)), 
+    "remap", (x: ValidIO[UInt]) => x.bits))
 
   // The Architectural register file
   val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64), "RF"))
@@ -114,11 +124,13 @@ class ROB extends Module {
     head.inc(headInc)
   }
 
-  // TODO: add stalling logic
+  io.stallReq := free < UInt(4)
 
   /////////////////////////////////////////////////////////////////////////////
   // Allocation logic
   /////////////////////////////////////////////////////////////////////////////
+  //
+  //TODO: pause if stallReq
   io.robFirst := head.value + (UInt(64) - free)
   io.robFree  := free
 

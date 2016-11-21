@@ -28,7 +28,7 @@ class RiscyAlloc extends Module {
     // ROB table access to populate next ROB entry
     val robPorts = Vec.fill(8) { UInt(OUTPUT, 6) }
     val robDest = Vec.fill(8) { Valid(UInt(INPUT, 64)).asInput }
-    val robFree = UInt(INPUT, 6) // How many free entries
+    val robFree = UInt(INPUT, 6) // How many free entries TODO: do we even need this? -MM
     val robFirst = UInt(INPUT, 6) // Index of the first free entry
 
     // Outputs to the Remap table and the ROB with the correct values to update
@@ -51,11 +51,11 @@ class RiscyAlloc extends Module {
   
   // Implementing pipeline for Opdecode and inst as per pipeline stage definition
   val pipelinedOpDecode = Vec.tabulate(4) {
-    i => RegEnable(opDecodes(i).io.opInfo, !stall)
+    i => RegEnable(opDecodes(i).io.opInfo, !io.stall)
   }
 
   val pipelinedInst = Vec.tabulate(4) {
-    i => RegEnable(io.inst(i), !stall)
+    i => RegEnable(io.inst(i), !io.stall)
   }
 
   // Do a simple addition to rename the instructions. Every instruction gets
