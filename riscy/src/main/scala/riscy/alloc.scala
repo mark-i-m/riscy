@@ -35,9 +35,10 @@ class RiscyAlloc extends Module {
     // for this cycle. 
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()) }
     val allocROB = Vec.fill(4) { Valid(new ROBEntry()) }
-  }
 
-  // TODO: stall if ROB is full
+    // Should alloc stall?
+    val stall = Bool(INPUT)
+  }
 
   // For each instruction, determine what resources/registers it needs.
   val opDecodes = Array.tabulate(4) {

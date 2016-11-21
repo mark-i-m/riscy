@@ -66,7 +66,13 @@ class Riscy extends Module {
   // TODO: hook up DCache and Memory
   //lsq <> memory
 
-  // TODO Hook up Stall module
+  // Hook up stalling logic
+  fetch.io.stall := stall.io.fetchStall
+  alloc.io.stall := stall.io.allocStall
+  rob.io.stall   := stall.io.robStall
+
+  stall.io.robStallReq := rob.io.stallReq
+  stall.io.arbiterStallReq := issue.io.stall
 }
 
 class TopLevelTests(c: Riscy) extends Tester(c) {
