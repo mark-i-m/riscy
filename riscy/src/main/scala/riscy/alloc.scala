@@ -51,11 +51,11 @@ class RiscyAlloc extends Module {
   
   // Implementing pipeline for Opdecode and inst as per pipeline stage definition
   val pipelinedOpDecode = Vec.tabulate(4) {
-    i => Reg(next = opDecodes(i).io.opInfo)
+    i => RegEnable(opDecodes(i).io.opInfo, !stall)
   }
 
   val pipelinedInst = Vec.tabulate(4) {
-    i => Reg(next = io.inst(i))
+    i => RegEnable(io.inst(i), !stall)
   }
 
   // Do a simple addition to rename the instructions. Every instruction gets
@@ -226,8 +226,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.remapMapping(3).valid, 0)
   step(1)
 
-  // TODO: expect output to ROB
-
   // Should map r1 to ROB0
   expect(c.io.allocRemap(0).valid, 1)
   expect(c.io.allocRemap(0).bits.reg, 1)
@@ -325,8 +323,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.remapMapping(6).valid, 1)
  
   step(1)
-
-  // TODO: expect output to ROB
 
   // Should map r1 to ROB5
   expect(c.io.allocRemap(3).valid, 1)
@@ -450,8 +446,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
 
   step(1)
 
-  // TODO: expect output to ROB
-
   // Should map r1 to ROB6
   expect(c.io.allocRemap(0).valid, 1)
   expect(c.io.allocRemap(0).bits.reg, 1)
@@ -505,8 +499,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocRemap(1).valid, 0)
   expect(c.io.allocRemap(3).valid, 0)
   expect(c.io.allocROB(3).valid, 0)
-
-  // TODO: add more tests
 
   // add r4 <- r3 + r5
   // add r5 <- r4 + r6
