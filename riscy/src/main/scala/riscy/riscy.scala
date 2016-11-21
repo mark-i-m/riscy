@@ -67,10 +67,11 @@ class Riscy extends Module {
   //lsq <> memory
 
   // Hook up stalling logic
-  fetch.io.stall := stall.io.fetchStall
-  alloc <> stall
-  rob <> stall
+  fetch.io.stall      := stall.io.fetchStall
+  alloc.io.allocStall := stall.io.allocStall
+  rob.io.robStall     := stall.io.robStall
 
+  stall.io.robStallReq := rob.io.robStallReq
   stall.io.arbiterStallReq := issue.io.stall
 }
 

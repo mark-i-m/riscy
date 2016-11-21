@@ -27,6 +27,9 @@ test: $(TESTS)
 $(TESTS) : %.test :
 	$(SBT) "run riscy.$*Generator"
 
+TopLevel.test:
+	$(SBT) "run riscy.TopLevelGenerator"
+
 # Run benchmarks with `make <Bench name>.bench`
 $(BENCHES) : %.bench : ./riscy_emu
 	./riscy_emu bench/$* $*.log $*.vcd
