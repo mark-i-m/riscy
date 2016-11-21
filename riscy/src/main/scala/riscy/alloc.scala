@@ -14,6 +14,7 @@ class RiscyAlloc extends Module {
   val io = new Bundle {
     // Input from the rotator and decode logic with 4 decoded instructions
     val inst = Vec.fill(4) { Valid(new DecodeIns()).flip }
+    val pc = Vec.fill(4) {UInt(INPUT, 64)}
 
     // Access the Remap table to find out what the current mappings are (so we
     // can rename)
@@ -27,16 +28,17 @@ class RiscyAlloc extends Module {
     // ROB table access to populate next ROB entry
     val robPorts = Vec.fill(8) { UInt(OUTPUT, 6) }
     val robDest = Vec.fill(8) { Valid(UInt(INPUT, 64)).asInput }
-    val robFree = UInt(INPUT, 6) // How many free entries
+    val robFree = UInt(INPUT, 6) // How many free entries TODO: do we even need this? -MM
     val robFirst = UInt(INPUT, 6) // Index of the first free entry
 
     // Outputs to the Remap table and the ROB with the correct values to update
     // for this cycle. 
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()) }
     val allocROB = Vec.fill(4) { Valid(new ROBEntry()) }
-  }
 
-  // TODO: stall if ROB is full
+    // Should alloc stall?
+    val allocStall = Bool(INPUT)
+  }
 
   // For each instruction, determine what resources/registers it needs.
   val opDecodes = Array.tabulate(4) {
@@ -49,11 +51,11 @@ class RiscyAlloc extends Module {
   
   // Implementing pipeline for Opdecode and inst as per pipeline stage definition
   val pipelinedOpDecode = Vec.tabulate(4) {
-    i => Reg(next = opDecodes(i).io.opInfo)
+    i => RegEnable(opDecodes(i).io.opInfo, !io.allocStall)
   }
 
   val pipelinedInst = Vec.tabulate(4) {
-    i => Reg(next = io.inst(i))
+    i => RegEnable(io.inst(i), !io.allocStall)
   }
 
   // Do a simple addition to rename the instructions. Every instruction gets
@@ -116,7 +118,8 @@ class RiscyAlloc extends Module {
     robEntry.op := pipelinedInst(i).bits.op
     robEntry.funct3 := pipelinedInst(i).bits.funct3
     robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
-
+		robEntry.isSt := pipelinedOpDecode(i).isSt
+		robEntry.isLd := pipelinedOpDecode(i).isLd
     // First operand
     when (renamedRs1(i).valid) {
       // Getting from ROB
@@ -223,8 +226,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.remapMapping(3).valid, 0)
   step(1)
 
-  // TODO: expect output to ROB
-
   // Should map r1 to ROB0
   expect(c.io.allocRemap(0).valid, 1)
   expect(c.io.allocRemap(0).bits.reg, 1)
@@ -322,8 +323,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.remapMapping(6).valid, 1)
  
   step(1)
-
-  // TODO: expect output to ROB
 
   // Should map r1 to ROB5
   expect(c.io.allocRemap(3).valid, 1)
@@ -447,8 +446,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
 
   step(1)
 
-  // TODO: expect output to ROB
-
   // Should map r1 to ROB6
   expect(c.io.allocRemap(0).valid, 1)
   expect(c.io.allocRemap(0).bits.reg, 1)
@@ -502,8 +499,6 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocRemap(1).valid, 0)
   expect(c.io.allocRemap(3).valid, 0)
   expect(c.io.allocROB(3).valid, 0)
-
-  // TODO: add more tests
 
   // add r4 <- r3 + r5
   // add r5 <- r4 + r6

@@ -26,6 +26,7 @@ class ROBEntry extends DecodeIns {
   // - is this instruction a jump
   val hasRd = Bool(OUTPUT)
   val isSt = Bool(OUTPUT)
+  val isLd = Bool(OUTPUT)
 
   // From BP:
   // - was this branch predicted taken? 1 => T, 0 => NT
@@ -80,6 +81,19 @@ class ROB extends Module {
     // mispredTarget is the correct target of the mispredicted branch.
     val mispredPC = Valid(UInt(OUTPUT, 64))
     val mispredTarget = UInt(OUTPUT, 64)
+
+    // Should ROB produce a stall?
+    val robStallReq = Bool(OUTPUT)
+
+    // Should ROB consume a stall?
+    // TODO: Need to stop
+    // - stCommit
+    // - mispredPC
+    // - mispredTarget
+    //
+    // Don't need to stall
+    // - anything in commit except under the above circumstances
+    val robStall = Bool(INPUT)
   }
 
   // The register remap table
@@ -87,7 +101,11 @@ class ROB extends Module {
   // (1) or in the ROB (0).
   //
   // The remaining bits denote which ROB entry if the register is in the ROB
-  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6)), "remap", (x: ValidIO[UInt]) => x.bits))
+  //
+  // NOTE: writing regs is idempotent, so we need no special handling here for
+  // stalls as long as we continue to present the same input signals :)
+  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6)), 
+    "remap", (x: ValidIO[UInt]) => x.bits))
 
   // The Architectural register file
   val rf = Module(new RegFile(32, 8, 4, i => UInt(width = 64), "RF"))
@@ -113,7 +131,7 @@ class ROB extends Module {
     head.inc(headInc)
   }
 
-  // TODO: add stalling logic
+  io.robStallReq := free < UInt(4)
 
   /////////////////////////////////////////////////////////////////////////////
   // Allocation logic
@@ -131,37 +149,53 @@ class ROB extends Module {
     io.robDest(i) := rob(io.robPorts(i)).rdVal
   }
 
-  // Latch new remap table mappings
-  for(i <- 0 until 4) {
-    remap.io.wPorts(i).valid  := io.allocRemap(i).valid
-    remap.io.wPorts(i).bits   := io.allocRemap(i).bits.reg
-    remap.io.wValues(i).valid := Bool(true)
-    remap.io.wValues(i).bits  := io.allocRemap(i).bits.idxROB
-  }
+  when(!io.robStallReq) {
+    // Latch new remap table mappings
+    for(i <- 0 until 4) {
+      remap.io.wPorts(i).valid  := io.allocRemap(i).valid
+      remap.io.wPorts(i).bits   := io.allocRemap(i).bits.reg
+      remap.io.wValues(i).valid := Bool(true)
+      remap.io.wValues(i).bits  := io.allocRemap(i).bits.idxROB
+    }
 
-  // Latch new ROB entries
-  for(i <- 0 until 64) {
-    when(UInt(i) === io.robFirst) {
-      robW(i) := io.allocROB(0)
-      when(io.allocROB(0).valid) {
-        printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(0).bits.pc)
+    // Latch new ROB entries
+    for(i <- 0 until 64) {
+      when(UInt(i) === io.robFirst) {
+        robW(i) := io.allocROB(0)
+        when(io.allocROB(0).valid) {
+          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(0).bits.pc)
+        }
+      } .elsewhen(UInt(i) === io.robFirst + UInt(1)) {
+        robW(i) := io.allocROB(1)
+        when(io.allocROB(1).valid) {
+          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(1).bits.pc)
+        }
+      } .elsewhen(UInt(i) === io.robFirst + UInt(2)) {
+        robW(i) := io.allocROB(2)
+        when(io.allocROB(2).valid) {
+          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(2).bits.pc)
+        }
+      } .elsewhen(UInt(i) === io.robFirst + UInt(3)) {
+        robW(i) := io.allocROB(3)
+        when(io.allocROB(3).valid) {
+          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(3).bits.pc)
+        }
+      } .otherwise {
+        robW(i).valid := Bool(false) // write disable
+        robW(i).bits  := new ROBEntry
       }
-    } .elsewhen(UInt(i) === io.robFirst + UInt(1)) {
-      robW(i) := io.allocROB(1)
-      when(io.allocROB(1).valid) {
-        printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(1).bits.pc)
-      }
-    } .elsewhen(UInt(i) === io.robFirst + UInt(2)) {
-      robW(i) := io.allocROB(2)
-      when(io.allocROB(2).valid) {
-        printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(2).bits.pc)
-      }
-    } .elsewhen(UInt(i) === io.robFirst + UInt(3)) {
-      robW(i) := io.allocROB(3)
-      when(io.allocROB(3).valid) {
-        printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(3).bits.pc)
-      }
-    } .otherwise {
+    }
+  } .otherwise {
+    // Don't latch new remap table mappings
+    for(i <- 0 until 4) {
+      remap.io.wPorts(i).valid  := Bool(false)
+      remap.io.wPorts(i).bits   := UInt(0)
+      remap.io.wValues(i).valid := Bool(false)
+      remap.io.wValues(i).bits  := UInt(0)
+    }
+
+    // Don't latch new ROB entries
+    for(i <- 0 until 64) {
       robW(i).valid := Bool(false) // write disable
       robW(i).bits  := new ROBEntry
     }
@@ -483,7 +517,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   )
 
   // Try some random reads and writes
-  for(i <- 0 until 1000) {
+  for(i <- 0 until 100) {
     val randRPort = rnd.nextInt(8)
     val randWPort = rnd.nextInt(4)
     val randWReg = rnd.nextInt(32)

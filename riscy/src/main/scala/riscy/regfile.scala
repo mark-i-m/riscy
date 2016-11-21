@@ -70,7 +70,7 @@ class RegFile[T <: Data](size: Int, numRPorts: Int, numWPorts: Int, gen: Int => 
 }
 
 class RegFileTests(c: RegFile[ValidIO[UInt]]) extends Tester(c) {
-  for (i <- 0 until 1000) {
+  for (i <- 0 until 100) {
     val randVal = rnd.nextInt(1 << 16)
     val randValid = rnd.nextInt(2)
     val randRPort = rnd.nextInt(4)

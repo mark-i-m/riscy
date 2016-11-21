@@ -1,5 +1,10 @@
 # List of MODULES for unit tests
-MODULES=HelloModule Fetch Decode Alloc ROB RegFile OpDecode ICache IssueQueue MultiCounter
+# Front end
+MODULES = Fetch ICache DecodeSingle OpDecode Alloc ROB 
+# Backend
+MODULES += IssueQueue IqArbiter LSQ Issue ALU RobWriteback Execute Stall
+# Util
+MODULES += HelloModule MultiCounter CAM RegFile
 
 # List of BENCHES for integration testing
 BENCHES=Hello.hex.bench
@@ -21,6 +26,9 @@ test: $(TESTS)
 # Run unit tests with `make <Module name>.test`
 $(TESTS) : %.test :
 	$(SBT) "run riscy.$*Generator"
+
+TopLevel.test:
+	$(SBT) "run riscy.TopLevelGenerator"
 
 # Run benchmarks with `make <Bench name>.bench`
 $(BENCHES) : %.bench : ./riscy_emu
