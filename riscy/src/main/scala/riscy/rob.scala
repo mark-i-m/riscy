@@ -144,37 +144,53 @@ class ROB extends Module {
     io.robDest(i) := rob(io.robPorts(i)).rdVal
   }
 
-  // Latch new remap table mappings
-  for(i <- 0 until 4) {
-    remap.io.wPorts(i).valid  := io.allocRemap(i).valid
-    remap.io.wPorts(i).bits   := io.allocRemap(i).bits.reg
-    remap.io.wValues(i).valid := Bool(true)
-    remap.io.wValues(i).bits  := io.allocRemap(i).bits.idxROB
-  }
+  when(!io.stallReq) {
+    // Latch new remap table mappings
+    for(i <- 0 until 4) {
+      remap.io.wPorts(i).valid  := io.allocRemap(i).valid
+      remap.io.wPorts(i).bits   := io.allocRemap(i).bits.reg
+      remap.io.wValues(i).valid := Bool(true)
+      remap.io.wValues(i).bits  := io.allocRemap(i).bits.idxROB
+    }
 
-  // Latch new ROB entries
-  for(i <- 0 until 64) {
-    when(UInt(i) === io.robFirst) {
-      robW(i) := io.allocROB(0)
-      when(io.allocROB(0).valid) {
-        printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(0).bits.pc)
+    // Latch new ROB entries
+    for(i <- 0 until 64) {
+      when(UInt(i) === io.robFirst) {
+        robW(i) := io.allocROB(0)
+        when(io.allocROB(0).valid) {
+          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(0).bits.pc)
+        }
+      } .elsewhen(UInt(i) === io.robFirst + UInt(1)) {
+        robW(i) := io.allocROB(1)
+        when(io.allocROB(1).valid) {
+          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(1).bits.pc)
+        }
+      } .elsewhen(UInt(i) === io.robFirst + UInt(2)) {
+        robW(i) := io.allocROB(2)
+        when(io.allocROB(2).valid) {
+          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(2).bits.pc)
+        }
+      } .elsewhen(UInt(i) === io.robFirst + UInt(3)) {
+        robW(i) := io.allocROB(3)
+        when(io.allocROB(3).valid) {
+          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(3).bits.pc)
+        }
+      } .otherwise {
+        robW(i).valid := Bool(false) // write disable
+        robW(i).bits  := new ROBEntry
       }
-    } .elsewhen(UInt(i) === io.robFirst + UInt(1)) {
-      robW(i) := io.allocROB(1)
-      when(io.allocROB(1).valid) {
-        printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(1).bits.pc)
-      }
-    } .elsewhen(UInt(i) === io.robFirst + UInt(2)) {
-      robW(i) := io.allocROB(2)
-      when(io.allocROB(2).valid) {
-        printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(2).bits.pc)
-      }
-    } .elsewhen(UInt(i) === io.robFirst + UInt(3)) {
-      robW(i) := io.allocROB(3)
-      when(io.allocROB(3).valid) {
-        printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(3).bits.pc)
-      }
-    } .otherwise {
+    }
+  } .otherwise {
+    // Don't latch new remap table mappings
+    for(i <- 0 until 4) {
+      remap.io.wPorts(i).valid  := Bool(false)
+      remap.io.wPorts(i).bits   := UInt(0)
+      remap.io.wValues(i).valid := Bool(false)
+      remap.io.wValues(i).bits  := UInt(0)
+    }
+
+    // Don't latch new ROB entries
+    for(i <- 0 until 64) {
       robW(i).valid := Bool(false) // write disable
       robW(i).bits  := new ROBEntry
     }
