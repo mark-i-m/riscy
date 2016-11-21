@@ -83,11 +83,13 @@ class ROB extends Module {
     val mispredTarget = UInt(OUTPUT, 64)
 
     // Should ROB produce a stall?
+    // TODO test
     val robStallReq = Bool(OUTPUT)
 
     // Should ROB consume a stall?
+    // TODO test
     // TODO: Need to stop
-    // - stCommit
+    // - stCommit (TODO: or could this cause a deadlock?)
     // - mispredPC
     // - mispredTarget
     //
