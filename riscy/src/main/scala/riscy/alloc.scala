@@ -37,7 +37,7 @@ class RiscyAlloc extends Module {
     val allocROB = Vec.fill(4) { Valid(new ROBEntry()) }
 
     // Should alloc stall?
-    val stall = Bool(INPUT)
+    val allocStall = Bool(INPUT)
   }
 
   // For each instruction, determine what resources/registers it needs.
@@ -51,11 +51,11 @@ class RiscyAlloc extends Module {
   
   // Implementing pipeline for Opdecode and inst as per pipeline stage definition
   val pipelinedOpDecode = Vec.tabulate(4) {
-    i => RegEnable(opDecodes(i).io.opInfo, !io.stall)
+    i => RegEnable(opDecodes(i).io.opInfo, !io.allocStall)
   }
 
   val pipelinedInst = Vec.tabulate(4) {
-    i => RegEnable(io.inst(i), !io.stall)
+    i => RegEnable(io.inst(i), !io.allocStall)
   }
 
   // Do a simple addition to rename the instructions. Every instruction gets

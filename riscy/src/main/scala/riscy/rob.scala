@@ -83,10 +83,17 @@ class ROB extends Module {
     val mispredTarget = UInt(OUTPUT, 64)
 
     // Should ROB produce a stall?
-    val stallReq = Bool(OUTPUT)
+    val robStallReq = Bool(OUTPUT)
 
     // Should ROB consume a stall?
-    val stall = Bool(INPUT) // TODO hook this up
+    // TODO: Need to stop
+    // - stCommit
+    // - mispredPC
+    // - mispredTarget
+    //
+    // Don't need to stall
+    // - anything in commit except under the above circumstances
+    val robStall = Bool(INPUT)
   }
 
   // The register remap table
@@ -124,13 +131,11 @@ class ROB extends Module {
     head.inc(headInc)
   }
 
-  io.stallReq := free < UInt(4)
+  io.robStallReq := free < UInt(4)
 
   /////////////////////////////////////////////////////////////////////////////
   // Allocation logic
   /////////////////////////////////////////////////////////////////////////////
-  //
-  //TODO: pause if stallReq
   io.robFirst := head.value + (UInt(64) - free)
   io.robFree  := free
 
@@ -144,7 +149,7 @@ class ROB extends Module {
     io.robDest(i) := rob(io.robPorts(i)).rdVal
   }
 
-  when(!io.stallReq) {
+  when(!io.robStallReq) {
     // Latch new remap table mappings
     for(i <- 0 until 4) {
       remap.io.wPorts(i).valid  := io.allocRemap(i).valid
