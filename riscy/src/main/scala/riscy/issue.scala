@@ -119,10 +119,10 @@ class Issue extends Module {
 
   // Providing tags of last 2 instructions to all
   // issue queues for wakeup - TODO
-  //  issueQ0.io.issuedPrev2  := issuedPrev2
-  //  issueQ1.io.issuedPrev2  := issuedPrev2
-  //  issueQ2.io.issuedPrev2  := issuedPrev2
-  //  issueQ3.io.issuedPrev2  := issuedPrev2
+  issueQ0.io.issuedPrev2  := issuedPrev2
+  issueQ1.io.issuedPrev2  := issuedPrev2
+  issueQ2.io.issuedPrev2  := issuedPrev2
+  issueQ3.io.issuedPrev2  := issuedPrev2
 }
 
 class IssueTests(c: Issue) extends Tester(c) {
