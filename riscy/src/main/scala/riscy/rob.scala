@@ -83,18 +83,25 @@ class ROB extends Module {
     val mispredTarget = UInt(OUTPUT, 64)
 
     // Should ROB produce a stall?
-    // TODO test
     val robStallReq = Bool(OUTPUT)
 
     // Should ROB consume a stall?
-    // TODO test
-    // TODO: Need to stop
-    // - stCommit (TODO: or could this cause a deadlock?)
-    // - mispredPC
-    // - mispredTarget
     //
-    // Don't need to stall
-    // - anything in commit except under the above circumstances
+    // When the ROB is consuming a stall, we need to be really careful to avoid
+    // causing a deadlock OR losing instructions.  We should only stop
+    // committing instructions if the head of the ROB is a mispredicted jump
+    // and we are consuming a stall. Note, the branch *must* THE FIRST
+    // INSTRUCTION in the ROB.
+    //
+    // In particular, we should not prevent a stall from committing if it comes
+    // *before* a mispredicted branch simply because they could commit in the
+    // same cycle because this could cause deadlock. Consider if the LSQ is
+    // full and the issue arbiter produces a stall. The second instruction in
+    // the ROB happens to be a mispredicted branch and the first is a store
+    // that is committing. Now, the LSQ needs the store to commit so it can
+    // free LSQ entries, but the store will not commit as long as LSQ is full
+    // because the mispredicted branch prevents the head from committing and
+    // the stall prevents the branch from committing.
     val robStall = Bool(INPUT)
   }
 
@@ -133,7 +140,10 @@ class ROB extends Module {
     head.inc(headInc)
   }
 
-  io.robStallReq := free < UInt(4)
+  // TODO: test this
+  // Should request that fetch stall if the ROB is full, unless we are about to
+  // flush everything anyway.
+  io.robStallReq := free < UInt(4) && !io.mispredPC.valid
 
   /////////////////////////////////////////////////////////////////////////////
   // Allocation logic
@@ -264,11 +274,18 @@ class ROB extends Module {
   }
 
   // Compute a simple flag that tells if an instruction could commit this cycle.
-  // This should only happen if it is at the front of the queue (first 4) AND
-  // all the instructions before it are ready to commit AND the ready bit for its
-  // destination is set AND the previous instruction is not a mispredicted branch
-  // AND either this is not a store or there are fewer than 2 stores already
-  // committing this cycle
+  // This should only happen if 
+  //  /\ it is at the front of the queue (first 4)
+  //  /\ all the instructions before it are ready to commit
+  //  /\ the ready bit for its destination is set 
+  //  /\ the previous instruction is not a mispredicted branch
+  //  /\ \/ this is not a store 
+  //     \/ there are fewer than 2 stores already committing this cycle
+  //  /\ \/ this is not a mispredicted branch (TODO: can jal or jalr be mispred?)
+  //     \/ we are not stalling
+  //
+  // NOTE: /\ is AND, \/ is OR
+  //
   // TODO: test multiple stores committing this cycle
   //
   // Note: there is an easy optimization here in that if i < 2, we know that there
@@ -281,7 +298,8 @@ class ROB extends Module {
       (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) &&
       front(i).rdVal.valid &&
       (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) }) &&
-      (if(i < 2) { Bool(true) } else { front(i).op =/= UInt(23) || numStores(i) < UInt(2) })
+      (if(i < 2) { Bool(true) } else { front(i).op =/= UInt(23) || numStores(i) < UInt(2) }) &&
+      (!(front(i).isMispredicted && front(i).op === UInt(0x63)) || !io.robStall)
 
     when(couldCommit(i)) {
       printf("Commit ROB%d\n", head.value + UInt(i))
