@@ -106,7 +106,7 @@ class ROB extends Module {
   //
   // NOTE: writing regs is idempotent, so we need no special handling here for
   // stalls as long as we continue to present the same input signals :)
-  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6)), 
+  val remap = Module(new RegFile(32, 12, 8, i => Valid(UInt(width = 6)),
     "remap", (x: ValidIO[UInt]) => x.bits))
 
   // The Architectural register file
@@ -247,10 +247,32 @@ class ROB extends Module {
   // front(i) = head + i
   val front = Vec.tabulate(4) { i => rob(head.value + UInt(i)) }
 
+  // Compute the number of stores being committed for use in couldCommit
+  // numStores(i) := number of stores coming before front(i) among the four
+  // instructions at the head of the ROB this cycle.
+  val numStores = Vec.fill(4) { UInt(width = 2) }
+  for(i <- 0 until 4) {
+    if(i == 0) {
+      numStores(i) := UInt(0)
+    } else {
+      when(front(i).op === UInt(23)) {
+        numStores(i) := numStores(i-1) + UInt(1)
+      } .otherwise {
+        numStores(i) := numStores(i-1)
+      }
+    }
+  }
+
   // Compute a simple flag that tells if an instruction could commit this cycle.
   // This should only happen if it is at the front of the queue (first 4) AND
   // all the instructions before it are ready to commit AND the ready bit for its
-  // destination is set AND the previous instruction is not a mispredicted branch.
+  // destination is set AND the previous instruction is not a mispredicted branch
+  // AND either this is not a store or there are fewer than 2 stores already
+  // committing this cycle
+  // TODO: test multiple stores committing this cycle
+  //
+  // Note: there is an easy optimization here in that if i < 2, we know that there
+  // cannot already be two stores.
   //
   // couldCommit(i) corresponds to front(i)
   val couldCommit = Vec.fill(4) { Bool() }
@@ -258,7 +280,8 @@ class ROB extends Module {
     couldCommit(i) :=
       (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) &&
       front(i).rdVal.valid &&
-      (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) })
+      (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) }) &&
+      (if(i < 2) { Bool(true) } else { front(i).op =/= UInt(23) || numStores(i) < UInt(2) })
 
     when(couldCommit(i)) {
       printf("Commit ROB%d\n", head.value + UInt(i))
@@ -281,8 +304,8 @@ class ROB extends Module {
   io.mispredPC.bits  := MuxLookup(firstMispred, UInt(0),
     Array.tabulate(4) { i => UInt(i) -> front(i).pc})
   io.mispredTarget   := MuxLookup(firstMispred, UInt(0),
-    Array.tabulate(4) { 
-      i => UInt(i) -> Mux(front(i).isMispredicted ^ front(i).predTaken, 
+    Array.tabulate(4) {
+      i => UInt(i) -> Mux(front(i).isMispredicted ^ front(i).predTaken,
         front(i).rdVal.bits, front(i).pc + UInt(4))
     })
 
@@ -1003,7 +1026,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   expectROBDestValid(Array(4 -> false, 5 -> false, 6 -> false, 7 -> false))
 
   // Check that RF is correct
-  
+
   poke(c.io.rfPorts(0), 1) // Read r1
   poke(c.io.rfPorts(1), 2) // Read r2
   poke(c.io.rfPorts(2), 3) // Read r3
