@@ -84,25 +84,6 @@ class ROB extends Module {
 
     // Should ROB produce a stall?
     val robStallReq = Bool(OUTPUT)
-
-    // Should ROB consume a stall?
-    //
-    // When the ROB is consuming a stall, we need to be really careful to avoid
-    // causing a deadlock OR losing instructions.  We should only stop
-    // committing instructions if the head of the ROB is a mispredicted jump
-    // and we are consuming a stall. Note, the branch *must* THE FIRST
-    // INSTRUCTION in the ROB.
-    //
-    // In particular, we should not prevent a stall from committing if it comes
-    // *before* a mispredicted branch simply because they could commit in the
-    // same cycle because this could cause deadlock. Consider if the LSQ is
-    // full and the issue arbiter produces a stall. The second instruction in
-    // the ROB happens to be a mispredicted branch and the first is a store
-    // that is committing. Now, the LSQ needs the store to commit so it can
-    // free LSQ entries, but the store will not commit as long as LSQ is full
-    // because the mispredicted branch prevents the head from committing and
-    // the stall prevents the branch from committing.
-    val robStall = Bool(INPUT)
   }
 
   // The register remap table
@@ -281,8 +262,6 @@ class ROB extends Module {
   //  /\ the previous instruction is not a mispredicted branch
   //  /\ \/ this is not a store 
   //     \/ there are fewer than 2 stores already committing this cycle
-  //  /\ \/ this is not a mispredicted branch (TODO: can jal or jalr be mispred?)
-  //     \/ we are not stalling
   //
   // NOTE: /\ is AND, \/ is OR
   //
@@ -298,8 +277,7 @@ class ROB extends Module {
       (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) &&
       front(i).rdVal.valid &&
       (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) }) &&
-      (if(i < 2) { Bool(true) } else { front(i).op =/= UInt(23) || numStores(i) < UInt(2) }) &&
-      (!(front(i).isMispredicted && front(i).op === UInt(0x63)) || !io.robStall)
+      (if(i < 2) { Bool(true) } else { front(i).op =/= UInt(23) || numStores(i) < UInt(2) })
 
     when(couldCommit(i)) {
       printf("Commit ROB%d\n", head.value + UInt(i))

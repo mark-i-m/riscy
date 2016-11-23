@@ -14,12 +14,10 @@ class Stall extends Module {
     // Signals that a stage should stall
     val fetchStall = Bool(OUTPUT)
     val allocStall = Bool(OUTPUT)
-    val robStall   = Bool(OUTPUT)
   }
 
   io.fetchStall := io.allocStall
-  io.allocStall := io.robStall || io.robStallReq
-  io.robStall   := io.arbiterStallReq
+  io.allocStall := io.arbiterStallReq || io.robStallReq
 }
 
 class StallTests(c: Stall) extends Tester(c) {
@@ -33,7 +31,6 @@ class StallTests(c: Stall) extends Tester(c) {
   def expectFlags(fetch: Boolean, alloc: Boolean, rob: Boolean) = {
     expect(c.io.fetchStall, fetch)
     expect(c.io.allocStall, alloc)
-    expect(c.io.robStall,   rob)
   }
 
   // nobody stalls
