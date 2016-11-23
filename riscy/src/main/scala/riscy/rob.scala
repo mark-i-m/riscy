@@ -84,6 +84,18 @@ class ROB extends Module {
 
     // Should ROB produce a stall?
     val robStallReq = Bool(OUTPUT)
+
+    // NOTE: ROB is not a stall consumer.
+    //
+    // Commit should never stall for any reason, as this can induce deadlock.
+    // In particular, LSQ and Fetch should be responsive to the stCommit and
+    // mispredPC signals EVEN IF THEY ARE STALLED! This guarantees that ROB can
+    // continue to commit instructions and the processor will always make
+    // progress.
+    //
+    // Otherwise, it would be possible for a structure to fill up and requests
+    // a stall while at the same time, the commit stage is stalled because
+    // fetch or LSQ is stalled and won't accept a mispredict or stCommit flag.
   }
 
   // The register remap table
