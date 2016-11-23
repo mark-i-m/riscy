@@ -1,6 +1,11 @@
 Project Riscy [![Build Status](https://travis-ci.com/mark-i-m/rocketchip.svg?token=z7ydGWURgxF6b4fcVtfN&branch=master)](https://travis-ci.com/mark-i-m/rocketchip)
 =============
 
+- Karan Bavishi
+- Mark Mansi
+- Suhas Pai
+- Preyas Shah
+
 The repo for our [CS
 752](http://pages.cs.wisc.edu/~karu/courses/cs752/fall2016/wiki/index.php?n=Main.HomePage)
 project! :smiley:
