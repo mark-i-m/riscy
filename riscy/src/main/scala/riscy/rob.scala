@@ -257,7 +257,7 @@ class ROB extends Module {
     if(i == 0) {
       numStores(i) := UInt(0)
     } else {
-      when(front(i).op === UInt(23)) {
+      when(front(i).op === UInt(0x23)) {
         numStores(i) := numStores(i-1) + UInt(1)
       } .otherwise {
         numStores(i) := numStores(i-1)
@@ -266,12 +266,12 @@ class ROB extends Module {
   }
 
   // Compute a simple flag that tells if an instruction could commit this cycle.
-  // This should only happen if 
+  // This should only happen if
   //  /\ it is at the front of the queue (first 4)
   //  /\ all the instructions before it are ready to commit
-  //  /\ the ready bit for its destination is set 
+  //  /\ the ready bit for its destination is set
   //  /\ the previous instruction is not a mispredicted branch
-  //  /\ \/ this is not a store 
+  //  /\ \/ this is not a store
   //     \/ there are fewer than 2 stores already committing this cycle
   //
   // NOTE: /\ is AND, \/ is OR
@@ -286,7 +286,7 @@ class ROB extends Module {
       (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) &&
       front(i).rdVal.valid &&
       (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) }) &&
-      (if(i < 2) { Bool(true) } else { front(i).op =/= UInt(23) || numStores(i) < UInt(2) })
+      (if(i < 2) { Bool(true) } else { front(i).op =/= UInt(0x23) || numStores(i) < UInt(2) })
 
     when(couldCommit(i)) {
       printf("Commit ROB%d\n", head.value + UInt(i))
@@ -473,26 +473,26 @@ class ROBTests(c: ROB) extends Tester(c) {
     rs1: Int, rs1Rename: (Boolean, Int), rs1Val: (Boolean, Int),
     rs2: Int, rs2Rename: (Boolean, Int), rs2Val: (Boolean, Int)) = {
 
-    poke(c.io.allocROB(1).valid, true)
-    poke(c.io.allocROB(1).bits.pc, pc)
-    poke(c.io.allocROB(1).bits.tag, tag)
-    poke(c.io.allocROB(1).bits.op, 0x23)
-    poke(c.io.allocROB(1).bits.funct3, 0x2) // word, not byte, or double
-    poke(c.io.allocROB(1).bits.rs1, rs1)
-    poke(c.io.allocROB(1).bits.rs2, rs2)
-    poke(c.io.allocROB(1).bits.rd, 0) // No dest
-    poke(c.io.allocROB(1).bits.immS, imm)
-    poke(c.io.allocROB(1).bits.hasRd, false)
-    poke(c.io.allocROB(1).bits.isSt, true)
-    poke(c.io.allocROB(1).bits.predTaken, false)
-    poke(c.io.allocROB(1).bits.isMispredicted, false)
-    poke(c.io.allocROB(1).bits.rs1Rename, if(rs1Rename._1) { rs1Rename._2 } else { 0 })
-    poke(c.io.allocROB(1).bits.rs2Rename, if(rs2Rename._1) { rs2Rename._2 } else { 0 }) 
-    poke(c.io.allocROB(1).bits.rs1Val.valid, rs1Val._1)
-    poke(c.io.allocROB(1).bits.rs1Val.bits, if(rs1Val._1) { rs1Val._2 } else { 0 })
-    poke(c.io.allocROB(1).bits.rs2Val.valid, rs2Val._1)
-    poke(c.io.allocROB(1).bits.rs2Val.bits, if(rs2Val._1) { rs2Val._2 } else { 0 })
-    poke(c.io.allocROB(1).bits.rdVal.valid, false) // NOT Ready
+    poke(c.io.allocROB(port).valid, true)
+    poke(c.io.allocROB(port).bits.pc, pc)
+    poke(c.io.allocROB(port).bits.tag, tag)
+    poke(c.io.allocROB(port).bits.op, 0x23)
+    poke(c.io.allocROB(port).bits.funct3, 0x2) // word, not byte, or double
+    poke(c.io.allocROB(port).bits.rs1, rs1)
+    poke(c.io.allocROB(port).bits.rs2, rs2)
+    poke(c.io.allocROB(port).bits.rd, 0) // No dest
+    poke(c.io.allocROB(port).bits.immS, imm)
+    poke(c.io.allocROB(port).bits.hasRd, false)
+    poke(c.io.allocROB(port).bits.isSt, true)
+    poke(c.io.allocROB(port).bits.predTaken, false)
+    poke(c.io.allocROB(port).bits.isMispredicted, false)
+    poke(c.io.allocROB(port).bits.rs1Rename, if(rs1Rename._1) { rs1Rename._2 } else { 0 })
+    poke(c.io.allocROB(port).bits.rs2Rename, if(rs2Rename._1) { rs2Rename._2 } else { 0 })
+    poke(c.io.allocROB(port).bits.rs1Val.valid, rs1Val._1)
+    poke(c.io.allocROB(port).bits.rs1Val.bits, if(rs1Val._1) { rs1Val._2 } else { 0 })
+    poke(c.io.allocROB(port).bits.rs2Val.valid, rs2Val._1)
+    poke(c.io.allocROB(port).bits.rs2Val.bits, if(rs2Val._1) { rs2Val._2 } else { 0 })
+    poke(c.io.allocROB(port).bits.rdVal.valid, false) // NOT Ready
   }
 
   def pokeROBInvalid(ports: Array[Int]) =
@@ -1037,8 +1037,88 @@ class ROBTests(c: ROB) extends Tester(c) {
   // check that second store does not commit
   expectStCommit(Array.fill(4)(false))
 
-  // TODO: test that robStallReq is set when ROB is full
-  // TODO: test that no more than two stores commit in a cycle
+  step(1)
+
+  // Fill the ROB with stall instructions and check that
+  //
+  // - TODO: robStallReq is set when ROB is full
+  // - TODO: no more than two stores commit in a cycle
+
+  // sw 0x100 to 0x140 [r1] <- $0
+  for(i <- 0 until 64) {
+    pokeROBStW(i % 4, i, 0x108 + 4*i, 0x100 + 4*i,
+      1, (false, 0), (true, 0xDEAFBDED),
+      0, (false, 0), (true, 0))
+
+    if(i % 4 == 3) step(1)
+  }
+
+  // ROB should produce a stall now b/c it is full
+  expect(c.io.robStallReq, true);
+
+  expect(c.io.robFree, 0)
+  expect(c.io.robFirst, 0)
+
+  // Sanity check
+  // All invalid
+  for(i <- 0 until 16) {
+    pokeROBPorts(Array.tabulate(4) { j => j -> (4*i + j) })
+    step(0)
+    expectROBDestValid(Array.tabulate(4) { _ -> false })
+  }
+
+  // All invalid
+  for(i <- 0 until 4) {
+    pokeRemapPorts(Array.tabulate(8) { j => j -> (8*i + j) })
+    step(0)
+    expectRemapMappingValid(Array.tabulate(8) { _ -> false })
+  }
+
+  pokeROBInvalid(Array(0,1,2,3))
+
+  // Wow! super fast D$
+  pokeWB(0, 0, 0xDEAFBEED);
+  pokeWB(1, 1, 0xDEAFBEF1);
+  pokeWB(2, 2, 0xDEAFBEF5);
+  pokeWB(3, 3, 0xDEAFBEF9);
+
+  step(1)
+
+  pokeWBInvalid(Array(0,1,2,3))
+
+  // All invalid except the first 4
+  for(i <- 1 until 16) {
+    pokeROBPorts(Array.tabulate(4) { j => j -> (4*i + j) })
+    step(0)
+    expectROBDestValid(Array.tabulate(4) { _ -> false })
+  }
+
+  // All invalid
+  for(i <- 0 until 4) {
+    pokeRemapPorts(Array.tabulate(8) { j => j -> (8*i + j) })
+    step(0)
+    expectRemapMappingValid(Array.tabulate(8) { _ -> false })
+  }
+
+  pokeROBPorts(Array.tabulate(4) { j => j -> j })
+
+  step(0)
+
+  expectROBDestValid(Array.tabulate(4) { i => i -> true })
+  expectROBDestBits(Array.tabulate(4) { i => i -> (0xDEAFBEED + 4*i) })
+
+  // Now all 4 stores will try to commit, but at most two stores can be
+  // committed per cycle
+
+  expectStCommit(Array(true, true, false, false))
+
+  step(1)
+
+  // Now the remaining 2 stores commit
+
+  expectStCommit(Array(true, true, false, false))
+
+
 }
 
 class ROBGenerator extends TestGenerator {
