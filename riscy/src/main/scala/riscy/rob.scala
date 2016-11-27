@@ -133,7 +133,6 @@ class ROB extends Module {
     head.inc(headInc)
   }
 
-  // TODO: test this
   // Should request that fetch stall if the ROB is full, unless we are about to
   // flush everything anyway.
   io.robStallReq := free < UInt(4) && !io.mispredPC.valid
@@ -276,8 +275,6 @@ class ROB extends Module {
   //     \/ there are fewer than 2 stores already committing this cycle
   //
   // NOTE: /\ is AND, \/ is OR
-  //
-  // TODO: test multiple stores committing this cycle
   //
   // Note: there is an easy optimization here in that if i < 2, we know that there
   // cannot already be two stores.
@@ -463,6 +460,39 @@ class ROBTests(c: ROB) extends Tester(c) {
     poke(c.io.allocROB(port).bits.rs2Val.valid, true) // Ready
     poke(c.io.allocROB(port).bits.rs2Val.bits, imm) // No RS2, use Imm
     poke(c.io.allocROB(port).bits.rdVal.valid, false) // NOT Ready
+  }
+
+  // Store Word
+  //
+  // *(imm + rs1) <- rs2
+  //
+  // if rs1Rename._1 => get value from ROB
+  // else            => get value from RF
+  //
+  def pokeROBStW(port: Int, tag: Int, pc: Int, imm: Int,
+    rs1: Int, rs1Rename: (Boolean, Int), rs1Val: (Boolean, Int),
+    rs2: Int, rs2Rename: (Boolean, Int), rs2Val: (Boolean, Int)) = {
+
+    poke(c.io.allocROB(1).valid, true)
+    poke(c.io.allocROB(1).bits.pc, pc)
+    poke(c.io.allocROB(1).bits.tag, tag)
+    poke(c.io.allocROB(1).bits.op, 0x23)
+    poke(c.io.allocROB(1).bits.funct3, 0x2) // word, not byte, or double
+    poke(c.io.allocROB(1).bits.rs1, rs1)
+    poke(c.io.allocROB(1).bits.rs2, rs2)
+    poke(c.io.allocROB(1).bits.rd, 0) // No dest
+    poke(c.io.allocROB(1).bits.immS, imm)
+    poke(c.io.allocROB(1).bits.hasRd, false)
+    poke(c.io.allocROB(1).bits.isSt, true)
+    poke(c.io.allocROB(1).bits.predTaken, false)
+    poke(c.io.allocROB(1).bits.isMispredicted, false)
+    poke(c.io.allocROB(1).bits.rs1Rename, if(rs1Rename._1) { rs1Rename._2 } else { 0 })
+    poke(c.io.allocROB(1).bits.rs2Rename, if(rs2Rename._1) { rs2Rename._2 } else { 0 }) 
+    poke(c.io.allocROB(1).bits.rs1Val.valid, rs1Val._1)
+    poke(c.io.allocROB(1).bits.rs1Val.bits, if(rs1Val._1) { rs1Val._2 } else { 0 })
+    poke(c.io.allocROB(1).bits.rs2Val.valid, rs2Val._1)
+    poke(c.io.allocROB(1).bits.rs2Val.bits, if(rs2Val._1) { rs2Val._2 } else { 0 })
+    poke(c.io.allocROB(1).bits.rdVal.valid, false) // NOT Ready
   }
 
   def pokeROBInvalid(ports: Array[Int]) =
@@ -807,26 +837,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
 
   // sw (store word) -0x100[r2] <- r3
-  poke(c.io.allocROB(1).valid, true)
-  poke(c.io.allocROB(1).bits.pc, 0x100)
-  poke(c.io.allocROB(1).bits.tag, 0x8)
-  poke(c.io.allocROB(1).bits.op, 0x23)
-  poke(c.io.allocROB(1).bits.funct3, 0x2) // word, not byte, or double
-  poke(c.io.allocROB(1).bits.rs1, 2)
-  poke(c.io.allocROB(1).bits.rs2, 3)
-  poke(c.io.allocROB(1).bits.rd, 0) // No dest
-  poke(c.io.allocROB(1).bits.immS, -0x100)
-  poke(c.io.allocROB(1).bits.hasRd, false)
-  poke(c.io.allocROB(1).bits.isSt, true)
-  poke(c.io.allocROB(1).bits.predTaken, false)
-  poke(c.io.allocROB(1).bits.isMispredicted, false)
-  poke(c.io.allocROB(1).bits.rs1Rename, 0) // Not renamed
-  poke(c.io.allocROB(1).bits.rs2Rename, 6) // Renamed
-  poke(c.io.allocROB(1).bits.rs1Val.valid, true) // Ready
-  poke(c.io.allocROB(1).bits.rs1Val.bits, 0xDEAEBEEE) // Value from RF
-  poke(c.io.allocROB(1).bits.rs2Val.valid, false) // Not Ready
-  poke(c.io.allocROB(1).bits.rs2Val.bits, 0) // Value from ROB
-  poke(c.io.allocROB(1).bits.rdVal.valid, false) // NOT Ready
+  pokeROBStW(1, 0x8, 0x100, -0x100, 2, (false, 0), (true, 0xDEAEBEEE), 3, (true, 6), (false, 0))
 
   step(1)
 
@@ -866,26 +877,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   poke(c.io.allocROB(0).bits.rdVal.valid, false) // NOT Ready
 
   // sw (store word) -0x100[r2] <- r3
-  poke(c.io.allocROB(1).valid, true)
-  poke(c.io.allocROB(1).bits.pc, 0xbc)
-  poke(c.io.allocROB(1).bits.tag, 0xa)
-  poke(c.io.allocROB(1).bits.op, 0x23)
-  poke(c.io.allocROB(1).bits.funct3, 0x2) // word, not byte, or double
-  poke(c.io.allocROB(1).bits.rs1, 2)
-  poke(c.io.allocROB(1).bits.rs2, 3)
-  poke(c.io.allocROB(1).bits.rd, 0) // No dest
-  poke(c.io.allocROB(1).bits.immS, -0x100)
-  poke(c.io.allocROB(1).bits.hasRd, false)
-  poke(c.io.allocROB(1).bits.isSt, true)
-  poke(c.io.allocROB(1).bits.predTaken, false)
-  poke(c.io.allocROB(1).bits.isMispredicted, false)
-  poke(c.io.allocROB(1).bits.rs1Rename, 0) // Not renamed
-  poke(c.io.allocROB(1).bits.rs2Rename, 6) // Renamed
-  poke(c.io.allocROB(1).bits.rs1Val.valid, true) // Ready
-  poke(c.io.allocROB(1).bits.rs1Val.bits, 0xDEAFBEED) // Value from RF
-  poke(c.io.allocROB(1).bits.rs2Val.valid, false) // Not Ready
-  poke(c.io.allocROB(1).bits.rs2Val.bits, 0) // Value from ROB
-  poke(c.io.allocROB(1).bits.rdVal.valid, false) // NOT Ready
+  pokeROBStW(1, 0xa, 0xbc, -0x100, 2, (false, 0), (true, 0xDEAFBEED), 3, (true, 6), (false, 0))
 
   // r1 <- r1 + 0xFFFF
   pokeROBAddRI(2, 0xb, 0xc0, 1, (true, 5), (true, 0xDEB2BEEA), 0xFFFF, 1)
@@ -1044,6 +1036,9 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   // check that second store does not commit
   expectStCommit(Array.fill(4)(false))
+
+  // TODO: test that robStallReq is set when ROB is full
+  // TODO: test that no more than two stores commit in a cycle
 }
 
 class ROBGenerator extends TestGenerator {
