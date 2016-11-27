@@ -1041,8 +1041,8 @@ class ROBTests(c: ROB) extends Tester(c) {
 
   // Fill the ROB with stall instructions and check that
   //
-  // - TODO: robStallReq is set when ROB is full
-  // - TODO: no more than two stores commit in a cycle
+  // - robStallReq is set when ROB is full
+  // - no more than two stores commit in a cycle
 
   // sw 0x100 to 0x140 [r1] <- $0
   for(i <- 0 until 64) {
