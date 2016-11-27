@@ -1117,8 +1117,6 @@ class ROBTests(c: ROB) extends Tester(c) {
   // Now the remaining 2 stores commit
 
   expectStCommit(Array(true, true, false, false))
-
-
 }
 
 class ROBGenerator extends TestGenerator {
