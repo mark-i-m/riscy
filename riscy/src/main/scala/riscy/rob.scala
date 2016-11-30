@@ -257,7 +257,7 @@ class ROB extends Module {
     if(i == 0) {
       numStores(i) := UInt(0)
     } else {
-      when(front(i).op === UInt(0x23)) {
+      when(front(i).isSt) {
         numStores(i) := numStores(i-1) + UInt(1)
       } .otherwise {
         numStores(i) := numStores(i-1)
@@ -286,7 +286,7 @@ class ROB extends Module {
       (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) &&
       front(i).rdVal.valid &&
       (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) }) &&
-      (if(i < 2) { Bool(true) } else { front(i).op =/= UInt(0x23) || numStores(i) < UInt(2) })
+      (if(i < 2) { Bool(true) } else { !front(i).isSt || numStores(i) < UInt(2) })
 
     when(couldCommit(i)) {
       printf("Commit ROB%d\n", head.value + UInt(i))
