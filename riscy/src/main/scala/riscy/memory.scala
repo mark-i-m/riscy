@@ -4,8 +4,8 @@ import Chisel._
 
 class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, latency: Int) extends Module {
   val io = new Bundle {
-    val readPorts = Vec.fill(numRPorts) { Valid(UInt(INPUT, 64)) }
-    val readData = Vec.fill(numRPorts) { Valid(UInt(OUTPUT, lineBytes*8)) }
+    val readPorts = Vec.fill(numRPorts) { Valid(UInt(INPUT, 64)).asInput }
+    val readData = Vec.fill(numRPorts) { Valid(UInt(OUTPUT, lineBytes*8)).asOutput }
 
     val writePorts = Vec.fill(numWPorts) { Valid(UInt(INPUT, 64)) }
     val writeData = Vec.fill(numWPorts) { UInt(INPUT, 64) }
