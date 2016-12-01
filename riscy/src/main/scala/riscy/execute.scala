@@ -64,11 +64,11 @@ class Execute extends Module {
 
   // Hook up the output of LSQ to ROB writeback structure
   for(i <- 0 until 2) {
-    rob_writeback.io.input.data(3+i)    := io.rob_wb_input.data(i)     
-    rob_writeback.io.input.is_addr(3+i) := io.rob_wb_input.is_addr(i) 
-    rob_writeback.io.input.operand(3+i) := io.rob_wb_input.operand(i) 
-    rob_writeback.io.input.valid(3+i)   := io.rob_wb_input.valid(i)   
-  }	
+    rob_writeback.io.input.data(4+i)    := io.rob_wb_input.data(i)
+    rob_writeback.io.input.is_addr(4+i) := io.rob_wb_input.is_addr(i)
+    rob_writeback.io.input.operand(4+i) := io.rob_wb_input.operand(i)
+    rob_writeback.io.input.valid(4+i)   := io.rob_wb_input.valid(i)
+  }
 
   // Hook up certain output attributes of ALUs to the outside world
   for(i <- 0 until 4) {
