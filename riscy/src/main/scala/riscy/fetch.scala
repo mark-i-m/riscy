@@ -95,6 +95,7 @@ class Fetch extends Module {
   // Increment PC
   when ((io.stall === Bool(false)) && icache_ready) {
     PC := nextPC
+    printf("Current PC: %x, Next PC: %x\n", PC, nextPC)
   }
 
   /* Assuming a 32B cache block, calculate the next sequential fetch address

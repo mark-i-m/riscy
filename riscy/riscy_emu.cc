@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#define parse_nibble(c) ((c) >= 'a' ? (c)-'a'+10 : (c) >= 'A' ? (c)-'A'+10 : (c)-'0')
+#define min(a,b) ((a) < (b) ? (a) : (b))
+
 /*
  * Run the given benchmark, producing a vcd and trace file.
  *
@@ -61,12 +64,9 @@ int main(int argc, char** argv) {
     // The Riscy generated code
     Riscy_t* riscy = new Riscy_t;
 
-    // Set random seed
+    // Set random seed -- Don't randomize... our processor doesn't have proper initialization code
     srand(random_seed);
-    riscy->init(random_seed != 0);
-
-    // TODO: What about Tracer_t in example?
-    //  https://github.com/ucb-bar/riscv-sodor/blob/master/emulator/common/tracer.h/cpp
+    //riscy->init(random_seed != 0);
 
     // Load memory from file
     std::ifstream in(loadmem);
@@ -75,30 +75,39 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    // Read one line at a time. Each line should have 32 B (4 instructions)
+    // Read one line at a time. Each line should have 8B (1 word); anything
+    // past the 8th byte is ignored.
+    uint64_t mem_idx = 0; // which word are we currently loading?
     std::string line;
-    uint64_t mem_idx = 0; // which 4B word are we at?
     while (std::getline(in, line)) {
-        // 4 words per line
-        assert (line.length()/2/4 == 4);
+        assert(line.length() >= 16);
 
-        uint32_t m[4] = {0,0,0,0}; 
+        // 8B per word
+        uint8_t m[8] = {0,0,0,0,0,0,0,0}; 
 
-        #define parse_nibble(c) ((c) >= 'a' ? (c)-'a'+10 : (c)-'0')
-        for (ssize_t i = line.length()-2, j = 0; i >= 0; i -= 2, j++) {
-            uint8_t byte = (parse_nibble(line[i]) << 4) | parse_nibble(line[i+1]); 
-            m[j>>2] = (byte << ((j%4)*8)) | m[j>>2];
+        for(ssize_t i = 0; i < 16; i += 2) {
+            uint8_t mask = 0xF;
+            // beginning of string => high-order bits
+            uint8_t nibble1 = parse_nibble(line[i]) & mask;
+            uint8_t nibble2 = parse_nibble(line[i+1]) & mask;
+            uint8_t byte = (nibble1 << 4) | nibble2;
+
+            m[8 - (i/2) -1] = byte;
         }
 
         // Copy words into the Riscy memory.
         // Make sure we don't copy too much memory
-        if (mem_idx < (memory_size/4)) {
-            riscy->Riscy_memory__memBank.put(mem_idx  , LIT<32>(m[0]));
-            riscy->Riscy_memory__memBank.put(mem_idx+1, LIT<32>(m[1]));
-            riscy->Riscy_memory__memBank.put(mem_idx+2, LIT<32>(m[2]));
-            riscy->Riscy_memory__memBank.put(mem_idx+3, LIT<32>(m[3]));
+        if (mem_idx < (memory_size/8)) {
+            riscy->Riscy_memory__memBank.put(mem_idx  , LIT<8>(m[0]));
+            riscy->Riscy_memory__memBank.put(mem_idx+1, LIT<8>(m[1]));
+            riscy->Riscy_memory__memBank.put(mem_idx+2, LIT<8>(m[2]));
+            riscy->Riscy_memory__memBank.put(mem_idx+3, LIT<8>(m[3]));
+            riscy->Riscy_memory__memBank.put(mem_idx+4, LIT<8>(m[4]));
+            riscy->Riscy_memory__memBank.put(mem_idx+5, LIT<8>(m[5]));
+            riscy->Riscy_memory__memBank.put(mem_idx+6, LIT<8>(m[6]));
+            riscy->Riscy_memory__memBank.put(mem_idx+7, LIT<8>(m[7]));
         }
-        mem_idx += 4;
+        mem_idx += 8;
     }
 
     in.close();
@@ -106,8 +115,6 @@ int main(int argc, char** argv) {
     std::cerr << "Loaded memory" << std::endl;
 
     // Run the emulation
-    // TODO: Might need the "HTIF" stuff here to discover end of workload.
-    //   https://github.com/ucb-bar/riscv-sodor/blob/master/emulator/common/htif_emulator.h
     while(trace_count < max_cycles) {
         riscy->clock_lo(LIT<1>(0));
 
@@ -116,10 +123,10 @@ int main(int argc, char** argv) {
 
         riscy->clock_hi(LIT<1>(0));
 
-        std::cerr << "TICK " << trace_count << std::endl;
-
         trace_count++;
     }
+
+    std::cerr << "Ran for " << trace_count << " cycles. Done." << std::endl;
 
     // Clean up
     fclose(vcdfile);

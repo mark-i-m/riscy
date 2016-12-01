@@ -4,7 +4,15 @@ import Chisel._
 
 // The whole processor!
 class Riscy extends Module {
-  val io = new Bundle { /* No system, just a processor! */ }
+  val io = new Bundle { 
+    /* No system, just a processor! */ 
+    val cycles = UInt(OUTPUT, width = 128)
+  }
+
+  // Cycle counter -- purely for debugging
+  val cycles = Reg(init = UInt(0, width = 128))
+  cycles := cycles + UInt(1)
+  io.cycles := cycles
 
   // Memory for both data and instructions
   // - Port 0 => Instruction/Fetch
