@@ -6,8 +6,10 @@ import Chisel._
 class Riscy extends Module {
   val io = new Bundle { /* No system, just a processor! */ }
 
-  //var memory = Module(new BigMemory(64, 1 << 24, 2, 2, 100)) // 1 gB memory
-  var memory = Module(new BigMemory(64, 1 << 12, 2, 2, 100)) // 256 kB memory
+  // Memory for both data and instructions
+  // - Port 0 => Instruction/Fetch
+  // - Port 1 => Data/LSQ
+  var memory = Module(new BigMemory(64, 1 << 12, 2, 2, 100)) // 256 kB memory, 8 word cache lines
 
   // TODO add BP
   //val bp = Module(new BP)
@@ -21,7 +23,8 @@ class Riscy extends Module {
   val stall = Module(new Stall)
 
   // TODO: hook up ICache and Memory
-  // fetch <> memory
+  memory.io.readPorts(0) := fetch.io.memReadPort
+  fetch.io.memReadData := memory.io.readData(0)
 
   // TODO: hook up BP and Fetch
   //fetch <> bp
