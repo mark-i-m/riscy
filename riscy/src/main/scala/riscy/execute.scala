@@ -13,6 +13,9 @@ class Execute extends Module {
     // These values are to be written back to the ROB
     val rob_wb_output = new RobWbOutput(6) // OUTPUT
 
+		// Values coming in from LSQ for WB structure
+		val rob_wb_input = new RobWbInput(2)
+
     // Indicates whether the branch was taken. Valid only if the instruction
     // executed by the ALU was a branch. If valid, the `bits` attribute will
     // indicate whether the branch was taken.
@@ -54,6 +57,14 @@ class Execute extends Module {
     rob_writeback.io.input.operand(i) := io.issued_inst(i).bits.tag
     rob_writeback.io.input.valid(i)   := io.issued_inst(i).valid
   }
+
+	// Hook up the output of LSQ to ROB writeback structure
+	 for(i <- 0 until 2) {
+    rob_writeback.io.input.data(3+i)    := io.rob_wb_input.data(i)     
+    rob_writeback.io.input.is_addr(3+i) := io.rob_wb_input.is_addr(i) 
+    rob_writeback.io.input.operand(3+i) := io.rob_wb_input.operand(i) 
+    rob_writeback.io.input.valid(3+i)   := io.rob_wb_input.valid(i)   
+  }	
 
   // Hook up certain output attributes of ALUs to the outside world
   for(i <- 0 until 4) {

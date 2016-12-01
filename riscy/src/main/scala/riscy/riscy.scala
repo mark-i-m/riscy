@@ -56,15 +56,21 @@ class Riscy extends Module {
   lsq.io.resEntry     := issue.io.addBuf
   issue.io.addBufLen  := lsq.io.currentLen
 
-  // TODO: Hook up Exec and ROB
+  // Hook up Exec and ROB
+	// TODO: This is still WIP and will update once interface is right
 
-  // TODO: LSQ and Exec
 
-  // TODO: Issue and Exec
+  // LSQ and Exec
+	lsq.io.robWbin := exec.io.rob_wb_store
+	exec.io.rob_wb_input <> lsq.io.robWbOut
+
+  // Issue and Exec
   exec.io.issued_inst := issue.io.issuedEntry
+	issue.io.robWb <> exec.io.rob_wb_store
 
   // Hook up LSQ to ROB, so we can commit stores
-  lsq.io.stCommit := rob.io.stCommit
+  // TODO: Allignment is needed on this
+	// lsq.io.stCommit := rob.io.stCommit
 
   // TODO: hook up DCache and Memory
   //lsq <> memory
