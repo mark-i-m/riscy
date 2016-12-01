@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
     const unsigned random_seed = (unsigned)time(NULL) ^ (unsigned)getpid();
     const int memory_size = (1 << 30); // 1GB
     const int disasm_len = 24;
-    const uint64_t max_cycles = 1 << 30; // 1G cycles
+    const uint64_t max_cycles = 1 << 10; // 1K cycles
 
     // Counter for emulation
     uint64_t trace_count = 0;
@@ -108,13 +108,15 @@ int main(int argc, char** argv) {
     // Run the emulation
     // TODO: Might need the "HTIF" stuff here to discover end of workload.
     //   https://github.com/ucb-bar/riscv-sodor/blob/master/emulator/common/htif_emulator.h
-    while(trace_count == max_cycles) {
+    while(trace_count < max_cycles) {
         riscy->clock_lo(LIT<1>(0));
 
         riscy->print(logfile);
         riscy->dump(vcdfile, trace_count);
 
         riscy->clock_hi(LIT<1>(0));
+
+        std::cerr << "TICK " << trace_count << std::endl;
 
         trace_count++;
     }

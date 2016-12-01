@@ -9,7 +9,8 @@ class Riscy extends Module {
   // Memory for both data and instructions
   // - Port 0 => Instruction/Fetch
   // - Port 1 => Data/LSQ
-  var memory = Module(new BigMemory(64, 1 << 12, 2, 2, 100)) // 256 kB memory, 8 word cache lines
+  //var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 100)) // 64kB memory, 8 word cache lines
+  var memory = Module(new BigMemory(64, 1 << 2, 2, 2, 100)) // 64kB memory, 8 word cache lines
 
   //TODO val bp = Module(new BP)
   var fetch = Module(new Fetch)

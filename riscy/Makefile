@@ -4,7 +4,7 @@ MODULES = Fetch ICache DecodeSingle OpDecode Alloc ROB
 # Backend
 MODULES += IssueQueue IqArbiter LSQ Issue ALU RobWriteback Execute Stall
 # Util
-MODULES += HelloModule MultiCounter CAM RegFile
+MODULES += HelloModule MultiCounter CAM RegFile Memory
 
 # List of BENCHES for integration testing
 BENCHES=Hello.hex.bench

@@ -40,11 +40,11 @@ class Fetch extends Module {
   /* PC value takes a cycle to reach Icache. We start it at 0x10 so that we
    * don't lose the first cycle. The pipeline register which PC feeds starts at
    * 0x0 */
-  val PC = Reg(init = UInt(16, width = 32))
+  val PC = Reg(init = UInt(16, width = 64))
 
   val nextAddr = Mux(io.isBranchTaken, io.btbAddr, PC)
 
-  val addr = UInt(width = 32)
+  val addr = UInt(width = 64)
   val addrSelect = UInt(width = 2)
   addrSelect := Cat(io.isBranchMispred, io.isReturn).toBits().toUInt()
   addr := nextAddr
@@ -62,9 +62,9 @@ class Fetch extends Module {
 
   /* Register which holds the address to be sent to Icache. PC value appears here
    * after one cycle delay */
-  val fetchAddr = Reg(init = UInt(0, width = 32))
+  val fetchAddr = Reg(init = UInt(0, width = 64))
   // Used to correct requested PC incase Icache tells us that it is not ready
-  val prevFetchAddr = Reg(init = UInt(0, width = 32))
+  val prevFetchAddr = Reg(init = UInt(0, width = 64))
   val icache_ready = icache.io.resp.idle || icache.io.resp.valid
 
   // Shift in a new address only is the cache is ready to accept the old address
@@ -85,7 +85,7 @@ class Fetch extends Module {
   icache.io.memReadData := io.memReadData
   io.memReadPort := icache.io.memReadPort
 
-  val nextPC = UInt(width = 32)
+  val nextPC = UInt(width = 64)
   val nextPCOffset = UInt(width = 5)
   nextPCOffset := UInt(16)
 
