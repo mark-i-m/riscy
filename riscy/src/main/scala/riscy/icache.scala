@@ -118,10 +118,9 @@ class ICache extends Module {
   // Check if we got a miss. If we did, we need to refill from memory
   val refill_addr = Reg(UInt(width = IcParams.addr_width))
   when (s1_miss && state === s_ready) {
-    // TODO markm: s1_vaddr does not contain the request address because
-    // s1_miss is true in the cycle when the miss is detected?
-    //refill_addr := s1_vaddr
-    refill_addr := io.req.addr
+    // s1_vaddr contains the address for which the data and tag arrays were
+    // consulted 1 cycle ago and it generated a miss.
+    refill_addr := s1_vaddr
     printf("Need to refill: %x, %x, %x\n", io.req.addr, s0_vaddr, s1_vaddr)
   }
 

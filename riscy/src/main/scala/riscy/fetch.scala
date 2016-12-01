@@ -205,7 +205,7 @@ class FetchTests(c: Fetch) extends Tester(c) {
 
   // Memory request from I$
   expect(c.io.memReadPort.valid, true)
-  expect(c.io.memReadPort.bits, 0x10)
+  expect(c.io.memReadPort.bits, 0x0)
 
   peek_regs(c)
   step(1)
