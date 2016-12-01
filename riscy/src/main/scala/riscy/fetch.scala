@@ -26,10 +26,14 @@ class Fetch extends Module {
     // Is this instruction a return from a subroutine call?
     val isReturn = Bool(INPUT)
     val stall = Bool(INPUT)
+    // Memory requests fullfilled from memory
+    val memReadData = Valid(UInt(INPUT, 64 * 8)).asInput
 
     /* OUTPUTS */
     // Instructions and PC to be passed to the decode stage
     val output = (new FetchOutput).asOutput
+    // Memory requests outgoing to memory
+    val memReadPort = Valid(UInt(OUTPUT, 64)).asOutput
   }
   val icache = Module(new ICache())
 
@@ -76,6 +80,10 @@ class Fetch extends Module {
   // ago.
   icache.io.req.addr := Mux(icache_ready, fetchAddr, prevFetchAddr)
   icache.io.req.valid := Bool(true)
+
+  // Hook up I$ to memory
+  icache.io.memReadData := io.memReadData
+  io.memReadPort := icache.io.memReadPort
 
   val nextPC = UInt(width = 32)
   val nextPCOffset = UInt(width = 5)
@@ -155,6 +163,9 @@ class FetchTests(c: Fetch) extends Tester(c) {
     peek(c.PC)
     peek(c.fetchAddr)
     peek(c.prevFetchAddr)
+    peek(c.icache.s0_vaddr)
+    peek(c.io.memReadPort.valid)
+    peek(c.io.memReadPort.bits)
   }
 
   // Setup necessary stuff for testcase
@@ -165,6 +176,7 @@ class FetchTests(c: Fetch) extends Tester(c) {
   poke(c.io.isBranchMispred, false)
   poke(c.io.isReturn, false)
   poke(c.io.stall, false)
+  poke(c.io.memReadData.valid, false)
 
   // We expect the Icache to be ready for taking responses ie. idle should be
   // true. 
@@ -172,6 +184,7 @@ class FetchTests(c: Fetch) extends Tester(c) {
   expect(c.icache.io.resp.idle, true)
   expect(c.icache.io.req.addr, 0x0)
   expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, false)
   // It will take us 5 cycles to load the first block into the cache
   step(1)
 
@@ -180,6 +193,7 @@ class FetchTests(c: Fetch) extends Tester(c) {
   expect(c.icache.io.resp.idle, true)
   expect(c.icache.io.req.addr, 0x10)
   expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, false)
   peek_regs(c)
   step(1)
 
@@ -188,6 +202,11 @@ class FetchTests(c: Fetch) extends Tester(c) {
   expect(c.icache.io.resp.idle, false)
   expect(c.icache.io.req.addr, 0x10)
   expect_all_inst_validity(c, false)
+
+  // Memory request from I$
+  expect(c.io.memReadPort.valid, true)
+  expect(c.io.memReadPort.bits, 0x0)
+
   peek_regs(c)
   step(1)
 
@@ -196,6 +215,12 @@ class FetchTests(c: Fetch) extends Tester(c) {
   expect(c.icache.io.resp.idle, false)
   expect(c.icache.io.req.addr, 0x10)
   expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, false)
+
+  // Memory fullfills I$ request
+  poke(c.io.memReadData.valid, true)
+  poke(c.io.memReadData.bits, 0)
+
   peek_regs(c)
   step(1)
 
@@ -204,41 +229,50 @@ class FetchTests(c: Fetch) extends Tester(c) {
   expect(c.icache.io.resp.idle, false)
   expect(c.icache.io.req.addr, 0x10)
   expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, false)
   peek_regs(c)
-  step(1)
+  step(2)
 
-  // Cycle 5 - We should have gotten a hit now for 0x0
+  // Cycle 6 - We should have gotten a hit now for 0x0
   expect(c.icache.io.resp.valid, true)
   expect(c.icache.io.resp.idle, true)
   expect(c.icache.io.resp.addr, 0x0)
   expect(c.icache.io.req.addr, 0x20)
   expect_all_inst_validity(c, true)
+  expect(c.io.memReadPort.valid, false)
   peek_regs(c)
   step(1)
 
-  // Cycle 6 - Another hit
+  // Cycle 7 - Another hit
   expect(c.icache.io.resp.valid, true)
   expect(c.icache.io.resp.idle, true)
   expect(c.icache.io.resp.addr, 0x10)
   expect(c.icache.io.req.addr, 0x30)
   expect_all_inst_validity(c, true)
+  expect(c.io.memReadPort.valid, false)
   peek_regs(c)
   step(1)
 
-  // Cycle 7 - This should be a miss since the 0x20 requested 2 cycles ago
+  // Cycle 8 - This should be a miss since the 0x20 requested 2 cycles ago
   // doesn't exist in cache
   expect(c.icache.io.resp.valid, false)
   expect(c.icache.io.resp.idle, false)
   expect(c.icache.io.req.addr, 0x30)
   expect_all_inst_validity(c, false)
+
+  // Memory fullfills I$ request
+  poke(c.io.memReadData.valid, true)
+  poke(c.io.memReadData.bits, 0x30)
+
   peek_regs(c)
   step(1)
 
-  // Cycle 8 - Icache busy filling response
+  // Cycle 9 - Icache busy filling response
   expect(c.icache.io.resp.valid, false)
   expect(c.icache.io.resp.idle, false)
   expect(c.icache.io.req.addr, 0x30)
   expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, false)
   peek_regs(c)
 } 
 
