@@ -28,6 +28,9 @@ class ROBEntry extends DecodeIns {
   val isSt = Bool(OUTPUT)
   val isLd = Bool(OUTPUT)
 
+  // Purely for emulation purposes
+  val isHalt = Bool(OUTPUT)
+
   // From BP:
   // - was this branch predicted taken? 1 => T, 0 => NT
   val predTaken = Bool(OUTPUT)
@@ -96,7 +99,18 @@ class ROB extends Module {
     // Otherwise, it would be possible for a structure to fill up and requests
     // a stall while at the same time, the commit stage is stalled because
     // fetch or LSQ is stalled and won't accept a mispredict or stCommit flag.
+    
+    // Purely for emulation
+    val halt = Bool(OUTPUT)
   }
+
+  // A hack to make sure things are initialized properly
+  val inited = Reg(init = Bool(false), next = Bool(true))
+
+  // Purely for emulation purposes
+  // halt when the "halt" instruction commits
+  val halt = Reg(init = Bool(false)) 
+  io.halt := halt
 
   // The register remap table
   // Bit 0 of each register denotes if that register is in the Arch register
@@ -125,7 +139,7 @@ class ROB extends Module {
   var freeInc = UInt()
   val free = Reg(init = UInt(64), next = freeInc)
 
-  when(io.mispredPC.valid) {
+  when(io.mispredPC.valid || !inited) {
     freeInc := UInt(64)
     head.reset
   } .otherwise {
@@ -409,6 +423,15 @@ class ROB extends Module {
       robW(i).valid := Bool(true)
       robW(i).bits := new ROBEntry
     }
+  }
+
+  // Halt when a "halt" commits
+  halt := (Vec.tabulate(4) { i =>
+    front(i).isHalt && couldCommit(i)
+  }).exists(identity[Bool] _)
+
+  when(halt) {
+    printf("HALT\n")
   }
 
   // Compute the new head

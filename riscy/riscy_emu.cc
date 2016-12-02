@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
     const unsigned random_seed = (unsigned)time(NULL) ^ (unsigned)getpid();
     const int memory_size = (1 << 30); // 1GB
     const int disasm_len = 24;
-    const uint64_t max_cycles = 1 << 10; // 1K cycles
+    const uint64_t max_cycles = 1 << 14; // 16K cycles
 
     // Counter for emulation
     uint64_t trace_count = 0;
@@ -112,6 +112,11 @@ int main(int argc, char** argv) {
 
     // Run the emulation
     while(trace_count < max_cycles) {
+        if(riscy->Riscy_rob__io_halt.to_bool()) {
+            std::cerr << "Processor Halted." << std::endl;
+            break;
+        }
+
         riscy->clock_lo(LIT<1>(0));
 
         riscy->print(logfile);
