@@ -137,7 +137,7 @@ class IssueQueue extends Module {
 	val issuedPipelineBits = Reg(next = MuxLookup(issuedNum, iqueue(0), 
 	Array.tabulate(16) {i => UInt (i) -> iqueue(i)}))
 
-	printf("issuedNum val: %x\n issuedNumOH %x\n", issuedNum, issuedNumOH)
+	//printf("issuedNum val: %x\n issuedNumOH %x\n", issuedNum, issuedNumOH)
 	
 	io.issuedEntry.bits := issuedPipelineBits
 

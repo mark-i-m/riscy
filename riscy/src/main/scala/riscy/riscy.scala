@@ -76,7 +76,7 @@ class Riscy extends Module {
   issue.io.robWb <> exec.io.rob_wb_store
 
   // Hook up LSQ to ROB, so we can commit stores
-  // TODO: Alignment is needed on this
+  // Can only store up to two values per cycle
   lsq.io.stCommit(0) := rob.io.stCommit(0)
   lsq.io.stCommit(1) := rob.io.stCommit(1)
 
