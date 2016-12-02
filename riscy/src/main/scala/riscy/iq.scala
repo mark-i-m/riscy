@@ -30,8 +30,8 @@ class IssueQueue extends Module {
 		wbCamRs2.io.input_bits(i) := iqueue(i).rs2Rename
 	}
 	for (i <- 0 until 6) {
-		wbCamRs1.io.compare_bits(i) := io.robWb.operand_s1(i)
-		wbCamRs2.io.compare_bits(i) := io.robWb.operand_s1(i)
+		wbCamRs1.io.compare_bits(i) := io.robWb.entry_s1(i).operand
+		wbCamRs2.io.compare_bits(i) := io.robWb.entry_s1(i).operand
 	}
   
 	val isAssigned = Vec.fill(5) {UInt(width = 3)}
@@ -158,12 +158,12 @@ class IssueQueue extends Module {
 					// from issued to last entry compare with next one 
 					// as they are shifted
 					for (k <- 0 until 6) {
-						when (wbCamRs1.io.hit(k)(j+1) && io.robWb.valid_s1(k)) {
-							iqueue(j).rs1Val.bits := io.robWb.data_s1(k)
+						when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid) {
+							iqueue(j).rs1Val.bits := io.robWb.entry_s1(k).data
 							iqueue(j).rs1Val.bits := Bool(true)
 						}
-						when (wbCamRs2.io.hit(k)(j+1) && io.robWb.valid_s1(k)) {
-							iqueue(j).rs2Val.bits := io.robWb.data_s1(k)
+						when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid) {
+							iqueue(j).rs2Val.bits := io.robWb.entry_s1(k).data
 							iqueue(j).rs2Val.valid := Bool(true)
 						} 	
 					}
@@ -172,12 +172,12 @@ class IssueQueue extends Module {
 				}
 				for (l <- 0 to i-1) {
 					for (k <- 0 until 6) {
-						when (wbCamRs1.io.hit(k)(l) && io.robWb.valid_s1(k)) {
-							iqueue(l).rs1Val.bits := io.robWb.data_s1(k)
+						when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid) {
+							iqueue(l).rs1Val.bits := io.robWb.entry_s1(k).data
 							iqueue(l).rs1Val.bits := Bool(true)
 						}
-						when (wbCamRs2.io.hit(k)(l) && io.robWb.valid_s1(k)) {
-							iqueue(l).rs2Val.bits := io.robWb.data_s1(k)
+						when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid) {
+							iqueue(l).rs2Val.bits := io.robWb.entry_s1(k).data
 							iqueue(l).rs2Val.valid := Bool(true)
 						} 	
 					}
@@ -189,12 +189,12 @@ class IssueQueue extends Module {
 		// IQ entries
 		for (l <- 0 to 15) {
 			for (k <- 0 until 6) {
-				when (wbCamRs1.io.hit(k)(l) && io.robWb.valid_s1(k)) {
-					iqueue(l).rs1Val.bits := io.robWb.data_s1(k)
+				when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid) {
+					iqueue(l).rs1Val.bits := io.robWb.entry_s1(k).data
 					iqueue(l).rs1Val.bits := Bool(true)
 				}
-				when (wbCamRs2.io.hit(k)(l) && io.robWb.valid_s1(k)) {
-					iqueue(l).rs2Val.bits := io.robWb.data_s1(k)
+				when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid) {
+					iqueue(l).rs2Val.bits := io.robWb.entry_s1(k).data
 					iqueue(l).rs2Val.valid := Bool(true)
 				} 	
 			}
@@ -313,8 +313,8 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(1).valid, 0)
 	poke(c.io.newEntry(2).valid, 0)
 	poke(c.io.newEntry(3).valid, 0)
-	poke(c.io.robWb.operand_s1(0), 5)
-	poke(c.io.robWb.valid_s1(0), 1)
+	poke(c.io.robWb.entry_s1(0).operand, 5)
+	poke(c.io.robWb.entry_s1(0).valid, 1)
 
 	step(1)
 	expect(c.io.currentLen, 3)
@@ -379,8 +379,8 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	println("// Test8 - Adding test to completely fill IQ")
 	println("// write back a value and issue one instruction at a time")
 	
-	poke(c.io.robWb.operand_s1(0), 4)
-	poke(c.io.robWb.valid_s1(0), 0)
+	poke(c.io.robWb.entry_s1(0).operand, 4)
+	poke(c.io.robWb.entry_s1(0).valid, 0)
 	
 	for (j <- 0 to 3) {
 		for (i <- 0 to 3) {
@@ -410,8 +410,8 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(1).valid, 0)
 	poke(c.io.newEntry(2).valid, 0)
 	poke(c.io.newEntry(3).valid, 0)
-	poke(c.io.robWb.operand_s1(0), 5)
-	poke(c.io.robWb.valid_s1(0), 1)
+	poke(c.io.robWb.entry_s1(0).operand, 5)
+	poke(c.io.robWb.entry_s1(0).valid, 1)
 
 	step(1)
 	expect(c.io.currentLen, 16)
@@ -419,8 +419,8 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
   
 	println("// Test8b")
 	
-	poke(c.io.robWb.operand_s1(0), 4)
-	poke(c.io.robWb.valid_s1(0), 0)
+	poke(c.io.robWb.entry_s1(0).operand, 4)
+	poke(c.io.robWb.entry_s1(0).valid, 0)
 	
 	for (i <- 0 to 15) {
 		for (i <- 0 to 7) {

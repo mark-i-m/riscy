@@ -13,19 +13,6 @@ class Execute extends Module {
     // These values are to be written back to the ROB
     val rob_wb_output = new RobWbOutput(6) // OUTPUT
 
-    // Indicates whether the branch was taken. Valid only if the instruction
-    // executed by the ALU was a branch. If valid, the `bits` attribute will
-    // indicate whether the branch was taken.
-    val is_branch_taken = Vec(4, Valid(Bool(OUTPUT)))
-    // The computed branch targets. Use in conjunction with is_branch_taken ie.
-    // only if the valid bit is set.
-    val branch_target = Vec(4, UInt(OUTPUT, 64))
-    // The tags for the branch instructions. Use only if valid bit is set for
-    // is_branch_taken
-    val branch_tag = Vec(4, UInt(OUTPUT, 6))
-    // The PCs of the branch instructions. Use only if valid bit is set for
-    // is_branch_taken
-    val branch_PC = Vec(4, UInt(OUTPUT, 64))
   }
 
   val alu = Array.fill(4)(Module(new ALU(64)))
@@ -49,19 +36,15 @@ class Execute extends Module {
 
   // Hook up the output of ALUs to ROB writeback structure
   for(i <- 0 until 4) {
-    rob_writeback.io.input.data(i)    := alu(i).io.out
-    rob_writeback.io.input.is_addr(i) := alu(i).io.is_out_addr
-    rob_writeback.io.input.operand(i) := io.issued_inst(i).bits.tag
-    rob_writeback.io.input.valid(i)   := io.issued_inst(i).valid
-  }
-
-  // Hook up certain output attributes of ALUs to the outside world
-  for(i <- 0 until 4) {
-    io.is_branch_taken(i).valid := alu(i).io.is_branch
-    io.is_branch_taken(i).bits  := alu(i).io.cmp_out
-    io.branch_target(i)         := alu(i).io.out
-    io.branch_tag(i)            := io.issued_inst(i).bits.tag
-    io.branch_PC(i)             := io.issued_inst(i).bits.pc
+    rob_writeback.io.input.entry(i).data                  := alu(i).io.out
+    rob_writeback.io.input.entry(i).is_addr               := alu(i).io.is_out_addr
+    rob_writeback.io.input.entry(i).operand               := io.issued_inst(i).bits.tag
+    rob_writeback.io.input.entry(i).valid                 := io.issued_inst(i).valid
+    rob_writeback.io.input.entry(i).is_branch_taken.valid := alu(i).io.is_branch
+    rob_writeback.io.input.entry(i).is_branch_taken.bits  := alu(i).io.cmp_out
+    rob_writeback.io.input.entry(i).branch_target         := alu(i).io.out
+    rob_writeback.io.input.entry(i).branch_tag            := io.issued_inst(i).bits.tag
+    rob_writeback.io.input.entry(i).branch_PC             := io.issued_inst(i).bits.pc
   }
 
   // Hookup the output of ROB writeback structure to the outside world
@@ -120,38 +103,38 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   // correctly computed
 
   // Check ADD result
-  expect(c.io.rob_wb_store.valid_s1(0), true)
-  expect(c.io.rob_wb_store.data_s1(0), 250)
-  expect(c.io.rob_wb_store.is_addr_s1(0), false)
-  expect(c.io.rob_wb_store.operand_s1(0), 1)
-  expect(c.io.is_branch_taken(0).valid, false)
+  expect(c.io.rob_wb_store.entry_s1(0).valid, true)
+  expect(c.io.rob_wb_store.entry_s1(0).data, 250)
+  expect(c.io.rob_wb_store.entry_s1(0).is_addr, false)
+  expect(c.io.rob_wb_store.entry_s1(0).operand, 1)
+  expect(c.io.rob_wb_store.entry_s1(0).is_branch_taken.valid, false)
 
   // Check ADDI result
-  expect(c.io.rob_wb_store.valid_s1(1), true)
-  expect(c.io.rob_wb_store.data_s1(1), 250)
-  expect(c.io.rob_wb_store.is_addr_s1(1), false)
-  expect(c.io.rob_wb_store.operand_s1(1), 2)
-  expect(c.io.is_branch_taken(1).valid, false)
+  expect(c.io.rob_wb_store.entry_s1(1).valid, true)
+  expect(c.io.rob_wb_store.entry_s1(1).data, 250)
+  expect(c.io.rob_wb_store.entry_s1(1).is_addr, false)
+  expect(c.io.rob_wb_store.entry_s1(1).operand, 2)
+  expect(c.io.rob_wb_store.entry_s1(1).is_branch_taken.valid, false)
 
   // Check BEQ result
-  expect(c.io.rob_wb_store.valid_s1(2), true)
-  expect(c.io.rob_wb_store.data_s1(2), 10400)
-  expect(c.io.rob_wb_store.is_addr_s1(2), true)
-  expect(c.io.rob_wb_store.operand_s1(2), 3)
-  expect(c.io.is_branch_taken(2).valid, true)
-  expect(c.io.is_branch_taken(2).bits, false)
-  expect(c.io.branch_tag(2), 3)
-  expect(c.io.branch_PC(2), 10000)
+  expect(c.io.rob_wb_store.entry_s1(2).valid, true)
+  expect(c.io.rob_wb_store.entry_s1(2).data, 10400)
+  expect(c.io.rob_wb_store.entry_s1(2).is_addr, true)
+  expect(c.io.rob_wb_store.entry_s1(2).operand, 3)
+  expect(c.io.rob_wb_store.entry_s1(2).is_branch_taken.valid, true)
+  expect(c.io.rob_wb_store.entry_s1(2).is_branch_taken.bits, false)
+  expect(c.io.rob_wb_store.entry_s1(2).branch_tag, 3)
+  expect(c.io.rob_wb_store.entry_s1(2).branch_PC, 10000)
 
   // Check BNE result
-  expect(c.io.rob_wb_store.valid_s1(3), true)
-  expect(c.io.rob_wb_store.data_s1(3), 10400)
-  expect(c.io.rob_wb_store.is_addr_s1(3), true)
-  expect(c.io.rob_wb_store.operand_s1(3), 4)
-  expect(c.io.is_branch_taken(3).valid, true)
-  expect(c.io.is_branch_taken(3).bits, true)
-  expect(c.io.branch_tag(3), 4)
-  expect(c.io.branch_PC(3), 10000)
+  expect(c.io.rob_wb_store.entry_s1(3).valid, true)
+  expect(c.io.rob_wb_store.entry_s1(3).data, 10400)
+  expect(c.io.rob_wb_store.entry_s1(3).is_addr, true)
+  expect(c.io.rob_wb_store.entry_s1(3).operand, 4)
+  expect(c.io.rob_wb_store.entry_s1(3).is_branch_taken.valid, true)
+  expect(c.io.rob_wb_store.entry_s1(3).is_branch_taken.bits, true)
+  expect(c.io.rob_wb_store.entry_s1(3).branch_tag, 4)
+  expect(c.io.rob_wb_store.entry_s1(3).branch_PC, 10000)
 
   // Add 2 valid instructions and 2 invalid instructions
   set_instruction(0, "ADD")
@@ -174,50 +157,50 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   // correctly computed. Only 2 ALU results should be valid.
 
   // Check ADD result
-  expect(c.io.rob_wb_store.valid_s1(0), true)
-  expect(c.io.rob_wb_store.data_s1(0), -3L)
-  expect(c.io.rob_wb_store.is_addr_s1(0), false)
-  expect(c.io.rob_wb_store.operand_s1(0), 5)
-  expect(c.io.is_branch_taken(0).valid, false)
+  expect(c.io.rob_wb_store.entry_s1(0).valid, true)
+  expect(c.io.rob_wb_store.entry_s1(0).data, -3L)
+  expect(c.io.rob_wb_store.entry_s1(0).is_addr, false)
+  expect(c.io.rob_wb_store.entry_s1(0).operand, 5)
+  expect(c.io.rob_wb_store.entry_s1(0).is_branch_taken.valid, false)
 
   // Check BLT result
-  expect(c.io.rob_wb_store.valid_s1(1), true)
-  expect(c.io.rob_wb_store.data_s1(1), 20200)
-  expect(c.io.rob_wb_store.is_addr_s1(1), true)
-  expect(c.io.rob_wb_store.operand_s1(1), 6)
-  expect(c.io.is_branch_taken(1).valid, true)
-  expect(c.io.is_branch_taken(1).bits, true)
-  expect(c.io.branch_tag(1), 6)
-  expect(c.io.branch_PC(1), 20000)
+  expect(c.io.rob_wb_store.entry_s1(1).valid, true)
+  expect(c.io.rob_wb_store.entry_s1(1).data, 20200)
+  expect(c.io.rob_wb_store.entry_s1(1).is_addr, true)
+  expect(c.io.rob_wb_store.entry_s1(1).operand, 6)
+  expect(c.io.rob_wb_store.entry_s1(1).is_branch_taken.valid, true)
+  expect(c.io.rob_wb_store.entry_s1(1).is_branch_taken.bits, true)
+  expect(c.io.rob_wb_store.entry_s1(1).branch_tag, 6)
+  expect(c.io.rob_wb_store.entry_s1(1).branch_PC, 20000)
 
   // Check invalid instructions
-  expect(c.io.rob_wb_store.valid_s1(2), false)
-  expect(c.io.rob_wb_store.valid_s1(2), false)
+  expect(c.io.rob_wb_store.entry_s1(2).valid, false)
+  expect(c.io.rob_wb_store.entry_s1(2).valid, false)
 
   // Also verify that results computed 2 cycles ago are now output from ROB WB.
   // Check ADD result
-  expect(c.io.rob_wb_output.valid(0), true)
-  expect(c.io.rob_wb_output.data(0), 250)
-  expect(c.io.rob_wb_output.is_addr(0), false)
-  expect(c.io.rob_wb_output.operand(0), 1)
+  expect(c.io.rob_wb_output.entry(0).valid, true)
+  expect(c.io.rob_wb_output.entry(0).data, 250)
+  expect(c.io.rob_wb_output.entry(0).is_addr, false)
+  expect(c.io.rob_wb_output.entry(0).operand, 1)
 
   // Check ADDI result
-  expect(c.io.rob_wb_output.valid(1), true)
-  expect(c.io.rob_wb_output.data(1), 250)
-  expect(c.io.rob_wb_output.is_addr(1), false)
-  expect(c.io.rob_wb_output.operand(1), 2)
+  expect(c.io.rob_wb_output.entry(1).valid, true)
+  expect(c.io.rob_wb_output.entry(1).data, 250)
+  expect(c.io.rob_wb_output.entry(1).is_addr, false)
+  expect(c.io.rob_wb_output.entry(1).operand, 2)
 
   // Check BEQ result
-  expect(c.io.rob_wb_output.valid(2), true)
-  expect(c.io.rob_wb_output.data(2), 10400)
-  expect(c.io.rob_wb_output.is_addr(2), true)
-  expect(c.io.rob_wb_output.operand(2), 3)
+  expect(c.io.rob_wb_output.entry(2).valid, true)
+  expect(c.io.rob_wb_output.entry(2).data, 10400)
+  expect(c.io.rob_wb_output.entry(2).is_addr, true)
+  expect(c.io.rob_wb_output.entry(2).operand, 3)
 
   // Check BNE result
-  expect(c.io.rob_wb_output.valid(3), true)
-  expect(c.io.rob_wb_output.data(3), 10400)
-  expect(c.io.rob_wb_output.is_addr(3), true)
-  expect(c.io.rob_wb_output.operand(3), 4)
+  expect(c.io.rob_wb_output.entry(3).valid, true)
+  expect(c.io.rob_wb_output.entry(3).data, 10400)
+  expect(c.io.rob_wb_output.entry(3).is_addr, true)
+  expect(c.io.rob_wb_output.entry(3).operand, 4)
 
 }
 
