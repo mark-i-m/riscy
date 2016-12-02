@@ -9,12 +9,12 @@ class Issue extends Module {
 
     // Values from rob_wb with valid signal
     val robWb = new RobWbStore(6).flip // Input
-    val addBufLen = UInt(INPUT, 5)
+    val addrBufLen = UInt(INPUT, 5)
     val stall = Bool(OUTPUT)
     val issuedEntry = Vec.fill(4) {Valid(new ROBEntry).asOutput}
 
-    // Address buf entry and load store info
-    val addBuf = Vec.fill(4) {Valid (new AddBufEntry)} // Output
+    // Addrress buf entry and load store info
+    val addrBuf = Vec.fill(4) {Valid (new AddrBufEntry)} // Output
   }
 
   val arbiter = Module (new IqArbiter())
@@ -25,32 +25,32 @@ class Issue extends Module {
 
   // connections for arbiter
   arbiter.io.inst         := io.inst
-  arbiter.io.addBufLen    := io.addBufLen
+  arbiter.io.addrBufLen		:= io.addrBufLen
   arbiter.io.iqLen(0)     := issueQ0.io.currentLen
   arbiter.io.iqLen(1)     := issueQ1.io.currentLen
   arbiter.io.iqLen(2)     := issueQ2.io.currentLen
   arbiter.io.iqLen(3)     := issueQ3.io.currentLen
 
   val allocatedInst        = arbiter.io.allocIQ
-  io.addBuf               := arbiter.io.addBuf
+  io.addrBuf             	:= arbiter.io.addrBuf
   io.stall                := arbiter.io.stall
 
   // calculating instructions per issue queue
   for (i <- 0 until 4) {
     when (allocatedInst(i).inst.valid === Bool(true)) {
-      when (allocatedInst(i).iqNum === UInt (0)) {
+      when (allocatedInst(i).iqNum === UInt (0x0)) {
         issueQ0.io.newEntry(i).valid := Bool(true)
         issueQ0.io.newEntry(i).bits  := allocatedInst(i).inst.bits
         issueQ1.io.newEntry(i).valid := Bool(false)
         issueQ2.io.newEntry(i).valid := Bool(false)
         issueQ3.io.newEntry(i).valid := Bool(false)
-      } .elsewhen (allocatedInst(i).iqNum === UInt (1)) {
+      } .elsewhen (allocatedInst(i).iqNum === UInt (0x1)) {
         issueQ1.io.newEntry(i).valid := Bool(true)
         issueQ1.io.newEntry(i).bits  := allocatedInst(i).inst.bits
         issueQ0.io.newEntry(i).valid := Bool(false)
         issueQ2.io.newEntry(i).valid := Bool(false)
         issueQ3.io.newEntry(i).valid := Bool(false)
-      } .elsewhen (allocatedInst(i).iqNum === UInt (2)) {
+      } .elsewhen (allocatedInst(i).iqNum === UInt (0x2)) {
         issueQ2.io.newEntry(i).valid := Bool(true)
         issueQ2.io.newEntry(i).bits  := allocatedInst(i).inst.bits
         issueQ0.io.newEntry(i).valid := Bool(false)
@@ -75,7 +75,7 @@ class Issue extends Module {
     }
   }
 
-  // Providing robWB bypass values to  
+  // Providing robWB bypass values to issue queues 
   issueQ0.io.robWb            := io.robWb
   issueQ1.io.robWb            := io.robWb
   issueQ2.io.robWb            := io.robWb
@@ -118,7 +118,7 @@ class Issue extends Module {
   }
 
   // Providing tags of last 2 instructions to all
-  // issue queues for wakeup - TODO
+  // issue queues for wakeup 
   issueQ0.io.issuedPrev2  := issuedPrev2
   issueQ1.io.issuedPrev2  := issuedPrev2
   issueQ2.io.issuedPrev2  := issuedPrev2
