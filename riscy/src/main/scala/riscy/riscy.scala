@@ -61,8 +61,8 @@ class Riscy extends Module {
   issue.io.inst := alloc.io.allocROB
 
   // Hook up IssueStage and LSQ (Addr Q)
-  lsq.io.resEntry     := issue.io.addBuf
-  issue.io.addBufLen  := lsq.io.currentLen
+  lsq.io.resEntry     := issue.io.addrBuf
+  issue.io.addrBufLen  := lsq.io.currentLen
 
   // Hook up Exec and ROB
   // TODO: This is still WIP and will update once interface is right
