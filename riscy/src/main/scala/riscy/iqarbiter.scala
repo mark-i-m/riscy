@@ -106,11 +106,11 @@ class IqArbiter extends Module {
 		// Logic to issue instructions to different iqs
 		// if there is a stall signal set, top issue module
 		// should not issue any instructions to any iqs
-		when (UInt(i) < minDiff(0)) {
+		when (UInt(i) <= minDiff(0)) {
 			io.allocIQ(i).iqNum := finalMin(0)
-		} .elsewhen (UInt(i) < minDiff(1)) {
+		} .elsewhen (UInt(i) <= minDiff(1)) {
 			io.allocIQ(i).iqNum := finalMin(1)
-		} .elsewhen (UInt(i) < minDiff(2)) {
+		} .elsewhen (UInt(i) <= minDiff(2)) {
 			io.allocIQ(i).iqNum := finalMin(2)
 		} .otherwise {
 			io.allocIQ(i).iqNum := finalMin(3)
