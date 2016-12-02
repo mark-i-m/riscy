@@ -7,6 +7,9 @@ class Riscy extends Module {
   val io = new Bundle { 
     /* No system, just a processor! */ 
     val cycles = UInt(OUTPUT, width = 128)
+
+    // For debugging
+    val ins = Vec(4, Valid(UInt(INPUT, 32))).asInput
   }
 
   // Cycle counter -- purely for debugging
@@ -42,15 +45,20 @@ class Riscy extends Module {
   fetch.io.branchMispredTarget := rob.io.mispredTarget
 
   for(i <- 0 until 4) {
+  /* TODO uncomment
     // instructions from Fetch to Decode
     decode(i).io.ins := fetch.io.output.insts(i)
     decode(i).io.pc  := fetch.io.output.pc(i)
+    */
+
+   // TODO remove
+   decode(i).io.ins := io.ins(i)
 
     // decoded instructions to Allocation
     // NOTE: decode and alloc are part of a single pipeline stage, so passing
     // PC from fetch directly to alloc is ok.
     alloc.io.inst(i) := decode(i).io.decoded
-    alloc.io.pc(i)   := fetch.io.output.pc(i)
+    // TODO uncomment alloc.io.pc(i)   := fetch.io.output.pc(i)
   }
 
   // Hook up all signals between Allocation and ROB
@@ -91,15 +99,34 @@ class Riscy extends Module {
 }
 
 class TopLevelTests(c: Riscy) extends Tester(c) {
-	poke(c.decode(0).io.ins.bits, 0x00100013)
-	poke(c.decode(0).io.ins.valid, true)
-	step(1)
-  
-	poke(c.decode(0).io.ins.valid, false)
-	step(15)
-  poke(c.rob.io.rfPorts(0),0)
-	step(0)
-	peek(c.rob.io.rfValues(0))
+  def genAddRI(rs: Int, rd: Int, imm: Int): Int = 
+    ((imm) << 20) | ((rs) << 15) | ((0) << 12) | ((rd) << 7) | 0x13
+
+  poke(c.io.ins(0).bits, genAddRI(0,0,1))
+  poke(c.io.ins(0).valid, true)
+
+  /*
+  poke(c.io.ins(1).bits, genAddRI(1,1,1))
+  poke(c.io.ins(1).valid, true)
+
+  poke(c.io.ins(2).bits, genAddRI(2,2,1))
+  poke(c.io.ins(2).valid, true)
+
+  poke(c.io.ins(3).bits, genAddRI(3,3,1))
+  poke(c.io.ins(3).valid, true)
+  */
+
+  step(1)
+
+  poke(c.io.ins(0).valid, false)
+  poke(c.io.ins(1).valid, false)
+  poke(c.io.ins(2).valid, false)
+  poke(c.io.ins(3).valid, false)
+
+  step(15)
+
+  peek(c.rob.rf.regs(0)._2)
+
 }
 
 class TopLevelGenerator extends TestGenerator {
