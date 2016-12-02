@@ -16,6 +16,8 @@ class LSQ extends Module {
     val stCommit = Vec(2, Valid(UInt(INPUT, 6)).asInput)
     val currentLen = UInt(OUTPUT, 4)
     val robWbOut = new RobWbInput(2).flip
+    val ldAddr = Valid(UInt(OUTPUT, 64))
+    val ldValue = UInt(INPUT, 64)
     val stAddr = Vec(2, Valid(UInt(OUTPUT, 64)))
     val stValue = Vec(2, UInt(OUTPUT, 64))
     // TODO prune these
@@ -312,6 +314,20 @@ class LSQ extends Module {
         }
       }
     }
+  }
+
+  val loads = Vec.tabulate(32) { i => (addrq(i).valid
+              && !addrq(i).bits.st_nld && !addrq(i).bits.value.valid
+              && addrq(i).bits.addr.valid)}
+
+  val isLoad = Cat(Array.tabulate(32) {loads(_)})
+  when (isLoad.orR) {
+    io.ldAddr.valid := Bool(true)
+    io.ldAddr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
+    addrq(PriorityEncoder(loads)).bits.value.bits := io.ldValue
+  } .otherwise {
+    io.ldAddr.valid := Bool(false)
+    io.ldAddr.bits := UInt(0xff)
   }
 
   val CamStCommit = Module(new CAM(2, DEPTH, 6))
