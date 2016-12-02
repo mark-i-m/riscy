@@ -3,7 +3,7 @@ package riscy
 import Chisel._
 import scala.language.reflectiveCalls
 
-class LSQEntry extends AddBufEntry {
+class LSQEntry extends AddrBufEntry {
   val addr = Valid(UInt(OUTPUT, 32))
   val value = Valid(UInt(OUTPUT, 64))
   val ready  = Bool(OUTPUT) // Entry populated or not
@@ -11,7 +11,7 @@ class LSQEntry extends AddBufEntry {
 
 class LSQ extends Module {
   val io = new Bundle {
-    val resEntry = Vec.fill(4) { Valid(new AddBufEntry).flip }
+    val resEntry = Vec.fill(4) { Valid(new AddrBufEntry).flip }
     val robWbin = new RobWbStore(6).flip
     val stCommit = Vec(2, Valid(UInt(INPUT, 6)).asInput)
     val currentLen = UInt(OUTPUT, 4)
