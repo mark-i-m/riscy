@@ -39,7 +39,7 @@ emulator.h Riscy.h Riscy.cpp: $(SCALA_FILES)
 	$(SBT) run
 
 riscy_emu: riscy_emu.cc emulator.h Riscy.h Riscy.cpp
-	g++ -o riscy_emu -ggdb -O0 $^
+	g++ -ggdb -O0 -std=c++11 -o riscy_emu $^
 
 # Clean up!
 clean: 

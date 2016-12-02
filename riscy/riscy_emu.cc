@@ -56,10 +56,6 @@ int main(int argc, char** argv) {
     // Open vcd file
     vcdfile = fopen(vcd, "w");
     assert(vcdfile);
-    fprintf(vcdfile, "$scope module Testbench $end\n");
-    fprintf(vcdfile, "$var reg %d NDISASM instruction $end\n", disasm_len*8);
-    fprintf(vcdfile, "$var reg 64 NCYCLE cycle $end\n");
-    fprintf(vcdfile, "$upscope $end\n");
 
     // The Riscy generated code
     Riscy_t* riscy = new Riscy_t;
