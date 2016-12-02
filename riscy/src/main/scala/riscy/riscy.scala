@@ -91,6 +91,15 @@ class Riscy extends Module {
 }
 
 class TopLevelTests(c: Riscy) extends Tester(c) {
+	poke(c.decode(0).io.ins.bits, 0x00100013)
+	poke(c.decode(0).io.ins.valid, true)
+	step(1)
+  
+	poke(c.decode(0).io.ins.valid, false)
+	step(15)
+  poke(c.rob.io.rfPorts(0),0)
+	step(0)
+	peek(c.rob.io.rfValues(0))
 }
 
 class TopLevelGenerator extends TestGenerator {
