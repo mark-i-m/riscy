@@ -324,7 +324,11 @@ class LSQ extends Module {
     CamStCommit.io.compare_bits(i) := io.stCommit(i).bits
   }
 
-
+  for (i <- 0 until 2) {
+    io.stAddr(i).valid := Bool(false)
+    io.stAddr(i).bits := UInt(0xff)
+    io.stValue(i) := UInt(0xff)
+  }
 
   for (i <- 0 until DEPTH) {
     when (addrq(i).valid && addrq(i).bits.st_nld
@@ -367,9 +371,6 @@ class LSQ extends Module {
         io.robWbOut.is_addr(j) := Bool(false)
         io.robWbOut.operand(j) := addrq(i).bits.robLoc
         io.robWbOut.valid(j) := Bool(false)
-        io.stAddr(j).bits := addrq(i).bits.addr.bits
-        io.stAddr(j).valid := Bool(false)
-        io.stValue(j) := addrq(i).bits.value.bits
       }
     }
   }
