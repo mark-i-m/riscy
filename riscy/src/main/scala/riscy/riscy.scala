@@ -4,15 +4,23 @@ import Chisel._
 
 // The whole processor!
 class Riscy extends Module {
-  val io = new Bundle { /* No system, just a processor! */ }
+  val io = new Bundle { 
+    /* No system, just a processor! */ 
+    val cycles = UInt(OUTPUT, width = 128)
+  }
+
+  // Cycle counter -- purely for debugging
+  val cycles = Reg(init = UInt(0, width = 128))
+  cycles := cycles + UInt(1)
+  io.cycles := cycles
 
   // Memory for both data and instructions
   // - Port 0 => Instruction/Fetch
   // - Port 1 => Data/LSQ
-  var memory = Module(new BigMemory(64, 1 << 12, 2, 2, 100)) // 256 kB memory, 8 word cache lines
+  //var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 100)) // 64kB memory, 8 word cache lines
+  var memory = Module(new BigMemory(64, 1 << 2, 2, 2, 100)) // 64kB memory, 8 word cache lines
 
-  // TODO add BP
-  //val bp = Module(new BP)
+  //TODO val bp = Module(new BP)
   var fetch = Module(new Fetch)
   val decode = Array.fill(4)(Module(new DecodeSingle))
   val alloc = Module(new RiscyAlloc)
@@ -22,7 +30,7 @@ class Riscy extends Module {
   val exec = Module(new Execute)
   val stall = Module(new Stall)
 
-  // TODO: hook up ICache and Memory
+  // Hook up ICache and Memory
   memory.io.readPorts(0) := fetch.io.memReadPort
   fetch.io.memReadData := memory.io.readData(0)
 
@@ -57,23 +65,22 @@ class Riscy extends Module {
   issue.io.addBufLen  := lsq.io.currentLen
 
   // Hook up Exec and ROB
-	// TODO: This is still WIP and will update once interface is right
-
+  // TODO: This is still WIP and will update once interface is right
 
   // LSQ and Exec
-	lsq.io.robWbin := exec.io.rob_wb_store
-	exec.io.rob_wb_input <> lsq.io.robWbOut
+  lsq.io.robWbin := exec.io.rob_wb_store
+  exec.io.rob_wb_input <> lsq.io.robWbOut
 
   // Issue and Exec
   exec.io.issued_inst := issue.io.issuedEntry
-	issue.io.robWb <> exec.io.rob_wb_store
+  issue.io.robWb <> exec.io.rob_wb_store
 
   // Hook up LSQ to ROB, so we can commit stores
-  // TODO: Allignment is needed on this
-	// lsq.io.stCommit := rob.io.stCommit
+  // Can only store up to two values per cycle
+  lsq.io.stCommit(0) := rob.io.stCommit(0)
+  lsq.io.stCommit(1) := rob.io.stCommit(1)
 
   // TODO: hook up DCache and Memory
-  //lsq <> memory
 
   // Hook up stalling logic
   fetch.io.stall      := stall.io.fetchStall

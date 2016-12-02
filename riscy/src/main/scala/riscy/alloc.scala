@@ -118,8 +118,10 @@ class RiscyAlloc extends Module {
     robEntry.op := pipelinedInst(i).bits.op
     robEntry.funct3 := pipelinedInst(i).bits.funct3
     robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
-		robEntry.isSt := pipelinedOpDecode(i).isSt
-		robEntry.isLd := pipelinedOpDecode(i).isLd
+    robEntry.isSt := pipelinedOpDecode(i).isSt
+    robEntry.isLd := pipelinedOpDecode(i).isLd
+    robEntry.isHalt := pipelinedOpDecode(i).isHalt
+
     // First operand
     when (renamedRs1(i).valid) {
       // Getting from ROB

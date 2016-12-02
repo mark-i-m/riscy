@@ -4,7 +4,7 @@ MODULES = Fetch ICache DecodeSingle OpDecode Alloc ROB
 # Backend
 MODULES += IssueQueue IqArbiter LSQ Issue ALU RobWriteback Execute Stall
 # Util
-MODULES += HelloModule MultiCounter CAM RegFile
+MODULES += HelloModule MultiCounter CAM RegFile Memory
 
 # List of BENCHES for integration testing
 BENCHES=Hello.hex.bench
@@ -39,7 +39,7 @@ emulator.h Riscy.h Riscy.cpp: $(SCALA_FILES)
 	$(SBT) run
 
 riscy_emu: riscy_emu.cc emulator.h Riscy.h Riscy.cpp
-	g++ -o riscy_emu -ggdb -O0 $^
+	g++ -ggdb -O0 -std=c++11 -o riscy_emu $^
 
 # Clean up!
 clean: 
