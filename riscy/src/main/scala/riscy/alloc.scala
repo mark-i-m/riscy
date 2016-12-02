@@ -121,6 +121,7 @@ class RiscyAlloc extends Module {
     robEntry.isSt := pipelinedOpDecode(i).isSt
     robEntry.isLd := pipelinedOpDecode(i).isLd
     robEntry.isHalt := pipelinedOpDecode(i).isHalt
+    robEntry.hasRd := pipelinedOpDecode(i).hasRd
 
     // First operand
     when (renamedRs1(i).valid) {
@@ -228,6 +229,13 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.remapMapping(3).valid, 0)
   step(1)
 
+  // Control
+  // TODO expect pc
+  expect(c.io.allocROB(0).bits.tag, 0)
+  expect(c.io.allocROB(0).bits.hasRd, true)
+  expect(c.io.allocROB(0).bits.isSt, false)
+  expect(c.io.allocROB(0).bits.isLd, false)
+  expect(c.io.allocROB(0).bits.isHalt, false)
   // Should map r1 to ROB0
   expect(c.io.allocRemap(0).valid, 1)
   expect(c.io.allocRemap(0).bits.reg, 1)
@@ -245,6 +253,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(0).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs2Val.valid, true)
   expect(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF)
+
 
   // Should map r2 to ROB1
   expect(c.io.allocRemap(1).valid, 1)
