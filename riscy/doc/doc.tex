@@ -1,0 +1,97 @@
+\documentclass{article}
+
+\title{The Riscy Processor}
+\author{Karan Bavishi, Mark Mansi, Suhas Pai, Preyas Shah}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+We implement the RISCV ISA with a superscalar, out-of-order core. Our
+implementation is optimized for correctness. Our second goal was performance.
+Our third goal was synthesizeability. All goals have been compromised for the
+sake of completion.
+
+\section{Overview}
+
+\begin{itemize}
+    \item 4-wide pipeline
+    \item Out-of-order execution; In-order commit
+    \item Fetch
+        \begin{itemize}
+            \item 3 cycle latency for cache hit
+            \item Branch prediction (TODO): 2-level predictor, BTB, global
+                history register.
+            \item I-Cache: Blocking, (TODO) KB, 2-way associative, 1 port.
+        \end{itemize}
+    \item Decode and Rename
+        \begin{itemize}
+            \item 64-entry ROB
+            \item 2 cycle latency
+        \end{itemize}
+    \item Issue and FUs
+        \begin{itemize}
+            \item 4 ALUs
+            \item 4 issue queues, 16 entries each, 1 ALU per queue
+            \item Load-balancing arbiter places new instructions in issue
+                queues.
+            \item ALUs also used to compute ld/st addresses.
+        \end{itemize}
+    \item Address Queue
+        \begin{itemize}
+            \item 32 entries
+            \item Tracks load/store dependencies.
+            \item Non-speculative memory disambiguation.
+            \item Loads access cache out-of-order between stores.
+            \item Stores access cache on commit. 
+            \item D-Cache (TODO)
+        \end{itemize}
+    \item Writeback
+        \begin{itemize}
+            \item Processor supports back-to-back execution of dependent
+                instructions.
+            \item Writeback structure (a.k.a ROB WB or more affectionately,
+                \texttt{FooPP}) is designed to avoid the massive tangle of wires
+                created by broadcast-based writeback among 4 ALUs and a LSQ.
+        \end{itemize}
+    \item Stall: we implement a distinct top-level module to handle stall
+        coordination among all stages. The two stall producers in the pipeline
+        are the issue queue arbiter and the ROB. A stall is generated when there
+        is not enough room in the issue queues or the ROB. Each stage is a
+        consumer of stalls produced by stages before it.
+\end{itemize}
+
+\section{Modules}
+
+Our processor has a pipeline depth of 8. The pipeline is divided into several
+independently designed and implemented blocks (implemented as modules in
+Chisel). This section presents an overview of the whole processor. Then, we
+present the design of each block.
+
+\subsection{Fetch}
+
+Our fetch module encapsulates the logic of selecting the next PC, issuing
+requests to the instruction memory heirarchy (including the I\$), and presenting
+instructions to the subsequent stage (decode).
+
+We implement a pipelined, blocking, 2-way associative instruction cache with
+2-cycle latency. And additional cycle of latency comes from computing the next
+PC.
+
+The output from the caches is rotated and presented to the rest of the pipeline.
+
+\subsection{Decode and Allocate}
+
+The next two cycles are consumed in decoding and renaming the instructions from
+fetch.
+
+Decode takes less than one cycle because it consists entirely of separating
+wires. Thus, we combine decode with the first cycle of renaming.
+
+Renaming proceeds in two phases. The first cycle decodes the instruction and
+renames all destinations. The second cycle renames operands and produces and ROB
+entry which can just be latched to the ROB next cycle.
+
+\end{document}
