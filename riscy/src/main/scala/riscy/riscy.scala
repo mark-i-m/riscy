@@ -113,19 +113,31 @@ class TopLevelTests(c: Riscy) extends Tester(c) {
   def genAddRI(rs: Int, rd: Int, imm: Int): Int = 
     ((imm) << 20) | ((rs) << 15) | ((0) << 12) | ((rd) << 7) | 0x13
 
-  poke(c.io.ins(0).bits, genAddRI(0,0,1))
+  poke(c.io.ins(0).bits, genAddRI(1,1,1))
   poke(c.io.ins(0).valid, true)
 
-  /*
-  poke(c.io.ins(1).bits, genAddRI(1,1,1))
+  poke(c.io.ins(1).bits, genAddRI(2,2,2))
   poke(c.io.ins(1).valid, true)
 
-  poke(c.io.ins(2).bits, genAddRI(2,2,1))
+  poke(c.io.ins(2).bits, genAddRI(3,3,3))
   poke(c.io.ins(2).valid, true)
 
-  poke(c.io.ins(3).bits, genAddRI(3,3,1))
+  poke(c.io.ins(3).bits, genAddRI(4,4,4))
   poke(c.io.ins(3).valid, true)
-  */
+
+  step(2)
+
+  poke(c.io.ins(0).bits, genAddRI(1,1,1))
+  poke(c.io.ins(0).valid, true)
+
+  poke(c.io.ins(1).bits, genAddRI(2,2,2))
+  poke(c.io.ins(1).valid, true)
+
+  poke(c.io.ins(2).bits, genAddRI(3,3,3))
+  poke(c.io.ins(2).valid, true)
+
+  poke(c.io.ins(3).bits, genAddRI(4,4,4))
+  poke(c.io.ins(3).valid, true)
 
   step(1)
 
