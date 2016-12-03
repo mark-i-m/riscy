@@ -3,19 +3,21 @@ package riscy
 import Chisel._
 
 // The whole processor!
-class Riscy extends Module {
+class Riscy(blackbox: Boolean = false) extends Module {
   val io = new Bundle { 
     /* No system, just a processor! */ 
     val cycles = UInt(OUTPUT, width = 128)
 
-    // For debugging
+    // For testing and debugging
     val ins = Vec(4, Valid(UInt(INPUT, 32))).asInput
   }
 
   // Cycle counter -- purely for debugging
-  val cycles = Reg(init = UInt(0, width = 128))
+  val cycles = Reg(init = UInt(0, width = 32))
   cycles := cycles + UInt(1)
   io.cycles := cycles
+
+  printf("\n---------------------- CYCLE %d ----------------------\n", cycles)
 
   // Memory for both data and instructions
   // - Port 0 => Instruction/Fetch
@@ -45,20 +47,24 @@ class Riscy extends Module {
   fetch.io.branchMispredTarget := rob.io.mispredTarget
 
   for(i <- 0 until 4) {
-  /* TODO uncomment
-    // instructions from Fetch to Decode
-    decode(i).io.ins := fetch.io.output.insts(i)
-    decode(i).io.pc  := fetch.io.output.pc(i)
-    */
-
-   // TODO remove
-   decode(i).io.ins := io.ins(i)
+    // If testing as a blackbox, use our fetch unit and memory;
+    // otherwise, poke instructions into decode directly.
+    if(blackbox) {
+      // instructions from Fetch to Decode
+      decode(i).io.ins := fetch.io.output.insts(i)
+      decode(i).io.pc  := fetch.io.output.pc(i)
+    } else {
+      decode(i).io.ins := io.ins(i)
+    }
 
     // decoded instructions to Allocation
     // NOTE: decode and alloc are part of a single pipeline stage, so passing
     // PC from fetch directly to alloc is ok.
     alloc.io.inst(i) := decode(i).io.decoded
-    // TODO uncomment alloc.io.pc(i)   := fetch.io.output.pc(i)
+    
+    if(blackbox) {
+      alloc.io.pc(i) := fetch.io.output.pc(i)
+    }
   }
 
   // Hook up all signals between Allocation and ROB

@@ -181,22 +181,26 @@ class ROB extends Module {
       when(UInt(i) === io.robFirst) {
         robW(i) := io.allocROB(0)
         when(io.allocROB(0).valid) {
-          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(0).bits.pc)
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+            io.allocROB(0).bits.pc, io.allocROB(0).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(1)) {
         robW(i) := io.allocROB(1)
         when(io.allocROB(1).valid) {
-          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(1).bits.pc)
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+            io.allocROB(1).bits.pc, io.allocROB(1).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(2)) {
         robW(i) := io.allocROB(2)
         when(io.allocROB(2).valid) {
-          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(2).bits.pc)
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+            io.allocROB(2).bits.pc, io.allocROB(2).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(3)) {
         robW(i) := io.allocROB(3)
         when(io.allocROB(3).valid) {
-          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(3).bits.pc)
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+            io.allocROB(3).bits.pc, io.allocROB(3).bits.op)
         }
       } .otherwise {
         robW(i).valid := Bool(false) // write disable

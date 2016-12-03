@@ -109,6 +109,8 @@ int main(int argc, char** argv) {
     in.close();
 
     std::cerr << "Loaded memory" << std::endl;
+    
+    std::cerr << "Starting emulation" << std::endl;
 
     // Run the emulation
     while(trace_count < max_cycles) {

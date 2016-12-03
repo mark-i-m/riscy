@@ -130,6 +130,9 @@ class RiscyAlloc extends Module {
     robEntry.immU := pipelinedInst(i).bits.immU
     robEntry.immJ := pipelinedInst(i).bits.immJ
 
+    // If this is a halt instruction, then we are always ready to commit!
+    robEntry.rdVal.valid := pipelinedOpDecode(i).isHalt
+
     // First operand
     when (renamedRs1(i).valid) {
       // Getting from ROB
