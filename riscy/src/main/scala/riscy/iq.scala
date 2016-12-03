@@ -142,6 +142,9 @@ class IssueQueue extends Module {
 	
 	io.issuedEntry.bits := issuedPipelineBits
 
+	val rs1Val = Bool()
+	val rs2Val = Bool()
+
 	// First case is when instruction is issued from issue queue
 	// Logic to shift instructions up in the order
 	// if ith instruction is issued, we have to shift 
