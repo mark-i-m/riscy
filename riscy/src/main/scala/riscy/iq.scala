@@ -524,6 +524,16 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	step(1)
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
+
+	println("// Test10")
+	println("//	 - check if non filled issue queue are generating a valid signal")
+	poke(c.io.robWb.operand_s1(0), 0)
+	poke(c.io.robWb.valid_s1(0), 1)
+
+	step(1)
+	expect(c.io.currentLen, 0)
+	expect(c.io.issuedEntry.valid, 0)
+
 }
 
 class IssueQueueGenerator extends TestGenerator {
