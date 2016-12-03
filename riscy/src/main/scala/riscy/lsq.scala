@@ -331,6 +331,8 @@ class LSQ extends Module {
   }
 
   val CamStCommit = Module(new CAM(2, DEPTH, 6))
+  val stCommitRow = Vec(2, Vec(DEPTH, Bool()))
+  val stCommitSet = Vec(2, Bool())
 
   for ( i <- 0 until 32) {
     CamStCommit.io.input_bits(i) := addrq(i).bits.robLoc
@@ -338,12 +340,6 @@ class LSQ extends Module {
 
   for ( i <- 0 until 2) {
     CamStCommit.io.compare_bits(i) := io.stCommit(i).bits
-  }
-
-  for (i <- 0 until 2) {
-    io.stAddr(i).valid := Bool(false)
-    io.stAddr(i).bits := UInt(0xff)
-    io.stValue(i) := UInt(0xff)
   }
 
   for (i <- 0 until DEPTH) {
@@ -374,20 +370,32 @@ class LSQ extends Module {
           } 
           when (CamStCommit.io.hit(j)(i)) {
             printf("St dispatch on %d\n", UInt(j))
-            io.stAddr(j).bits := addrq(i).bits.addr.bits
             printf("St dispatch addr %d\n", addrq(i).bits.addr.bits)
-            io.stAddr(j).valid := io.stCommit(j).valid
-            io.stValue(j) := addrq(i).bits.value.bits
             printf("St dispatch value %d\n", addrq(i).bits.value.bits)
             addrq(i).bits.addr.valid := Bool(false)
             addrq(i).valid := Bool(false)
+            stCommitRow(j)(i) := Bool(true)
           }
       } .otherwise {
         io.robWbOut.data(j) := addrq(i).bits.value.bits
         io.robWbOut.is_addr(j) := Bool(false)
         io.robWbOut.operand(j) := addrq(i).bits.robLoc
         io.robWbOut.valid(j) := Bool(false)
+        stCommitRow(j)(i) := Bool(false)
       }
+    }
+  }
+
+  for (i <- 0 until 2) {
+    stCommitSet(i) := Cat(Array.tabulate(32) { stCommitRow(i)(_) }).orR
+    when (stCommitSet(i)) {
+      io.stAddr(i).valid := Bool(true)
+      io.stAddr(i).bits := addrq(PriorityEncoder(stCommitRow(i))).bits.addr.bits
+      io.stValue(i) := addrq(PriorityEncoder(stCommitRow(i))).bits.value.bits
+    } .otherwise {
+      io.stAddr(i).valid := Bool(false)
+      io.stAddr(i).bits := UInt(0xdead)
+      io.stValue(i) := UInt(0xdead)
     }
   }
 }
@@ -526,9 +534,8 @@ class LSQTests(c: LSQ) extends Tester(c) {
   poke(c.io.stCommit(0).bits, 6)
   expect(c.CamStCommit.io.hit(0)(0), true)
   expect(c.io.dispatch(0), true)
-  // TODO WHY???
-  //expect(c.io.stAddr(0).valid, true)
-  //expect(c.io.stAddr(0).bits, 0x10000)
+  expect(c.io.stAddr(0).valid, true)
+  expect(c.io.stAddr(0).bits, 0x10000)
 
   step(1)
   expect(c.depMatrix(1).bits(0), false)
