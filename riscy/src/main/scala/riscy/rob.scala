@@ -242,7 +242,7 @@ class ROB extends Module {
       robW(io.wbValues(i).id.bits).bits.isMispredicted :=
         io.wbValues(i).taken ^ robW(io.wbValues(i).id.bits).bits.predTaken
 
-      printf("writing WB value to ROB%d: %x\n", io.wbValues(i).id.bits, io.wbValues(i).value)
+      printf("WB value to ROB%d: %x\n", io.wbValues(i).id.bits, io.wbValues(i).value)
     }
   }
 
@@ -364,7 +364,7 @@ class ROB extends Module {
     rf.io.wValues(i)     := front(i).rdVal.bits
 
     when(rf.io.wPorts(i).valid) {
-      printf("latch to rf committing ROB%d: %x\n", head.value + UInt(i), front(i).rdVal.bits)
+      printf("Writing RF on ROB%d commit: %x\n", head.value + UInt(i), front(i).rdVal.bits)
     } .elsewhen(couldCommit(i) && !lastToRename(i) === UInt(i) && front(i).hasRd) {
       printf("not latching to rf front(%d), ROB%d, r%d: %x\n",
         UInt(i), head.value + UInt(i), front(i).rd, front(i).rdVal.bits)
