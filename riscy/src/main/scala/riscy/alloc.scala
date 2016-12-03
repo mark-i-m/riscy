@@ -123,6 +123,13 @@ class RiscyAlloc extends Module {
     robEntry.isHalt := pipelinedOpDecode(i).isHalt
     robEntry.hasRd := pipelinedOpDecode(i).hasRd
 
+    // Immediates
+    robEntry.immI := pipelinedInst(i).bits.immI
+    robEntry.immS := pipelinedInst(i).bits.immS
+    robEntry.immB := pipelinedInst(i).bits.immB
+    robEntry.immU := pipelinedInst(i).bits.immU
+    robEntry.immJ := pipelinedInst(i).bits.immJ
+
     // First operand
     when (renamedRs1(i).valid) {
       // Getting from ROB

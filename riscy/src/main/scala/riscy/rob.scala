@@ -41,9 +41,9 @@ class WBValue extends Bundle {
   // Which physical reg?
   val id = Valid(UInt(INPUT, 6))
   // The value to write back
-  val value = UInt(INPUT, 32)
+  val value = UInt(INPUT, 64)
   // Is this a taken branch
-  val taken = Bool(INPUT)
+  val taken = Bool(INPUT) // TODO
 }
 
 class ROB extends Module {

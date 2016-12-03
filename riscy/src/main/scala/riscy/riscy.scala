@@ -73,7 +73,12 @@ class Riscy extends Module {
   issue.io.addrBufLen  := lsq.io.currentLen
 
   // Hook up Exec and ROB
-  // TODO: This is still WIP and will update once interface is right
+  for(i <- 0 until 6) {
+    rob.io.wbValues(i).id.valid := exec.io.rob_wb_output.valid(i)
+    rob.io.wbValues(i).id.bits := exec.io.rob_wb_output.operand(i)
+    rob.io.wbValues(i).value := exec.io.rob_wb_output.data(i)
+    // TODO taken bit
+  }
 
   // LSQ and Exec
   lsq.io.robWbin := exec.io.rob_wb_store
