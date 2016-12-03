@@ -297,6 +297,30 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	expect(c.io.allocIQ(2).inst.valid, 0x1)
 	expect(c.io.allocIQ(3).inst.valid, 0x1)
 	expect(c.io.stall, 0x0)
+
+	// Test - 7  to check if all correct instructions are getting assigned
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  	poke(c.io.iqLen(0), 0x4)
+	poke(c.io.iqLen(1), 0x5)
+  	poke(c.io.iqLen(2), 0x6)
+	poke(c.io.iqLen(3), 0x7)
+	poke(c.io.addrBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.allocIQ(0).iqNum, 0x0)
+	expect(c.io.allocIQ(1).iqNum, 0x0)
+	expect(c.io.allocIQ(2).iqNum, 0x1)
+	expect(c.io.allocIQ(3).iqNum, 0x1)
+	expect(c.io.allocIQ(0).inst.valid, 0x1)
+	expect(c.io.allocIQ(1).inst.valid, 0x1)
+	expect(c.io.allocIQ(2).inst.valid, 0x1)
+	expect(c.io.allocIQ(3).inst.valid, 0x1)
+	expect(c.io.stall, 0x0)
+
 }
 
 class IqArbiterGenerator extends TestGenerator {
