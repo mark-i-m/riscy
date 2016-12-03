@@ -66,7 +66,8 @@ class IssueQueue extends Module {
 		for (i <- 0 to 7) {
 			isWokenUpRs1(j)(i+1) := isWokenUpRs1(j)(i) || 
 													(io.issuedPrev2(i).valid === Bool(true) && 
-					    						 iqueue(j).bits.rs1Rename === io.issuedPrev2(i).bits)
+					    						 iqueue(j).bits.rs1Rename === io.issuedPrev2(i).bits &&
+													 iqueue(j).valid)
 		}
 	}
 
@@ -76,7 +77,8 @@ class IssueQueue extends Module {
 		for (i <- 0 to 7) {
 			isWokenUpRs2(j)(i+1) := isWokenUpRs2(j)(i) || 
 													(io.issuedPrev2(i).valid === Bool(true) && 
-					    						 iqueue(j).bits.rs2Rename === io.issuedPrev2(i).bits)
+					    						 iqueue(j).bits.rs2Rename === io.issuedPrev2(i).bits &&
+													 iqueue(j).valid)
 		}
 	}
 
