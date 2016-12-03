@@ -1,7 +1,7 @@
 0020811300108093        add r1 <- r1 + 1, add r2 <- r1 + 2
 0041821300318193        add r3 <- r3 + 3, add r4 <- r3 + 4
 FFFFFFFFFFFFFFFF        halt
-
-This test is intended to cause instructions to execute out of order.  The first
-and third instructions should execute in the first cycle; then the second and
-fourth.
+0000000000000000
+0000000000000000        This test is intended to cause instructions to execute out of order.  The first
+0000000000000000        and third instructions should execute in the first cycle; then the second and
+0000000000000000        fourth.

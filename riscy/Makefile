@@ -6,9 +6,6 @@ MODULES += IssueQueue IqArbiter LSQ Issue ALU RobWriteback Execute Stall
 # Util
 MODULES += HelloModule MultiCounter CAM RegFile Memory
 
-# List of BENCHES for integration testing
-BENCHES=Hello.hex.bench
-
 ###############################################################################
 # Some configurations
 TOP = ..
@@ -19,9 +16,12 @@ SBT ?= java -Xmx2G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
 
 SCALA_FILES=$(wildcard src/main/scala/riscy/*.scala)
 TESTS=$(patsubst %, %.test, $(MODULES))
+BENCHES=$(patsubst bench/%, %.bench, $(wildcard bench/*.hex))
 
 # Target to run all tests
 test: $(TESTS)
+
+bench: $(BENCHES)
 
 # Run unit tests with `make <Module name>.test`
 $(TESTS) : %.test :
