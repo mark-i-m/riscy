@@ -7,7 +7,6 @@ class IssueQueue extends Module {
 		val newEntry = Vec.fill(4) {Valid(new ROBEntry).asInput}
 		// Currently just assume that below signals contain insts
 		// issued in last 2 cycles as form of ROB entry
-		// At top level this structure has to be generated - TODO
 		val issuedPrev2 = Vec.fill(8) {Valid(UInt(INPUT, 6)).asInput}
 		// Values from rob_wb with valid signal
 		val robWb = new RobWbStore(6).flip
@@ -16,7 +15,7 @@ class IssueQueue extends Module {
 	}
 
 	//val eachEntry = Module ( new ShiftRegPP(() => new  ROBEntry))
-	val iqueue = Vec.fill(16) {Reg(outType = new ROBEntry)}
+	val iqueue = Vec.fill(16) {Reg(outType = (Valid(new ROBEntry)))}
 	
 	//Counter to maintain length of IQ
 	val counter = new MultiCounter(17)
@@ -26,8 +25,8 @@ class IssueQueue extends Module {
 	val wbCamRs2 = Module (new CAM(6, 16, 6))
 
 	for (i <- 0 until 16) {
-		wbCamRs1.io.input_bits(i) := iqueue(i).rs1Rename
-		wbCamRs2.io.input_bits(i) := iqueue(i).rs2Rename
+		wbCamRs1.io.input_bits(i) := iqueue(i).bits.rs1Rename
+		wbCamRs2.io.input_bits(i) := iqueue(i).bits.rs2Rename
 	}
 	for (i <- 0 until 6) {
 		wbCamRs1.io.compare_bits(i) := io.robWb.operand_s1(i)
@@ -40,7 +39,7 @@ class IssueQueue extends Module {
 	isAssigned(0) := UInt(0)
 	for (i <- 0 until 4) {
 		when (io.newEntry(i).valid) {
-			iqueue(counter.value + isAssigned(i)) := io.newEntry(i).bits
+			iqueue(counter.value + isAssigned(i)) := io.newEntry(i)
 			isAssigned(i+1) := isAssigned(i) + UInt(1)
 		} .otherwise {
 			isAssigned(i+1) := isAssigned(i) + UInt(0)
@@ -67,7 +66,7 @@ class IssueQueue extends Module {
 		for (i <- 0 to 7) {
 			isWokenUpRs1(j)(i+1) := isWokenUpRs1(j)(i) || 
 													(io.issuedPrev2(i).valid === Bool(true) && 
-					    						 iqueue(j).rs1Rename === io.issuedPrev2(i).bits)
+					    						 iqueue(j).bits.rs1Rename === io.issuedPrev2(i).bits)
 		}
 	}
 
@@ -77,7 +76,7 @@ class IssueQueue extends Module {
 		for (i <- 0 to 7) {
 			isWokenUpRs2(j)(i+1) := isWokenUpRs2(j)(i) || 
 													(io.issuedPrev2(i).valid === Bool(true) && 
-					    						 iqueue(j).rs2Rename === io.issuedPrev2(i).bits)
+					    						 iqueue(j).bits.rs2Rename === io.issuedPrev2(i).bits)
 		}
 	}
 
@@ -86,7 +85,7 @@ class IssueQueue extends Module {
 		when (isWokenUpRs1(j)(8) === Bool(true)) {
 			wakeUpRs1(j) := Bool(true)
 		} .otherwise {
-			wakeUpRs1(j) := iqueue(j).rs1Val.valid
+			wakeUpRs1(j) := iqueue(j).bits.rs1Val.valid
 		}
 		//printf("Rs1WakeUp ROB%d val: %x\n", UInt(j), wakeUpRs1(j))
 	}
@@ -96,7 +95,7 @@ class IssueQueue extends Module {
 		when (isWokenUpRs2(j)(8) === Bool(true)) {
 			wakeUpRs2(j) := Bool(true)
 		} .otherwise {
-			wakeUpRs2(j) := iqueue(j).rs2Val.valid
+			wakeUpRs2(j) := iqueue(j).bits.rs2Val.valid
 		}
 		//printf("Rs2WakeUp ROB%d val: %x\n", UInt(j), wakeUpRs2(j))
   }
@@ -134,8 +133,8 @@ class IssueQueue extends Module {
 	// oldest instrution with valid bit not set
 	val issuedNum = PriorityEncoder(allReady)
 	val issuedNumOH = UIntToOH(issuedNum)
-	val issuedPipelineBits = Reg(next = MuxLookup(issuedNum, iqueue(0), 
-	Array.tabulate(16) {i => UInt (i) -> iqueue(i)}))
+	val issuedPipelineBits = Reg(next = MuxLookup(issuedNum, iqueue(0).bits, 
+	Array.tabulate(16) {i => UInt (i) -> iqueue(i).bits}))
 
 	//printf("issuedNum val: %x\n issuedNumOH %x\n", issuedNum, issuedNumOH)
 	
@@ -158,27 +157,27 @@ class IssueQueue extends Module {
 					// from issued to last entry compare with next one 
 					// as they are shifted
 					for (k <- 0 until 6) {
-						when (wbCamRs1.io.hit(k)(j+1) && io.robWb.valid_s1(k)) {
-							iqueue(j).rs1Val.bits := io.robWb.data_s1(k)
-							iqueue(j).rs1Val.bits := Bool(true)
+						when (wbCamRs1.io.hit(k)(j+1) && io.robWb.valid_s1(k) && iqueue(j).valid) {
+							iqueue(j).bits.rs1Val.bits := io.robWb.data_s1(k)
+							iqueue(j).bits.rs1Val.bits := Bool(true)
 						}
-						when (wbCamRs2.io.hit(k)(j+1) && io.robWb.valid_s1(k)) {
-							iqueue(j).rs2Val.bits := io.robWb.data_s1(k)
-							iqueue(j).rs2Val.valid := Bool(true)
+						when (wbCamRs2.io.hit(k)(j+1) && io.robWb.valid_s1(k) && iqueue(j).valid) {
+							iqueue(j).bits.rs2Val.bits := io.robWb.data_s1(k)
+							iqueue(j).bits.rs2Val.valid := Bool(true)
 						} 	
 					}
-					iqueue(15).rs1Val.valid := Bool(false)
-					iqueue(15).rs2Val.valid := Bool(false)
+					iqueue(15).bits.rs1Val.valid := Bool(false)
+					iqueue(15).bits.rs2Val.valid := Bool(false)
 				}
 				for (l <- 0 to i-1) {
 					for (k <- 0 until 6) {
-						when (wbCamRs1.io.hit(k)(l) && io.robWb.valid_s1(k)) {
-							iqueue(l).rs1Val.bits := io.robWb.data_s1(k)
-							iqueue(l).rs1Val.bits := Bool(true)
+						when (wbCamRs1.io.hit(k)(l) && io.robWb.valid_s1(k) && iqueue(l).valid) {
+							iqueue(l).bits.rs1Val.bits := io.robWb.data_s1(k)
+							iqueue(l).bits.rs1Val.bits := Bool(true)
 						}
-						when (wbCamRs2.io.hit(k)(l) && io.robWb.valid_s1(k)) {
-							iqueue(l).rs2Val.bits := io.robWb.data_s1(k)
-							iqueue(l).rs2Val.valid := Bool(true)
+						when (wbCamRs2.io.hit(k)(l) && io.robWb.valid_s1(k) && iqueue(l).valid) {
+							iqueue(l).bits.rs2Val.bits := io.robWb.data_s1(k)
+							iqueue(l).bits.rs2Val.valid := Bool(true)
 						} 	
 					}
 				}
@@ -189,13 +188,13 @@ class IssueQueue extends Module {
 		// IQ entries
 		for (l <- 0 to 15) {
 			for (k <- 0 until 6) {
-				when (wbCamRs1.io.hit(k)(l) && io.robWb.valid_s1(k)) {
-					iqueue(l).rs1Val.bits := io.robWb.data_s1(k)
-					iqueue(l).rs1Val.bits := Bool(true)
+				when (wbCamRs1.io.hit(k)(l) && io.robWb.valid_s1(k) && iqueue(l).valid) {
+					iqueue(l).bits.rs1Val.bits := io.robWb.data_s1(k)
+					iqueue(l).bits.rs1Val.bits := Bool(true)
 				}
-				when (wbCamRs2.io.hit(k)(l) && io.robWb.valid_s1(k)) {
-					iqueue(l).rs2Val.bits := io.robWb.data_s1(k)
-					iqueue(l).rs2Val.valid := Bool(true)
+				when (wbCamRs2.io.hit(k)(l) && io.robWb.valid_s1(k) && iqueue(l).valid) {
+					iqueue(l).bits.rs2Val.bits := io.robWb.data_s1(k)
+					iqueue(l).bits.rs2Val.valid := Bool(true)
 				} 	
 			}
 		}
