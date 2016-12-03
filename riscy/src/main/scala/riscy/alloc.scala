@@ -58,6 +58,10 @@ class RiscyAlloc extends Module {
     i => RegEnable(io.inst(i), !io.allocStall)
   }
 
+  val pipelinedPc = Vec.tabulate(4) {
+    i => RegEnable(io.pc(i), !io.allocStall)
+  }
+
   // Do a simple addition to rename the instructions. Every instruction gets
   // an ROB entry, regardless of how many registers it reads or writes. The
   // valid bits of the instructions and the number of free ROB entries determines
@@ -115,6 +119,8 @@ class RiscyAlloc extends Module {
     val robEntry = io.allocROB(i).bits // convenience
 
     // Operation
+    robEntry.tag := renamedDest(i)
+    robEntry.pc := pipelinedPc(i)
     robEntry.op := pipelinedInst(i).bits.op
     robEntry.funct3 := pipelinedInst(i).bits.funct3
     robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
