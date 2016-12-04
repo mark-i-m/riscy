@@ -19,8 +19,8 @@ class DCache extends Module {
     val ldReq = new DCacheLdReq
     val memStAddrPort = Vec(2, Valid(UInt(OUTPUT,64).asOutput))
     val memStData = Vec(2, UInt(OUTPUT,64))
-    val memLdAddrPort = Valid(UInt(OUTPUT,64))
-    val memLdData = UInt(INPUT,8 * 64)
+    val memLdAddrPort = Valid(UInt(OUTPUT,64)).asOutput
+    val memLdData = Valid(UInt(INPUT,8 * 64)).asInput
   }
 
   io.memStAddrPort(0).valid := io.stReq(0).addr.valid
@@ -32,7 +32,7 @@ class DCache extends Module {
 
   io.memLdAddrPort.valid := io.ldReq.addr.valid
   io.memLdAddrPort.bits := io.ldReq.addr.bits
-  io.ldReq.data := io.memLdData(63,0)
+  io.ldReq.data := io.memLdData.bits(63,0)
 }
 
 class DCacheTests(c: DCache) extends Tester(c) {

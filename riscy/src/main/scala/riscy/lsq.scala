@@ -22,8 +22,8 @@ class LSQ extends Module {
     val stValue = Vec(2, UInt(OUTPUT, 64))
     val memStAddrPort = Vec(2, Valid(UInt(OUTPUT,64).asOutput))
     val memStData = Vec(2, UInt(OUTPUT,64))
-    val memLdAddrPort = Valid(UInt(OUTPUT,64))
-    val memLdData = UInt(INPUT,8 * 64)
+    val memLdAddrPort = Valid(UInt(OUTPUT,64)).asOutput
+    val memLdData = Valid(UInt(INPUT,8 * 64)).asInput
   }
 
   // The Data Cache
