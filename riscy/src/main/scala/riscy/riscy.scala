@@ -83,6 +83,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
     rob.io.wbValues(i).id.valid := exec.io.rob_wb_output.valid(i)
     rob.io.wbValues(i).id.bits := exec.io.rob_wb_output.operand(i)
     rob.io.wbValues(i).value := exec.io.rob_wb_output.data(i)
+    rob.io.wbValues(i).isAddr := exec.io.rob_wb_output.is_addr(i)
     // TODO taken bit
   }
 

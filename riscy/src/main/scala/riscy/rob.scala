@@ -44,6 +44,8 @@ class WBValue extends Bundle {
   val value = UInt(INPUT, 64)
   // Is this a taken branch
   val taken = Bool(INPUT) // TODO
+  // Is this a computed address
+  val isAddr = Bool(INPUT) // TODO
 }
 
 class ROB extends Module {
@@ -234,7 +236,7 @@ class ROB extends Module {
   // guaranteed, so how to handle?
   for(i <- 0 until 6) {
     when(io.wbValues(i).id.valid) {
-      robW(io.wbValues(i).id.bits).valid := Bool(true)
+      robW(io.wbValues(i).id.bits).valid := Bool(true) && !io.wbValues(i).isAddr
       // The ROB entry stays the same, but the rdVal changes
       robW(io.wbValues(i).id.bits).bits := rob(io.wbValues(i).id.bits)
       robW(io.wbValues(i).id.bits).bits.rdVal.valid := Bool(true)
