@@ -1,0 +1,3 @@
+0021011300108093        add r1 <- r1 + 1, add r2 <- r2 + 2
+0042021300318193        add r3 <- r3 + 3, add r4 <- r4 + 4
+FFFFFFFFFFFFFFFF        halt
