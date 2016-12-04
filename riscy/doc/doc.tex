@@ -45,7 +45,7 @@ sake of completion.
             \item Tracks load/store dependencies.
             \item Non-speculative memory disambiguation.
             \item Loads access cache out-of-order between stores.
-            \item Stores access cache on commit. 
+            \item Stores access cache on commit.
             \item D-Cache (TODO)
         \end{itemize}
     \item Writeback
@@ -93,5 +93,65 @@ wires. Thus, we combine decode with the first cycle of renaming.
 Renaming proceeds in two phases. The first cycle decodes the instruction and
 renames all destinations. The second cycle renames operands and produces and ROB
 entry which can just be latched to the ROB next cycle.
+
+\subsection{ROB}
+
+The ROB is implemented as a 64-entry circular buffer. All committing logic is
+implemented in the ROB module. 4 instructions can commit in a single cycle. In
+the same cycle, 4 new ROB entries can also be added to the tail of the ROB.
+
+We choose to use an ROB as opposed to a merged register file because we
+prioritized performance and ease of implementation over energy.
+
+\subsection{Issue and FUs}
+
+In the same cycle, an ROB entry both latches in the ROB and goes to the issue
+queue arbiter, which puts it in a queue. All instructions go through the arbiter
+regardless of their type.
+
+Our issue stage consists of an arbiter feeding 4 issue queues.
+The arbiter does load balancing to attempt to keep any queue from becoming
+filled while other ALUs are available.
+
+Each issue queue is independent and feeds a single ALU. The issue queues can
+each independently wake up a single instruction to be sent an ALU. Our
+implementation is capable of speculatively waking up ALU operations when their
+operands are known to be nearly ready. This allows our processor to execute
+instruction with back-to-back dependencies. Our writeback mechnaism helps with
+this also...
+
+\subsection{Writeback}
+
+Each cycle, our processor may produce up to 6 values that need to be written
+back (4 from ALUs and 2 from memory). To avoid creating $O(n^2)$ wires between
+all of these value producers/consumers, we designed a single writeback
+structure, which we call \texttt{FooPP}. All values are written back to the
+\texttt{FooPP} in the cycle they produced. Any consumers of those values,
+including the ROB and issue queues, take the values directly from the
+\texttt{FooPP}.
+
+To avoid adding a 1 cycle bubble between instructions with back-to-back
+dependencies, the \texttt{FooPP} keeps 1 cycle of history, which the FUs can
+then consume from easily.
+
+\subsection{Address Queue}
+
+When a load or store instruction reaches the arbiter, the arbiter asks the
+address queue to reserve a spot for it. If the address queue is full, the
+pipeline stalls. The arbiter then puts the load or store in a normal issue queue
+to wait until an ALU can compute its address.
+
+When the address is written to the \texttt{FooPP}, the address queue will
+consume it.
+
+Loads can access the D-cache as soon as their address is known and it is also
+known that there is no preceeding store to the same address.
+
+Stores can access the D-cache as soon as the ROB signals the address queue that
+they have committed.
+
+To limit the number of ports need on the D-cache, we instead assume only two
+ports. The ROB gives the guarantee that no more than 2 stores will commit in any
+cycle.
 
 \end{document}
