@@ -2,6 +2,15 @@ package riscy
 
 import Chisel._
 
+class SpeculativeIssue extends Bundle {
+	val rs1WbLocation = UInt(OUTPUT, 2)
+	val rs1CycleNum 	= UInt(OUTPUT, 1)
+	val rs1IsSpec 		= Bool(OUTPUT)
+	val rs2WbLocation = UInt(OUTPUT, 2)
+	val rs2CycleNum 	= UInt(OUTPUT, 1)
+	val rs2IsSpec	 		= Bool(OUTPUT)
+}
+
 class IssueQueue extends Module {
 	val io = new Bundle {
 		val newEntry = Vec.fill(4) {Valid(new ROBEntry).asInput}
@@ -12,6 +21,7 @@ class IssueQueue extends Module {
 		val robWb = new RobWbStore(6).flip
 		val issuedEntry = Valid(new ROBEntry).asOutput
 		val currentLen = UInt(OUTPUT, 5)
+		val specIssue = Valid(new SpeculativeIssue).asOutput
 	}
 
 	//val eachEntry = Module ( new ShiftRegPP(() => new  ROBEntry))
@@ -65,7 +75,8 @@ class IssueQueue extends Module {
 		isWokenUpRs1(j)(0) := Bool(false)
 		for (i <- 0 to 7) {
 			isWokenUpRs1(j)(i+1) := isWokenUpRs1(j)(i) || 
-													(io.issuedPrev2(i).valid === Bool(true) && 
+													(io.issuedPrev2(i).valid === Bool(true) &&
+													 iqueue(j).bits.rs1Val.valid === Bool(false) &&
 					    						 iqueue(j).bits.rs1Rename === io.issuedPrev2(i).bits &&
 													 iqueue(j).valid)
 		}
@@ -77,6 +88,7 @@ class IssueQueue extends Module {
 		for (i <- 0 to 7) {
 			isWokenUpRs2(j)(i+1) := isWokenUpRs2(j)(i) || 
 													(io.issuedPrev2(i).valid === Bool(true) && 
+													 iqueue(j).bits.rs2Val.valid === Bool(false) &&
 					    						 iqueue(j).bits.rs2Rename === io.issuedPrev2(i).bits &&
 													 iqueue(j).valid)
 		}
@@ -137,13 +149,73 @@ class IssueQueue extends Module {
 	val issuedNumOH = UIntToOH(issuedNum)
 	val issuedPipelineBits = Reg(next = MuxLookup(issuedNum, iqueue(0).bits, 
 	Array.tabulate(16) {i => UInt (i) -> iqueue(i).bits}))
+	
+	val specCamRs1 = Module (new CAM(1, 8, 6))
+	val specCamRs2 = Module (new CAM(1, 8, 6))
+	
+	specCamRs1.io.compare_bits(0) := issuedPipelineBits.rs1Rename
+	specCamRs2.io.compare_bits(0) := issuedPipelineBits.rs2Rename
+	
+	for (i <- 0 until 8) {
+		specCamRs1.io.input_bits(i) := io.issuedPrev2(i).bits
+		specCamRs2.io.input_bits(i) := io.issuedPrev2(i).bits
+	}
 
+	val specInfo = Valid(new SpeculativeIssue()) 
+	
+	// Generating speculative bit value
+	when (issuedPipelineBits.rs1Val.valid === Bool(false)) {
+		specInfo.bits.rs1IsSpec 			:= Bool(true) 
+	} .otherwise {
+		specInfo.bits.rs1IsSpec			 	:= Bool(false)
+	}
+
+	for (i <- 0 until 8) {
+		when (specCamRs1.io.hit(0)(i) && io.issuedPrev2(i).valid) {
+			if (i < 4) {
+				specInfo.bits.rs1WbLocation		:= UInt(i) 
+				specInfo.bits.rs1CycleNum 		:= UInt(0)
+			} else {
+				specInfo.bits.rs1WbLocation		:= UInt(i-4) 
+				specInfo.bits.rs1CycleNum 		:= UInt(1)
+			}
+		} .otherwise {
+			specInfo.bits.rs1WbLocation		:= UInt(i) 
+			specInfo.bits.rs1CycleNum 		:= UInt(0)
+			specInfo.valid 								:= Bool(false)
+		}
+	}
+
+	when (issuedPipelineBits.rs2Val.valid === Bool(false)) {
+		specInfo.bits.rs2IsSpec 			:= Bool(true) 
+	} .otherwise {
+		specInfo.bits.rs2IsSpec 			:= Bool(false)
+	}
+
+	for (i <- 0 until 8) {
+		when (specCamRs2.io.hit(0)(i) && io.issuedPrev2(i).valid) {
+			if (i < 4) {
+				specInfo.bits.rs2WbLocation		:= UInt(i) 
+				specInfo.bits.rs2CycleNum 		:= UInt(0)
+			} else {
+				specInfo.bits.rs2WbLocation		:= UInt(i-4) 
+				specInfo.bits.rs2CycleNum 		:= UInt(1)
+			}
+		} .otherwise {
+			specInfo.bits.rs2WbLocation		:= UInt(i) 
+			specInfo.bits.rs2CycleNum 		:= UInt(0)
+			specInfo.valid 								:= Bool(false)
+		}
+	}
+
+	specInfo.valid := specInfo.bits.rs1IsSpec || specInfo.bits.rs2IsSpec
+	
+	val specPipelined = Reg(next = specInfo)
+
+  io.specIssue := specPipelined
 	//printf("issuedNum val: %x\n issuedNumOH %x\n", issuedNum, issuedNumOH)
 	
 	io.issuedEntry.bits := issuedPipelineBits
-
-	val rs1Val = Bool()
-	val rs2Val = Bool()
 
 	// First case is when instruction is issued from issue queue
 	// Logic to shift instructions up in the order
