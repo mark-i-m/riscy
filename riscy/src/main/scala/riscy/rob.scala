@@ -45,7 +45,7 @@ class WBValue extends Bundle {
   // Is this a taken branch
   val taken = Bool(INPUT) // TODO
   // Is this a computed address
-  val isAddr = Bool(INPUT) // TODO
+  val isAddr = Bool(INPUT)
 }
 
 class ROB extends Module {

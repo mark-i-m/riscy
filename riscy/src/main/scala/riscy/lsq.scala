@@ -335,7 +335,7 @@ class LSQ extends Module {
     dcache.io.ldReq.addr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
     addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data
   } .otherwise {
-    dcache.io.ldReq.addr.valid := Bool(true)
+    dcache.io.ldReq.addr.valid := Bool(false)
     dcache.io.ldReq.addr.bits := UInt(0xdead)
   }
 
