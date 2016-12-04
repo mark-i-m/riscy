@@ -40,9 +40,15 @@ class Fetch extends Module {
   /* PC value takes a cycle to reach Icache. We start it at 0x10 so that we
    * don't lose the first cycle. The pipeline register which PC feeds starts at
    * 0x0 */
-  val PC = Reg(init = UInt(16, width = 64))
+  val PC = Reg(init = UInt(0x10, width = 64))
 
-  val nextAddr = Mux(io.isBranchTaken, io.btbAddr, PC)
+  val inited = Reg(init = Bool(false), next = Bool(true))
+  val nextAddr = UInt(width=64)
+  when (inited) {
+    nextAddr := Mux(io.isBranchTaken, io.btbAddr, PC)
+  } .otherwise {
+    nextAddr := Mux(io.isBranchTaken, io.btbAddr, UInt(0x10))
+  }
 
   val addr = UInt(width = 64)
   val addrSelect = UInt(width = 2)

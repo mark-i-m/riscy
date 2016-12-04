@@ -12,6 +12,7 @@ class Issue extends Module {
     val addrBufLen = UInt(INPUT, 5)
     val stall = Bool(OUTPUT)
     val issuedEntry = Vec.fill(4) {Valid(new ROBEntry).asOutput}
+		val specIssue = Vec.fill(4) {Valid(new SpeculativeIssue).asOutput}
 
     // Addrress buf entry and load store info
     val addrBuf = Vec.fill(4) {Valid (new AddrBufEntry)} // Output
@@ -86,6 +87,11 @@ class Issue extends Module {
   io.issuedEntry(1)       := issueQ1.io.issuedEntry
   io.issuedEntry(2)       := issueQ2.io.issuedEntry
   io.issuedEntry(3)       := issueQ3.io.issuedEntry
+
+	io.specIssue(0)       := issueQ0.io.specIssue
+  io.specIssue(1)       := issueQ1.io.specIssue
+  io.specIssue(2)       := issueQ2.io.specIssue
+  io.specIssue(3)       := issueQ3.io.specIssue
 
   val issuedInstTag = Vec.fill(4) {UInt(width = 6)}
   issuedInstTag(0)        := issueQ0.io.issuedEntry.bits.tag
