@@ -10,7 +10,7 @@ class DCacheStReq extends Bundle {
 
 class DCacheLdReq extends Bundle {
   val addr = Valid(UInt(INPUT, 64)).asInput
-  val data = UInt(OUTPUT, 64)
+  val data = Valid(UInt(OUTPUT, 64)).asOutput
 }
 
 class DCache extends Module {
@@ -32,7 +32,8 @@ class DCache extends Module {
 
   io.memLdAddrPort.valid := io.ldReq.addr.valid
   io.memLdAddrPort.bits := io.ldReq.addr.bits
-  io.ldReq.data := io.memLdData.bits(63,0)
+  io.ldReq.data.bits := io.memLdData.bits(63,0)
+  io.ldReq.data.valid := io.memLdData.valid
 }
 
 class DCacheTests(c: DCache) extends Tester(c) {
