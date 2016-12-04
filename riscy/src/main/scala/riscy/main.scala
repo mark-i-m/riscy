@@ -14,6 +14,6 @@ object RiscyMain extends App {
     chiselMainTest(margs, gen.genMod) (gen.genTest) 
   } else {
     // Otherwise, just produce C++ for the whole chip
-    chiselMain(Array("--backend", "c", "--vcd"), () => Module(new Riscy()))
+    chiselMain(Array("--backend", "c", "--vcd"), () => Module(new Riscy(true)))
   }
 }

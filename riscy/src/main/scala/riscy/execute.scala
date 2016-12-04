@@ -7,6 +7,9 @@ class Execute extends Module {
     // Instructions to execute
     val issued_inst = Vec(4, Valid(new ROBEntry).asInput)
 
+    // Speculation info related to bypassing, given by IQ
+    val specIssue = Vec(4, Valid(new SpeculativeIssue).asInput)
+
     // Stored values for 2 cycles which can be used for bypass
     val rob_wb_store = new RobWbStore(6) // OUTPUT
 
@@ -52,6 +55,10 @@ class Execute extends Module {
     alu(i).io.inst.immB   := io.issued_inst(i).bits.immB
     alu(i).io.inst.immU   := io.issued_inst(i).bits.immU
     alu(i).io.inst.immJ   := io.issued_inst(i).bits.immJ
+
+    // Hook up speculative info related to bypassing
+    alu(i).io.specIssue   := io.specIssue(i)
+    alu(i).io.rob_wb_store <> rob_writeback.io.store
   }
 
   // Hook up the output of ALUs to ROB writeback structure
