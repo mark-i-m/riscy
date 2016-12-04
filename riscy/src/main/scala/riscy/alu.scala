@@ -37,6 +37,17 @@ object ALU {
   val A2_IMM_U  = UInt(6)
   val A2_RS2_32 = UInt(7)
 
+  // Bypass selection options
+  val BYPASS_0  = UInt(0)
+  val BYPASS_1  = UInt(1)
+  val BYPASS_2  = UInt(2)
+  val BYPASS_3  = UInt(3)
+  val BYPASS_4  = UInt(4)
+  val BYPASS_5  = UInt(5)
+  val BYPASS_6  = UInt(6)
+  val BYPASS_7  = UInt(7)
+  val BYPASS_8  = UInt(8)
+
   // Instructions needing the subtractor: UInt(8) - UInt(15)
   def isSub(cmd: UInt) = cmd(3)
 }
@@ -51,6 +62,11 @@ class ALU(xLen : Int) extends Module {
     val PC = UInt(INPUT, xLen)
     // The decoded information of the current instruction
     val inst = new DecodeIns().flip // Input
+
+    // Input from IQ for deciding where to bypass from
+    val specIssue = Valid(new SpeculativeIssue).asInput
+    // Input from ROB writeback to get the necessary values
+    val rob_wb_store = (new RobWbStore(6)).asInput 
 
     // The output of the ALU. Can be a 64-bit data value or a 64-bit address
     // depending on the type of the instruction
@@ -196,6 +212,66 @@ class ALU(xLen : Int) extends Module {
 
   // Selector logic for deciding which inputs must be chosen for the ALU to
   // perform the operation
+  val bypass_a1 = UInt(width=4)
+  val bypass_a2 = UInt(width=4)
+  when (io.specIssue.bits.rs1IsSpec) {
+    // First find out how long ago the cycle was computed
+    when (io.specIssue.bits.rs1CycleNum === UInt(0x0)) {
+      // Then find out which ALU had computed it
+      when (io.specIssue.bits.rs1WbLocation === UInt(0x0)) {
+        bypass_a1 := BYPASS_1
+      } .elsewhen (io.specIssue.bits.rs1WbLocation === UInt(0x1)) {
+        bypass_a1 := BYPASS_2
+      } .elsewhen (io.specIssue.bits.rs1WbLocation === UInt(0x2)) {
+        bypass_a1 := BYPASS_3
+      } .otherwise {
+        bypass_a1 := BYPASS_4
+      }
+    } .otherwise {
+      // Then find out which ALU had computed it
+      when (io.specIssue.bits.rs1WbLocation === UInt(0x0)) {
+        bypass_a1 := BYPASS_5
+      } .elsewhen (io.specIssue.bits.rs1WbLocation === UInt(0x1)) {
+        bypass_a1 := BYPASS_6
+      } .elsewhen (io.specIssue.bits.rs1WbLocation === UInt(0x2)) {
+        bypass_a1 := BYPASS_7
+      } .otherwise {
+        bypass_a1 := BYPASS_8
+      }
+    }
+  } .otherwise {
+    bypass_a1 := BYPASS_0
+  }
+  when (io.specIssue.bits.rs2IsSpec) {
+    // First find out how long ago the cycle was computed
+    when (io.specIssue.bits.rs2CycleNum === UInt(0x0)) {
+      // Then find out which ALU had computed it
+      when (io.specIssue.bits.rs2WbLocation === UInt(0x0)) {
+        bypass_a2 := BYPASS_1
+      } .elsewhen (io.specIssue.bits.rs2WbLocation === UInt(0x1)) {
+        bypass_a2 := BYPASS_2
+      } .elsewhen (io.specIssue.bits.rs2WbLocation === UInt(0x2)) {
+        bypass_a2 := BYPASS_3
+      } .otherwise {
+        bypass_a2 := BYPASS_4
+      }
+    } .otherwise {
+      // Then find out which ALU had computed it
+      when (io.specIssue.bits.rs2WbLocation === UInt(0x0)) {
+        bypass_a2 := BYPASS_5
+      } .elsewhen (io.specIssue.bits.rs2WbLocation === UInt(0x1)) {
+        bypass_a2 := BYPASS_6
+      } .elsewhen (io.specIssue.bits.rs2WbLocation === UInt(0x2)) {
+        bypass_a2 := BYPASS_7
+      } .otherwise {
+        bypass_a2 := BYPASS_8
+      }
+    }
+  } .otherwise {
+    bypass_a2 := BYPASS_0
+  }
+
+  // Instruction based input selection.
   val sel_a1 = UInt(width=3)
   val sel_a2 = UInt(width=3)
   when (io.inst.op === UInt(0x33)) {
@@ -264,27 +340,55 @@ class ALU(xLen : Int) extends Module {
   val immJ_ext = Cat(Fill(32, io.inst.immJ(31)), io.inst.immJ)
   val immU_ext = Cat(Fill(32, io.inst.immU(31)), io.inst.immU)
 
+  val bypass_in1 = MuxLookup(bypass_a1, UInt(0), Seq(
+    BYPASS_0 -> UInt(0),
+    BYPASS_1 -> io.rob_wb_store.data_s1(0),
+    BYPASS_2 -> io.rob_wb_store.data_s1(1),
+    BYPASS_3 -> io.rob_wb_store.data_s1(2),
+    BYPASS_4 -> io.rob_wb_store.data_s1(3),
+    BYPASS_5 -> io.rob_wb_store.data_s2(0),
+    BYPASS_6 -> io.rob_wb_store.data_s2(1),
+    BYPASS_7 -> io.rob_wb_store.data_s2(2),
+    BYPASS_8 -> io.rob_wb_store.data_s2(3)
+  ))
+  val bypass_in2 = MuxLookup(bypass_a2, UInt(0), Seq(
+    BYPASS_0 -> UInt(0),
+    BYPASS_1 -> io.rob_wb_store.data_s1(0),
+    BYPASS_2 -> io.rob_wb_store.data_s1(1),
+    BYPASS_3 -> io.rob_wb_store.data_s1(2),
+    BYPASS_4 -> io.rob_wb_store.data_s1(3),
+    BYPASS_5 -> io.rob_wb_store.data_s2(0),
+    BYPASS_6 -> io.rob_wb_store.data_s2(1),
+    BYPASS_7 -> io.rob_wb_store.data_s2(2),
+    BYPASS_8 -> io.rob_wb_store.data_s2(3)
+  ))
+  // Pick either the rs values passed along or the bypassed values
+  val rs1_val = Mux(io.specIssue.bits.rs1IsSpec, bypass_in1, io.rs1_val)
+  val rs2_val = Mux(io.specIssue.bits.rs2IsSpec, bypass_in2, io.rs2_val)
+
   // Select the inputs for ALU operations
   val in1 = MuxLookup(sel_a1, UInt(0), Seq(
-    A1_RS1    -> io.rs1_val,
-    A1_RS2    -> io.rs2_val,
+    A1_RS1    -> rs1_val,
+    A1_RS2    -> rs2_val,
     A1_PC     -> io.PC,
     A1_ZERO   -> UInt(0, width=xLen),
-    A1_RS1_32 -> Cat(Fill(32, io.rs1_val(31)), io.rs1_val(31,0)) ))
+    A1_RS1_32 -> Cat(Fill(32, rs1_val(31)), rs1_val(31,0))
+  ))
 
   // We are interested in putting 20 bits of immU followed by 12 bits of zeroes
   // to get 32-bit values for LUI and AUIPC. These values are then
   // sign-extended to 64 bits before getting used.
   val in2 = MuxLookup(sel_a2, UInt(0), Seq(
-    A2_RS2    -> io.rs2_val,
-    A2_RS2_32 -> Cat(Fill(32, io.rs1_val(31)), io.rs2_val(31,0)),
-    A2_RS1    -> io.rs1_val,
+    A2_RS2    -> rs2_val,
+    A2_RS2_32 -> Cat(Fill(32, rs1_val(31)), rs2_val(31,0)),
+    A2_RS1    -> rs1_val,
     A2_IMM_I  -> immI_ext.asUInt,
     A2_IMM_S  -> immS_ext.asUInt,
     A2_IMM_B  -> immB_ext.asUInt,
     A2_IMM_J  -> immJ_ext.asUInt,
     A2_IMM_U  -> Cat(Cat(Fill(32, immU_ext(19)), immU_ext.asUInt()(19,0)),
-                    Fill(12, UInt(0))) ))
+                     Fill(12, UInt(0)))
+  ))
 
   // ADD, SUB - Use an adder to derive results
   // LB, LH, LW, LBU, LHU, SB, SH, SW - Use adder to compute addresses
@@ -1934,6 +2038,142 @@ class ALUTests(c: ALU) extends Tester(c) {
   step(1)
   expect(c.io.out, 0xffffffff800003e8L)
 
+  def set_rob_wb_store(cycles : Int, index : Int, data : Int) = {
+    if (cycles == 0) {
+      poke(c.io.rob_wb_store.data_s1(index), data)
+    } else if (cycles == 1) {
+      poke(c.io.rob_wb_store.data_s2(index), data)
+    } else {
+      assert(false,
+        "ROB writeback does not store results from " + (cycles+1) + " cycles ago")
+    }
+  }
+  def set_rs1_speculative(cycles : Int, aluIndex : Int, data : Int) = {
+    poke(c.io.specIssue.valid, true)
+    poke(c.io.specIssue.bits.rs1IsSpec, true)
+    poke(c.io.specIssue.bits.rs1CycleNum, cycles)
+    poke(c.io.specIssue.bits.rs1WbLocation, aluIndex)
+    set_rob_wb_store(cycles, aluIndex, data)
+  }
+  def set_rs2_speculative(cycles : Int, aluIndex : Int, data : Int) = {
+    poke(c.io.specIssue.valid, true)
+    poke(c.io.specIssue.bits.rs2IsSpec, true)
+    poke(c.io.specIssue.bits.rs2CycleNum, cycles)
+    poke(c.io.specIssue.bits.rs2WbLocation, aluIndex)
+    set_rob_wb_store(cycles, aluIndex, data)
+  }
+
+  // --------------------------------------
+  // Bypass testcases
+  // --------------------------------------
+
+  // Part A - Test rs1 bypassing
+  poke(c.io.specIssue.bits.rs2IsSpec, false)
+
+  // 165. Test ADD instruction - 1 cycle ago
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 1)
+  poke(c.io.rs2_val, 1)
+  set_rs1_speculative(0, 1, 100)
+  step(1)
+  expect(c.io.out, 101)
+
+  // 166. Test ADD instruction - 2 cycles ago
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 1)
+  poke(c.io.rs2_val, 1)
+  set_rs1_speculative(1, 0, 1000)
+  step(1)
+  expect(c.io.out, 1001)
+
+  // Part B - Test rs2 bypassing
+  poke(c.io.specIssue.bits.rs1IsSpec, false)
+
+  // 166. Test ADD instruction - 1 cycle ago
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 1)
+  poke(c.io.rs2_val, 1)
+  set_rs2_speculative(0, 2, 100)
+  step(1)
+  expect(c.io.out, 101)
+
+  // 167. Test ADD instruction - 2 cycles ago
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 1)
+  poke(c.io.rs2_val, 1)
+  set_rs2_speculative(1, 3, 1000)
+  step(1)
+  expect(c.io.out, 1001)
+
+  // Part C - Both rs1 and rs2 bypassing
+
+  // 168. Test ADD instruction - 1 cycle ago each
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 1)
+  poke(c.io.rs2_val, 1)
+  set_rs1_speculative(0, 0, 200)
+  set_rs2_speculative(0, 2, 100)
+  step(1)
+  expect(c.io.out, 300)
+
+  // 169. Test ADD instruction - 2 cycles ago each
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 1)
+  poke(c.io.rs2_val, 1)
+  set_rs1_speculative(1, 2, 2000)
+  set_rs2_speculative(1, 3, 1000)
+  step(1)
+  expect(c.io.out, 3000)
+
+  // 170. Test ADD instruction - rs1 1 cycle ago, rs2 2 cycles ago
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 1)
+  poke(c.io.rs2_val, 1)
+  set_rs1_speculative(0, 0, 20)
+  set_rs2_speculative(1, 3, 10)
+  step(1)
+  expect(c.io.out, 30)
+
+  // 171. Test ADD instruction - rs1 2 cycles ago, rs2 1 cycle ago
+  set_instruction("ADD")
+  poke(c.io.rs1_val, 1)
+  poke(c.io.rs2_val, 1)
+  set_rs1_speculative(1, 2, 20000)
+  set_rs2_speculative(0, 3, 10000)
+  step(1)
+  expect(c.io.out, 30000)
+
+  // Part D - Fancy cases. 
+  // bits
+  poke(c.io.specIssue.bits.rs1IsSpec, false)
+  poke(c.io.specIssue.bits.rs2IsSpec, false)
+
+  // RV64I instructions which consider only the low 32 bits
+  //
+  // 172. Test ADDIW instruction - Verify that only the low 32 bits of inputs
+  // are considered
+  set_instruction("ADDIW")
+  poke(c.io.rs1_val, 0x100)
+  poke(c.io.inst.immI, 0x1)
+  set_rs1_speculative(1, 2, 0x800000001L)
+  step(1)
+  expect(c.io.out, 0x2)
+
+  // Instructions which swap rs1 and rs2 internally - BGE
+  //
+  // 173. Test BGE instruction
+  set_instruction("BGE")
+  poke(c.io.rs1_val, 50)
+  poke(c.io.rs2_val, 100)
+  set_rs1_speculative(0, 2, 100)
+  set_rs2_speculative(0, 3, 50)
+  poke(c.io.PC, 1000)
+  poke(c.io.inst.immB, 100)
+  step(1)
+  expect(c.io.cmp_out, 1)
+  expect(c.io.out, 1100)
+  expect(c.io.is_branch, true)
+  expect(c.io.is_out_addr, true)
 }
 
 class ALUGenerator extends TestGenerator {

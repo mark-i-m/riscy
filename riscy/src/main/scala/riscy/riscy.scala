@@ -92,6 +92,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
 
   // Issue and Exec
   exec.io.issued_inst := issue.io.issuedEntry
+  exec.io.specIssue   := issue.io.specIssue
   issue.io.robWb <> exec.io.rob_wb_store
 
   // Hook up LSQ to ROB, so we can commit stores
