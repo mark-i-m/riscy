@@ -4,8 +4,8 @@ import Chisel._
 
 // The whole processor!
 class Riscy(blackbox: Boolean = false) extends Module {
-  val io = new Bundle { 
-    /* No system, just a processor! */ 
+  val io = new Bundle {
+    /* No system, just a processor! */
     val cycles = UInt(OUTPUT, width = 128)
 
     // For testing and debugging
@@ -23,7 +23,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // - Port 0 => Instruction/Fetch
   // - Port 1 => Data/LSQ
   //var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 100)) // 64kB memory, 8 word cache lines
-  var memory = Module(new BigMemory(64, 1 << 2, 2, 2, 100)) // 64kB memory, 8 word cache lines
+  var memory = Module(new BigMemory(64, 1 << 2, 2, 2, 5)) // 64kB memory, 8 word cache lines
 
   //TODO val bp = Module(new BP)
   var fetch = Module(new Fetch)
@@ -61,7 +61,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
     // NOTE: decode and alloc are part of a single pipeline stage, so passing
     // PC from fetch directly to alloc is ok.
     alloc.io.inst(i) := decode(i).io.decoded
-    
+
     if(blackbox) {
       alloc.io.pc(i) := fetch.io.output.pc(i)
     }
@@ -100,7 +100,14 @@ class Riscy(blackbox: Boolean = false) extends Module {
   lsq.io.stCommit(0) := rob.io.stCommit(0)
   lsq.io.stCommit(1) := rob.io.stCommit(1)
 
-  // TODO: hook up DCache and Memory
+  // Hook up DCache and Memory
+  for(i <- 0 until 2) { // Write ports
+    memory.io.writePorts(i) := lsq.io.memStAddrPort(i)
+    memory.io.writeData(i) := lsq.io.memStData(i)
+  }
+
+  memory.io.readPorts(1) := lsq.io.memLdAddrPort
+  lsq.io.memLdData := memory.io.readData(1)
 
   // Hook up stalling logic
   fetch.io.stall      := stall.io.fetchStall
@@ -111,22 +118,8 @@ class Riscy(blackbox: Boolean = false) extends Module {
 }
 
 class TopLevelTests(c: Riscy) extends Tester(c) {
-  def genAddRI(rs: Int, rd: Int, imm: Int): Int = 
+  def genAddRI(rs: Int, rd: Int, imm: Int): Int =
     ((imm) << 20) | ((rs) << 15) | ((0) << 12) | ((rd) << 7) | 0x13
-
-  poke(c.io.ins(0).bits, genAddRI(1,1,1))
-  poke(c.io.ins(0).valid, true)
-
-  poke(c.io.ins(1).bits, genAddRI(2,2,2))
-  poke(c.io.ins(1).valid, true)
-
-  poke(c.io.ins(2).bits, genAddRI(3,3,3))
-  poke(c.io.ins(2).valid, true)
-
-  poke(c.io.ins(3).bits, genAddRI(4,4,4))
-  poke(c.io.ins(3).valid, true)
-
-  step(2)
 
   poke(c.io.ins(0).bits, genAddRI(1,1,1))
   poke(c.io.ins(0).valid, true)
@@ -142,14 +135,26 @@ class TopLevelTests(c: Riscy) extends Tester(c) {
 
   step(1)
 
+  poke(c.io.ins(0).bits, genAddRI(5,5,5))
+  poke(c.io.ins(0).valid, true)
+
+  poke(c.io.ins(1).bits, genAddRI(6,6,6))
+  poke(c.io.ins(1).valid, true)
+
+  poke(c.io.ins(2).bits, genAddRI(7,7,7))
+  poke(c.io.ins(2).valid, true)
+
+  poke(c.io.ins(3).bits, genAddRI(8,8,8))
+  poke(c.io.ins(3).valid, true)
+
+  step(1)
+
   poke(c.io.ins(0).valid, false)
   poke(c.io.ins(1).valid, false)
   poke(c.io.ins(2).valid, false)
   poke(c.io.ins(3).valid, false)
 
-  step(15)
-
-  peek(c.rob.rf.regs(0)._2)
+  step(30)
 
 }
 

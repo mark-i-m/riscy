@@ -20,7 +20,20 @@ class LSQ extends Module {
     val ldValue = UInt(INPUT, 64)
     val stAddr = Vec(2, Valid(UInt(OUTPUT, 64)))
     val stValue = Vec(2, UInt(OUTPUT, 64))
+    val memStAddrPort = Vec(2, Valid(UInt(OUTPUT,64).asOutput))
+    val memStData = Vec(2, UInt(OUTPUT,64))
+    val memLdAddrPort = Valid(UInt(OUTPUT,64))
+    val memLdData = UInt(INPUT,8 * 64)
   }
+
+  // The Data Cache
+  val dcache = Module(new DCache())
+
+  // Hook up D$ to memory
+  io.memStAddrPort := dcache.io.memStAddrPort
+  io.memStData := dcache.io.memStData
+  io.memLdAddrPort := dcache.io.memLdAddrPort
+  dcache.io.memLdData := io.memLdData
 
   val depMatrix = Vec.tabulate(32) { i => Reg(Valid(Vec.fill(32) { Bool() } )) }
   val depRow = Vec.tabulate(32) { i => Cat(Array.tabulate(32) { depMatrix(i).bits(_) }) }
@@ -318,12 +331,12 @@ class LSQ extends Module {
 
   val isLoad = Cat(Array.tabulate(32) {loads(_)})
   when (isLoad.orR) {
-    io.ldAddr.valid := Bool(true)
-    io.ldAddr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
-    addrq(PriorityEncoder(loads)).bits.value.bits := io.ldValue
+    dcache.io.ldReq.addr.valid := Bool(true)
+    dcache.io.ldReq.addr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
+    addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data
   } .otherwise {
-    io.ldAddr.valid := Bool(false)
-    io.ldAddr.bits := UInt(0xff)
+    dcache.io.ldReq.addr.valid := Bool(true)
+    dcache.io.ldReq.addr.bits := UInt(0xdead)
   }
 
   val CamStCommit = Module(new CAM(2, DEPTH, 6))
@@ -386,13 +399,13 @@ class LSQ extends Module {
   for (i <- 0 until 2) {
     stCommitSet(i) := Cat(Array.tabulate(32) { stCommitRow(i)(_) }).orR
     when (stCommitSet(i)) {
-      io.stAddr(i).valid := Bool(true)
-      io.stAddr(i).bits := addrq(PriorityEncoder(stCommitRow(i))).bits.addr.bits
-      io.stValue(i) := addrq(PriorityEncoder(stCommitRow(i))).bits.value.bits
+      dcache.io.stReq(i).addr.valid := Bool(true)
+      dcache.io.stReq(i).addr.bits := addrq(PriorityEncoder(stCommitRow(i))).bits.addr.bits
+      dcache.io.stReq(i).data := addrq(PriorityEncoder(stCommitRow(i))).bits.value.bits
     } .otherwise {
-      io.stAddr(i).valid := Bool(false)
-      io.stAddr(i).bits := UInt(0xdead)
-      io.stValue(i) := UInt(0xdead)
+      dcache.io.stReq(i).addr.valid := Bool(false)
+      dcache.io.stReq(i).addr.bits := UInt(0xdead)
+      dcache.io.stReq(i).data := UInt(0xdead)
     }
   }
 }
@@ -514,8 +527,8 @@ class LSQTests(c: LSQ) extends Tester(c) {
   poke(c.io.stCommit(0).valid, true)
   poke(c.io.stCommit(0).bits, 6)
   expect(c.CamStCommit.io.hit(0)(0), true)
-  expect(c.io.stAddr(0).valid, true)
-  expect(c.io.stAddr(0).bits, 0x10000)
+  expect(c.dcache.io.stReq(0).addr.valid, true)
+  expect(c.dcache.io.stReq(0).addr.bits, 0x10000)
 
   step(1)
   expect(c.depMatrix(1).bits(0), false)
