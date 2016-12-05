@@ -17,7 +17,7 @@ class Execute extends Module {
     val rob_wb_output = new RobWbOutput(6) // OUTPUT
 
     // Values coming in from LSQ for WB structure
-    val rob_wb_input = new RobWbInput(2)
+    val lsq_input = new RobWbInput(2)
   }
 
   val alu = Array.fill(4)(Module(new ALU(64)))
@@ -58,10 +58,10 @@ class Execute extends Module {
 
   // Hook up the output of LSQ to ROB writeback structure
   for(i <- 0 until 2) {
-    rob_writeback.io.input.entry(4+i).data    := io.rob_wb_input.entry(i).data
-    rob_writeback.io.input.entry(4+i).is_addr := io.rob_wb_input.entry(i).is_addr
-    rob_writeback.io.input.entry(4+i).operand := io.rob_wb_input.entry(i).operand
-    rob_writeback.io.input.entry(4+i).valid   := io.rob_wb_input.entry(i).valid
+    rob_writeback.io.input.entry(4+i).data    := io.lsq_input.entry(i).data
+    rob_writeback.io.input.entry(4+i).is_addr := io.lsq_input.entry(i).is_addr
+    rob_writeback.io.input.entry(4+i).operand := io.lsq_input.entry(i).operand
+    rob_writeback.io.input.entry(4+i).valid   := io.lsq_input.entry(i).valid
   }
 
   // Hookup the output of ROB writeback structure to the outside world
@@ -114,6 +114,17 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   poke(c.io.issued_inst(3).bits.rs2Val.bits, 150)
   poke(c.io.issued_inst(3).bits.pc, 10000)
   poke(c.io.issued_inst(3).bits.immB, 400)
+
+  // 0. Also add some LSQ inputs to Execute
+  poke(c.io.lsq_input.entry(0).data, 8000)
+  poke(c.io.lsq_input.entry(0).valid, true)
+  poke(c.io.lsq_input.entry(0).operand, 4)
+  poke(c.io.lsq_input.entry(0).is_addr, false)
+
+  poke(c.io.lsq_input.entry(1).data, 800)
+  poke(c.io.lsq_input.entry(1).valid, true)
+  poke(c.io.lsq_input.entry(1).operand, 4)
+  poke(c.io.lsq_input.entry(1).is_addr, false)
   step(1)
 
   // 1. Check results in ROB WB store and check whether branch targets are
@@ -152,6 +163,17 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   expect(c.io.rob_wb_store.entry_s1(3).is_branch_taken.bits, true)
   expect(c.io.rob_wb_store.entry_s1(3).branch_tag, 4)
   expect(c.io.rob_wb_store.entry_s1(3).branch_PC, 10000)
+
+  // Check storage of LSQ inputs
+  expect(c.io.rob_wb_store.entry_s1(4).valid, true)
+  expect(c.io.rob_wb_store.entry_s1(4).data, 8000)
+  expect(c.io.rob_wb_store.entry_s1(4).is_addr, false)
+  expect(c.io.rob_wb_store.entry_s1(4).operand, 4)
+
+  expect(c.io.rob_wb_store.entry_s1(5).valid, true)
+  expect(c.io.rob_wb_store.entry_s1(5).data, 800)
+  expect(c.io.rob_wb_store.entry_s1(5).is_addr, false)
+  expect(c.io.rob_wb_store.entry_s1(5).operand, 4)
 
   // Add 2 valid instructions and 2 invalid instructions
   set_instruction(0, "ADD")
@@ -219,6 +241,16 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   expect(c.io.rob_wb_output.entry(3).is_addr, true)
   expect(c.io.rob_wb_output.entry(3).operand, 4)
 
+  // Check LSQ inputs
+  expect(c.io.rob_wb_output.entry(4).valid, true)
+  expect(c.io.rob_wb_output.entry(4).data, 8000)
+  expect(c.io.rob_wb_output.entry(4).is_addr, false)
+  expect(c.io.rob_wb_output.entry(4).operand, 4)
+
+  expect(c.io.rob_wb_output.entry(5).valid, true)
+  expect(c.io.rob_wb_output.entry(5).data, 800)
+  expect(c.io.rob_wb_output.entry(5).is_addr, false)
+  expect(c.io.rob_wb_output.entry(5).operand, 4)
 }
 
 class ExecuteGenerator extends TestGenerator {

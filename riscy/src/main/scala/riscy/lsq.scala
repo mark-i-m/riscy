@@ -444,15 +444,15 @@ class LSQ extends Module {
 
     ldIssueSet(i) := Cat(Array.tabulate(32) { ldIssueRow(i)(_) }).orR
     when(ldIssueSet(i)) {
-      io.robWbOut.data(i) := addrq(PriorityEncoder(ldIssueRow(i))).bits.value.bits
-      io.robWbOut.is_addr(i) := Bool(false)
-      io.robWbOut.operand(i) := addrq(PriorityEncoder(ldIssueRow(i))).bits.robLoc
-      io.robWbOut.valid(i) := Bool(true)
+      io.robWbOut.entry(i).data := addrq(PriorityEncoder(ldIssueRow(i))).bits.value.bits
+      io.robWbOut.entry(i).is_addr := Bool(false)
+      io.robWbOut.entry(i).operand := addrq(PriorityEncoder(ldIssueRow(i))).bits.robLoc
+      io.robWbOut.entry(i).valid := Bool(true)
     } .otherwise {
-      io.robWbOut.data(i) := UInt(0xdead)
-      io.robWbOut.is_addr(i) := Bool(false)
-      io.robWbOut.operand(i) := UInt(0x0)
-      io.robWbOut.valid(i) := Bool(false)
+      io.robWbOut.entry(i).data := UInt(0xdead)
+      io.robWbOut.entry(i).is_addr := Bool(false)
+      io.robWbOut.entry(i).operand := UInt(0x0)
+      io.robWbOut.entry(i).valid := Bool(false)
     }
   }
 }
