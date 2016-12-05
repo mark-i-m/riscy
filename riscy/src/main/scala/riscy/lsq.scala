@@ -334,7 +334,41 @@ class LSQ extends Module {
     dcache.io.ldReq.addr.valid := Bool(true)
     dcache.io.ldReq.addr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
     when (dcache.io.ldReq.data.valid && !addrq(PriorityEncoder(loads)).bits.value.valid) {
-      addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data.bits
+      switch (addrq(PriorityEncoder(loads)).bits.funct3) {
+        is (UInt(0x3)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data.bits
+        }
+        is (UInt(0x2)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(32,dcache.io.ldReq.data.bits(31)),
+              dcache.io.ldReq.data.bits(31,0))
+        }
+        is (UInt(0x6)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(32,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(31,0))
+        }
+        is (UInt(0x1)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(48,dcache.io.ldReq.data.bits(15)),
+              dcache.io.ldReq.data.bits(15,0))
+        }
+        is (UInt(0x5)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(48,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(15,0))
+        }
+        is (UInt(0x0)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(56,dcache.io.ldReq.data.bits(7)),
+              dcache.io.ldReq.data.bits(7,0))
+        }
+        is (UInt(0x4)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(56,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(7,0))
+        }
+      }
       addrq(PriorityEncoder(loads)).bits.value.valid := Bool(true)
     }
   } .otherwise {
