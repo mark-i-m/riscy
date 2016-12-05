@@ -10,6 +10,7 @@ class IssuedInst extends Bundle {
 class AddrBufEntry extends Bundle {
 	val robLoc = UInt(OUTPUT, 6)
 	val st_nld = Bool(OUTPUT)
+        val funct3 = UInt(OUTPUT,3)
 }
 
 class IqArbiter extends Module {
@@ -120,14 +121,17 @@ class IqArbiter extends Module {
 		when (io.inst(i).bits.op === UInt(0x03)) {
 			io.addrBuf(i).valid := Bool(true)
 			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
+			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
 			io.addrBuf(i).bits.st_nld := Bool(false)
 		} .elsewhen (io.inst(i).bits.op === UInt(0x0b)) {
 			io.addrBuf(i).valid := Bool(true)
 			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
+			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
 			io.addrBuf(i).bits.st_nld := Bool(true)
 		} .otherwise {
 			io.addrBuf(i).valid := Bool(false)
 			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
+			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
 			io.addrBuf(i).bits.st_nld := Bool(false)
 		}
 	}
