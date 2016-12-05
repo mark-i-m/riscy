@@ -45,7 +45,7 @@ class WBValue extends Bundle {
   // Is this a taken branch
   val taken = Bool(INPUT) // TODO
   // Is this a computed address
-  val isAddr = Bool(INPUT) // TODO
+  val isAddr = Bool(INPUT)
 }
 
 class ROB extends Module {
@@ -235,8 +235,8 @@ class ROB extends Module {
   // number will not match, so they will be ignored, but this case is not
   // guaranteed, so how to handle?
   for(i <- 0 until 6) {
-    when(io.wbValues(i).id.valid) {
-      robW(io.wbValues(i).id.bits).valid := Bool(true) && !io.wbValues(i).isAddr
+    when(io.wbValues(i).id.valid && !io.wbValues(i).isAddr) {
+      robW(io.wbValues(i).id.bits).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
       robW(io.wbValues(i).id.bits).bits := rob(io.wbValues(i).id.bits)
       robW(io.wbValues(i).id.bits).bits.rdVal.valid := Bool(true)

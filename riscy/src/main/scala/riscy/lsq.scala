@@ -333,15 +333,54 @@ class LSQ extends Module {
   when (isLoad.orR) {
     dcache.io.ldReq.addr.valid := Bool(true)
     dcache.io.ldReq.addr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
-    addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data
+    when (dcache.io.ldReq.data.valid && !addrq(PriorityEncoder(loads)).bits.value.valid) {
+      switch (addrq(PriorityEncoder(loads)).bits.funct3) {
+        is (UInt(0x3)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data.bits
+        }
+        is (UInt(0x2)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(32,dcache.io.ldReq.data.bits(31)),
+              dcache.io.ldReq.data.bits(31,0))
+        }
+        is (UInt(0x6)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(32,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(31,0))
+        }
+        is (UInt(0x1)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(48,dcache.io.ldReq.data.bits(15)),
+              dcache.io.ldReq.data.bits(15,0))
+        }
+        is (UInt(0x5)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(48,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(15,0))
+        }
+        is (UInt(0x0)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(56,dcache.io.ldReq.data.bits(7)),
+              dcache.io.ldReq.data.bits(7,0))
+        }
+        is (UInt(0x4)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(56,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(7,0))
+        }
+      }
+      addrq(PriorityEncoder(loads)).bits.value.valid := Bool(true)
+    }
   } .otherwise {
-    dcache.io.ldReq.addr.valid := Bool(true)
+    dcache.io.ldReq.addr.valid := Bool(false)
     dcache.io.ldReq.addr.bits := UInt(0xdead)
   }
 
   val CamStCommit = Module(new CAM(2, DEPTH, 6))
   val stCommitRow = Vec(2, Vec(DEPTH, Bool()))
   val stCommitSet = Vec(2, Bool())
+  val ldIssueRow = Vec(2, Vec(DEPTH, Bool()))
+  val ldIssueSet = Vec(2, Bool())
 
   for ( i <- 0 until 32) {
     CamStCommit.io.input_bits(i) := addrq(i).bits.robLoc
@@ -353,7 +392,7 @@ class LSQ extends Module {
 
   val dispatch = Vec.fill(32) { Bool() }
   for (i <- 0 until DEPTH) {
-    when (addrq(i).valid && addrq(i).bits.st_nld
+    when (addrq(i).valid
           && addrq(i).bits.addr.valid && addrq(i).bits.value.valid) {
       addrq(i).bits.ready := Bool(true)
       when (!depRow(i).orR) {
@@ -371,11 +410,9 @@ class LSQ extends Module {
             depMatrix(k).bits(i) := Bool(false)
           }
           when (!addrq(i).bits.st_nld) {
-            io.robWbOut.data(j) := addrq(i).bits.value.bits
-            io.robWbOut.is_addr(j) := Bool(true)
-            io.robWbOut.operand(j) := addrq(i).bits.robLoc
-            io.robWbOut.valid(j) := Bool(true)
+            ldIssueRow(j)(i) := Bool(true)
             addrq(i).bits.addr.valid := Bool(false)
+            addrq(i).bits.value.valid := Bool(false)
             addrq(i).valid := Bool(false)
           } 
           when (CamStCommit.io.hit(j)(i)) {
@@ -387,11 +424,8 @@ class LSQ extends Module {
             stCommitRow(j)(i) := Bool(true)
           }
       } .otherwise {
-        io.robWbOut.data(j) := addrq(i).bits.value.bits
-        io.robWbOut.is_addr(j) := Bool(false)
-        io.robWbOut.operand(j) := addrq(i).bits.robLoc
-        io.robWbOut.valid(j) := Bool(false)
         stCommitRow(j)(i) := Bool(false)
+        ldIssueRow(j)(i) := Bool(false)
       }
     }
   }
@@ -406,6 +440,19 @@ class LSQ extends Module {
       dcache.io.stReq(i).addr.valid := Bool(false)
       dcache.io.stReq(i).addr.bits := UInt(0xdead)
       dcache.io.stReq(i).data := UInt(0xdead)
+    }
+
+    ldIssueSet(i) := Cat(Array.tabulate(32) { ldIssueRow(i)(_) }).orR
+    when(ldIssueSet(i)) {
+      io.robWbOut.data(i) := addrq(PriorityEncoder(ldIssueRow(i))).bits.value.bits
+      io.robWbOut.is_addr(i) := Bool(false)
+      io.robWbOut.operand(i) := addrq(PriorityEncoder(ldIssueRow(i))).bits.robLoc
+      io.robWbOut.valid(i) := Bool(true)
+    } .otherwise {
+      io.robWbOut.data(i) := UInt(0xdead)
+      io.robWbOut.is_addr(i) := Bool(false)
+      io.robWbOut.operand(i) := UInt(0x0)
+      io.robWbOut.valid(i) := Bool(false)
     }
   }
 }
