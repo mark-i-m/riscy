@@ -436,10 +436,12 @@ class LSQ extends Module {
       dcache.io.stReq(i).addr.valid := Bool(true)
       dcache.io.stReq(i).addr.bits := addrq(PriorityEncoder(stCommitRow(i))).bits.addr.bits
       dcache.io.stReq(i).data := addrq(PriorityEncoder(stCommitRow(i))).bits.value.bits
+      dcache.io.stReq(i).size := addrq(PriorityEncoder(stCommitRow(i))).bits.funct3
     } .otherwise {
       dcache.io.stReq(i).addr.valid := Bool(false)
       dcache.io.stReq(i).addr.bits := UInt(0xdead)
       dcache.io.stReq(i).data := UInt(0xdead)
+      dcache.io.stReq(i).size := UInt(0x3)
     }
 
     ldIssueSet(i) := Cat(Array.tabulate(32) { ldIssueRow(i)(_) }).orR
