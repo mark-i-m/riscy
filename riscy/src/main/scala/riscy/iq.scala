@@ -124,7 +124,8 @@ class IssueQueue extends Module {
 	val issuedNumOH = UIntToOH(issuedNum)
 	val issuedPipelineBits = Reg(next = MuxLookup(issuedNum, iqueue(0).bits, 
 	Array.tabulate(16) {i => UInt (i) -> iqueue(i).bits}))
-	
+  
+	val issuedPrev2Pipeline = Vec.tabulate(8) { i => Reg(next = io.issuedPrev2(i)) }
 	val specCamRs1 = Module (new CAM(1, 8, 6))
 	val specCamRs2 = Module (new CAM(1, 8, 6))
 	
@@ -132,8 +133,8 @@ class IssueQueue extends Module {
 	specCamRs2.io.compare_bits(0) := issuedPipelineBits.rs2Rename
 	
 	for (i <- 0 until 8) {
-		specCamRs1.io.input_bits(i) := io.issuedPrev2(i).bits
-		specCamRs2.io.input_bits(i) := io.issuedPrev2(i).bits
+		specCamRs1.io.input_bits(i) := issuedPrev2Pipeline(i).bits
+		specCamRs2.io.input_bits(i) := issuedPrev2Pipeline(i).bits
 	}
 
 	val specInfo = Valid(new SpeculativeIssue()) 
@@ -151,7 +152,7 @@ class IssueQueue extends Module {
   specInfo.bits.rs2CycleNum 		:= UInt(0)
 
 	for (i <- 0 until 8) {
-		when (specCamRs1.io.hit(0)(i) && io.issuedPrev2(i).valid) {
+		when (specCamRs1.io.hit(0)(i) && issuedPrev2Pipeline(i).valid) {
 			if (i < 4) {
 				specInfo.bits.rs1WbLocation		:= UInt(i) 
 				specInfo.bits.rs1CycleNum 		:= UInt(0)
@@ -169,7 +170,7 @@ class IssueQueue extends Module {
 	}
 
 	for (i <- 0 until 8) {
-		when (specCamRs2.io.hit(0)(i) && io.issuedPrev2(i).valid) {
+		when (specCamRs2.io.hit(0)(i) && issuedPrev2Pipeline(i).valid) {
 			if (i < 4) {
 				specInfo.bits.rs2WbLocation		:= UInt(i) 
 				specInfo.bits.rs2CycleNum 		:= UInt(0)
