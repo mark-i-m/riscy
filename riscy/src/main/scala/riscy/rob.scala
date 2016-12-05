@@ -106,9 +106,6 @@ class ROB extends Module {
     val halt = Bool(OUTPUT)
   }
 
-  // A hack to make sure things are initialized properly
-  val inited = Reg(init = Bool(false), next = Bool(true))
-
   // Purely for emulation purposes
   // halt when the "halt" instruction commits
   val halt = Reg(init = Bool(false)) 
@@ -141,7 +138,7 @@ class ROB extends Module {
   var freeInc = UInt()
   val free = Reg(init = UInt(64), next = freeInc)
 
-  when(io.mispredPC.valid || !inited) {
+  when(io.mispredPC.valid) {
     freeInc := UInt(64)
     head.reset
   } .otherwise {
