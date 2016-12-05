@@ -36,15 +36,22 @@ class Fetch extends Module {
     val memReadPort = Valid(UInt(OUTPUT, 64)).asOutput
   }
   val icache = Module(new ICache())
+  icache.io.resp.stall := io.stall
 
   /* PC value takes a cycle to reach Icache. We start it at 0x10 so that we
    * don't lose the first cycle. The pipeline register which PC feeds starts at
    * 0x0 */
-  val PC = Reg(init = UInt(16, width = 32))
+  val PC = Reg(init = UInt(0x10, width = 64))
 
-  val nextAddr = Mux(io.isBranchTaken, io.btbAddr, PC)
+  val inited = Reg(init = Bool(false), next = Bool(true))
+  val nextAddr = UInt(width=64)
+  when (inited) {
+    nextAddr := Mux(io.isBranchTaken, io.btbAddr, PC)
+  } .otherwise {
+    nextAddr := Mux(io.isBranchTaken, io.btbAddr, UInt(0x10))
+  }
 
-  val addr = UInt(width = 32)
+  val addr = UInt(width = 64)
   val addrSelect = UInt(width = 2)
   addrSelect := Cat(io.isBranchMispred, io.isReturn).toBits().toUInt()
   addr := nextAddr
@@ -62,9 +69,9 @@ class Fetch extends Module {
 
   /* Register which holds the address to be sent to Icache. PC value appears here
    * after one cycle delay */
-  val fetchAddr = Reg(init = UInt(0, width = 32))
+  val fetchAddr = Reg(init = UInt(0, width = 64))
   // Used to correct requested PC incase Icache tells us that it is not ready
-  val prevFetchAddr = Reg(init = UInt(0, width = 32))
+  val prevFetchAddr = Reg(init = UInt(0, width = 64))
   val icache_ready = icache.io.resp.idle || icache.io.resp.valid
 
   // Shift in a new address only is the cache is ready to accept the old address
@@ -85,7 +92,7 @@ class Fetch extends Module {
   icache.io.memReadData := io.memReadData
   io.memReadPort := icache.io.memReadPort
 
-  val nextPC = UInt(width = 32)
+  val nextPC = UInt(width = 64)
   val nextPCOffset = UInt(width = 5)
   nextPCOffset := UInt(16)
 
@@ -95,6 +102,7 @@ class Fetch extends Module {
   // Increment PC
   when ((io.stall === Bool(false)) && icache_ready) {
     PC := nextPC
+    printf("Current PC: %x, Next PC: %x\n", PC, nextPC)
   }
 
   /* Assuming a 32B cache block, calculate the next sequential fetch address
@@ -175,8 +183,15 @@ class FetchTests(c: Fetch) extends Tester(c) {
   poke(c.io.branchMispredTarget, 0xeeeeeeee)
   poke(c.io.isBranchMispred, false)
   poke(c.io.isReturn, false)
-  poke(c.io.stall, false)
   poke(c.io.memReadData.valid, false)
+  // Stall the Fetch module
+  poke(c.io.stall, true)
+
+  // We expect the Icache to not be ready for taking requests.
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  // Unstall the Fetch module
+  poke(c.io.stall, false)
 
   // We expect the Icache to be ready for taking responses ie. idle should be
   // true. 

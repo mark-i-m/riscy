@@ -28,6 +28,9 @@ class ROBEntry extends DecodeIns {
   val isSt = Bool(OUTPUT)
   val isLd = Bool(OUTPUT)
 
+  // Purely for emulation purposes
+  val isHalt = Bool(OUTPUT)
+
   // From BP:
   // - was this branch predicted taken? 1 => T, 0 => NT
   val predTaken = Bool(OUTPUT)
@@ -38,9 +41,11 @@ class WBValue extends Bundle {
   // Which physical reg?
   val id = Valid(UInt(INPUT, 6))
   // The value to write back
-  val value = UInt(INPUT, 32)
+  val value = UInt(INPUT, 64)
   // Is this a taken branch
-  val taken = Bool(INPUT)
+  val taken = Bool(INPUT) // TODO
+  // Is this a computed address
+  val isAddr = Bool(INPUT)
 }
 
 class ROB extends Module {
@@ -71,7 +76,7 @@ class ROB extends Module {
     // Signal to load/store to actually issue a store.
     // There is exactly one store that could be at the head of the LSQ, so we
     // only need to indicate when to actually write to memory.
-    val stCommit = Vec.fill(4) { Bool(OUTPUT) }
+    val stCommit = Vec.fill(4) { Valid(UInt(OUTPUT, 6)).asOutput }
 
     // Signal that a misprediction occured.
     //
@@ -96,7 +101,18 @@ class ROB extends Module {
     // Otherwise, it would be possible for a structure to fill up and requests
     // a stall while at the same time, the commit stage is stalled because
     // fetch or LSQ is stalled and won't accept a mispredict or stCommit flag.
+    
+    // Purely for emulation
+    val halt = Bool(OUTPUT)
   }
+
+  // A hack to make sure things are initialized properly
+  val inited = Reg(init = Bool(false), next = Bool(true))
+
+  // Purely for emulation purposes
+  // halt when the "halt" instruction commits
+  val halt = Reg(init = Bool(false)) 
+  io.halt := halt
 
   // The register remap table
   // Bit 0 of each register denotes if that register is in the Arch register
@@ -125,7 +141,7 @@ class ROB extends Module {
   var freeInc = UInt()
   val free = Reg(init = UInt(64), next = freeInc)
 
-  when(io.mispredPC.valid) {
+  when(io.mispredPC.valid || !inited) {
     freeInc := UInt(64)
     head.reset
   } .otherwise {
@@ -167,22 +183,26 @@ class ROB extends Module {
       when(UInt(i) === io.robFirst) {
         robW(i) := io.allocROB(0)
         when(io.allocROB(0).valid) {
-          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(0).bits.pc)
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+            io.allocROB(0).bits.pc, io.allocROB(0).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(1)) {
         robW(i) := io.allocROB(1)
         when(io.allocROB(1).valid) {
-          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(1).bits.pc)
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+            io.allocROB(1).bits.pc, io.allocROB(1).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(2)) {
         robW(i) := io.allocROB(2)
         when(io.allocROB(2).valid) {
-          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(2).bits.pc)
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+            io.allocROB(2).bits.pc, io.allocROB(2).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(3)) {
         robW(i) := io.allocROB(3)
         when(io.allocROB(3).valid) {
-          printf("Latch new ins, ROB%d PC: %x\n", UInt(i), io.allocROB(3).bits.pc)
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+            io.allocROB(3).bits.pc, io.allocROB(3).bits.op)
         }
       } .otherwise {
         robW(i).valid := Bool(false) // write disable
@@ -215,7 +235,7 @@ class ROB extends Module {
   // number will not match, so they will be ignored, but this case is not
   // guaranteed, so how to handle?
   for(i <- 0 until 6) {
-    when(io.wbValues(i).id.valid) {
+    when(io.wbValues(i).id.valid && !io.wbValues(i).isAddr) {
       robW(io.wbValues(i).id.bits).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
       robW(io.wbValues(i).id.bits).bits := rob(io.wbValues(i).id.bits)
@@ -224,7 +244,7 @@ class ROB extends Module {
       robW(io.wbValues(i).id.bits).bits.isMispredicted :=
         io.wbValues(i).taken ^ robW(io.wbValues(i).id.bits).bits.predTaken
 
-      printf("writing WB value to ROB%d: %x\n", io.wbValues(i).id.bits, io.wbValues(i).value)
+      printf("WB value to ROB%d: %x\n", io.wbValues(i).id.bits, io.wbValues(i).value)
     }
   }
 
@@ -296,7 +316,8 @@ class ROB extends Module {
   // If the head of the ROB is a store, tell the L/SQ to actually write to
   // memory now that the store has committed.
   for(i <- 0 until 4) {
-    io.stCommit(i) := rob(head.value + UInt(i)).isSt && couldCommit(i)
+    io.stCommit(i).valid := rob(head.value + UInt(i)).isSt && couldCommit(i)
+    io.stCommit(i).bits  := rob(head.value + UInt(i)).tag
   }
 
   // If the head of the ROB is a mispredicted branch...
@@ -345,7 +366,7 @@ class ROB extends Module {
     rf.io.wValues(i)     := front(i).rdVal.bits
 
     when(rf.io.wPorts(i).valid) {
-      printf("latch to rf committing ROB%d: %x\n", head.value + UInt(i), front(i).rdVal.bits)
+      printf("Writing RF on ROB%d commit: %x\n", head.value + UInt(i), front(i).rdVal.bits)
     } .elsewhen(couldCommit(i) && !lastToRename(i) === UInt(i) && front(i).hasRd) {
       printf("not latching to rf front(%d), ROB%d, r%d: %x\n",
         UInt(i), head.value + UInt(i), front(i).rd, front(i).rdVal.bits)
@@ -408,6 +429,15 @@ class ROB extends Module {
       robW(i).valid := Bool(true)
       robW(i).bits := new ROBEntry
     }
+  }
+
+  // Halt when a "halt" commits
+  halt := (Vec.tabulate(4) { i =>
+    front(i).isHalt && couldCommit(i)
+  }).exists(identity[Bool] _)
+
+  when(halt) {
+    printf("HALT\n")
   }
 
   // Compute the new head
@@ -517,8 +547,11 @@ class ROBTests(c: ROB) extends Tester(c) {
   def pokeWBInvalid(ports: Array[Int]) =
     ports foreach { port => poke(c.io.wbValues(port).id.valid, false) }
 
-  def expectStCommit(st: Array[Boolean]) =
-    for(i <- 0 until 4) { expect(c.io.stCommit(i), st(i)) }
+  def expectStCommit(st: Array[(Boolean, Int)]) =
+    for(i <- 0 until 4) { 
+      expect(c.io.stCommit(i).valid, st(i)._1) 
+      if(st(i)._1) { expect(c.io.stCommit(i).bits, st(i)._2) }
+    }
 
   // test the remap ports
 
@@ -945,7 +978,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   expectROBDestBits(Array(1 -> 0x5687, 2 -> 0x100, 4 -> 0xbc, 6 -> 0xDEB3BEE9))
 
   // check that second store does not commit
-  expectStCommit(Array.fill(4)(false))
+  expectStCommit(Array.fill(4)(false -> 0))
 
   // NOTE: load commits
   // NOTE: bne commits
@@ -975,7 +1008,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   pokeWB(5, 0xa, 0xDEAFBDED)
 
   // check that second store does not commit
-  expectStCommit(Array.fill(4)(false))
+  expectStCommit(Array.fill(4)(false -> 0))
 
   step(1)
 
@@ -1000,7 +1033,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   expect(c.io.mispredTarget, 0x108)
 
   // check that first store commits
-  expectStCommit(Array(true, false, false, false))
+  expectStCommit(Array(true -> 8, false -> 0, false -> 0, false -> 0))
 
   step(1)
 
@@ -1013,7 +1046,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   expectROBDestValid(Array(4 -> false, 5 -> false, 6 -> false, 7 -> false))
 
   // check that second store does not commit
-  expectStCommit(Array.fill(4)(false))
+  expectStCommit(Array.fill(4)(false -> 0))
 
   step(1)
 
@@ -1035,7 +1068,7 @@ class ROBTests(c: ROB) extends Tester(c) {
   expect(c.io.rfValues(2), 0x5687)
 
   // check that second store does not commit
-  expectStCommit(Array.fill(4)(false))
+  expectStCommit(Array.fill(4)(false -> 0))
 
   step(1)
 
@@ -1110,13 +1143,13 @@ class ROBTests(c: ROB) extends Tester(c) {
   // Now all 4 stores will try to commit, but at most two stores can be
   // committed per cycle
 
-  expectStCommit(Array(true, true, false, false))
+  expectStCommit(Array(true -> 0, true -> 1, false -> 0, false -> 0))
 
   step(1)
 
   // Now the remaining 2 stores commit
 
-  expectStCommit(Array(true, true, false, false))
+  expectStCommit(Array(true -> 2, true -> 3, false -> 0, false -> 0))
 }
 
 class ROBGenerator extends TestGenerator {

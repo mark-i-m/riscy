@@ -7,20 +7,21 @@ class IssuedInst extends Bundle {
 	val iqNum = UInt(OUTPUT,2)
 }
 
-class AddBufEntry extends Bundle {
+class AddrBufEntry extends Bundle {
 	val robLoc = UInt(OUTPUT, 6)
 	val st_nld = Bool(OUTPUT)
+        val funct3 = UInt(OUTPUT,3)
 }
 
 class IqArbiter extends Module {
 	val io = new Bundle {
 		val inst = Vec.fill(4) {Valid (new ROBEntry).flip}
 		val iqLen = Vec.fill(4) { UInt(INPUT, 5)}
-		val addBufLen = UInt(INPUT, 5)
-		// Instruction issue to address Queue
+		val addrBufLen = UInt(INPUT, 5)
+		// Instruction issue to addrress Queue
 		val allocIQ = Vec.fill(4) (new IssuedInst)
-		// Address buf entry and load store info
-		val addBuf = Vec.fill(4) {Valid (new AddBufEntry)}
+		// Addrress buf entry and load store info
+		val addrBuf = Vec.fill(4) {Valid (new AddrBufEntry)}
 		val stall = Bool(OUTPUT)
 	}
 	// Logic to generate initial stalls in design
@@ -30,7 +31,7 @@ class IqArbiter extends Module {
 	val iqLen7W = Vec.fill(4) {UInt(width = 7)}
 	iqLen7W := io.iqLen
 	val totalLen = iqLen7W(0) + iqLen7W(1) + iqLen7W(2) + iqLen7W(3)
-	when ((io.addBufLen > UInt(0x1b)) ||
+	when ((io.addrBufLen > UInt(0x1b)) ||
 	      (totalLen > UInt(0x3c))) {
 		      io.stall := Bool(true)
 	      } .otherwise {
@@ -96,7 +97,7 @@ class IqArbiter extends Module {
 	}
 
         for (i <- 0 until 3) {
-		minDiff(i) := io.iqLen(finalMin(i+1)) - io.iqLen(finalMin(0))
+		minDiff(i) := io.iqLen(finalMin(i+1)) - io.iqLen(finalMin(i))
 	}
 
 	for (i <- 0 until 4) {
@@ -106,11 +107,11 @@ class IqArbiter extends Module {
 		// Logic to issue instructions to different iqs
 		// if there is a stall signal set, top issue module
 		// should not issue any instructions to any iqs
-		when (UInt(i) < minDiff(0)) {
+		when (UInt(i) <= minDiff(0)) {
 			io.allocIQ(i).iqNum := finalMin(0)
-		} .elsewhen (UInt(i) < minDiff(1)) {
+		} .elsewhen (UInt(i) <= (minDiff(1) + minDiff(0) + UInt(1))) {
 			io.allocIQ(i).iqNum := finalMin(1)
-		} .elsewhen (UInt(i) < minDiff(2)) {
+		} .elsewhen (UInt(i) <= (minDiff(2) + minDiff(1) + minDiff(0) + UInt(2))) {
 			io.allocIQ(i).iqNum := finalMin(2)
 		} .otherwise {
 			io.allocIQ(i).iqNum := finalMin(3)
@@ -118,17 +119,20 @@ class IqArbiter extends Module {
 
 		// Logic to generate the entry for LS Buffer
 		when (io.inst(i).bits.op === UInt(0x03)) {
-			io.addBuf(i).valid := Bool(true)
-			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addBuf(i).bits.st_nld := Bool(false)
+			io.addrBuf(i).valid := Bool(true)
+			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
+			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
+			io.addrBuf(i).bits.st_nld := Bool(false)
 		} .elsewhen (io.inst(i).bits.op === UInt(0x0b)) {
-			io.addBuf(i).valid := Bool(true)
-			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addBuf(i).bits.st_nld := Bool(true)
+			io.addrBuf(i).valid := Bool(true)
+			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
+			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
+			io.addrBuf(i).bits.st_nld := Bool(true)
 		} .otherwise {
-			io.addBuf(i).valid := Bool(false)
-			io.addBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addBuf(i).bits.st_nld := Bool(false)
+			io.addrBuf(i).valid := Bool(false)
+			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
+			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
+			io.addrBuf(i).bits.st_nld := Bool(false)
 		}
 	}
 }
@@ -141,10 +145,10 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.inst(2).valid, 1)
 	poke(c.io.inst(3).valid, 1)
   	poke(c.io.iqLen(0), 0x4)
-	poke(c.io.iqLen(1), 0x5)
-  	poke(c.io.iqLen(2), 0x6)
-	poke(c.io.iqLen(3), 0x7)
-	poke(c.io.addBufLen, 0x7)
+	poke(c.io.iqLen(1), 0x4)
+  	poke(c.io.iqLen(2), 0x4)
+	poke(c.io.iqLen(3), 0x4)
+	poke(c.io.addrBufLen, 0x7)
 
 	step(1)
 
@@ -167,7 +171,7 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.iqLen(1), 0xf)
   poke(c.io.iqLen(2), 0xf)
 	poke(c.io.iqLen(3), 0xf)
-	poke(c.io.addBufLen, 0x7)
+	poke(c.io.addrBufLen, 0x7)
 
 	step(1)
 
@@ -182,7 +186,7 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.iqLen(1), 0x10)
   poke(c.io.iqLen(2), 0x10)
 	poke(c.io.iqLen(3), 0x10)
-	poke(c.io.addBufLen, 0x7)
+	poke(c.io.addrBufLen, 0x7)
 
 	step(1)
 
@@ -197,7 +201,7 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.iqLen(1), 0xf)
   poke(c.io.iqLen(2), 0xf)
 	poke(c.io.iqLen(3), 0x10)
-	poke(c.io.addBufLen, 0x7)
+	poke(c.io.addrBufLen, 0x7)
 
 	step(1)
 
@@ -212,7 +216,7 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.iqLen(1), 0x1)
   	poke(c.io.iqLen(2), 0x1)
 	poke(c.io.iqLen(3), 0x1)
-	poke(c.io.addBufLen, 0x1c)
+	poke(c.io.addrBufLen, 0x1c)
 
 	step(1)
 
@@ -227,14 +231,14 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.iqLen(1), 0x5)
   	poke(c.io.iqLen(2), 0x6)
 	poke(c.io.iqLen(3), 0x7)
-	poke(c.io.addBufLen, 0x7)
+	poke(c.io.addrBufLen, 0x7)
 
 	step(1)
 
 	expect(c.io.allocIQ(0).iqNum, 0x0)
 	expect(c.io.allocIQ(1).iqNum, 0x0)
 	expect(c.io.allocIQ(2).iqNum, 0x0)
-	expect(c.io.allocIQ(3).iqNum, 0x1)
+	expect(c.io.allocIQ(3).iqNum, 0x0)
 	expect(c.io.allocIQ(0).inst.valid, 0x1)
 	expect(c.io.allocIQ(1).inst.valid, 0x1)
 	expect(c.io.allocIQ(2).inst.valid, 0x1)
@@ -250,7 +254,7 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.iqLen(1), 0x6)
   	poke(c.io.iqLen(2), 0x2)
 	poke(c.io.iqLen(3), 0xf)
-	poke(c.io.addBufLen, 0x7)
+	poke(c.io.addrBufLen, 0x7)
 
 	step(1)
 
@@ -277,7 +281,7 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.iqLen(1), 0x6)
   	poke(c.io.iqLen(2), 0x2)
 	poke(c.io.iqLen(3), 0xf)
-	poke(c.io.addBufLen, 0x7)
+	poke(c.io.addrBufLen, 0x7)
 
 	step(1)
 
@@ -285,18 +289,42 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	expect(c.io.allocIQ(1).iqNum, 0x2)
 	expect(c.io.allocIQ(2).iqNum, 0x2)
 	expect(c.io.allocIQ(3).iqNum, 0x2)
-	expect(c.io.addBuf(0).bits.st_nld, 0)
-	expect(c.io.addBuf(1).bits.st_nld, 1)
-	expect(c.io.addBuf(2).bits.st_nld, 0)
-	expect(c.io.addBuf(0).valid, 1)
-	expect(c.io.addBuf(1).valid, 1)
-	expect(c.io.addBuf(2).valid, 1)
-	expect(c.io.addBuf(3).valid, 0)
+	expect(c.io.addrBuf(0).bits.st_nld, 0)
+	expect(c.io.addrBuf(1).bits.st_nld, 1)
+	expect(c.io.addrBuf(2).bits.st_nld, 0)
+	expect(c.io.addrBuf(0).valid, 1)
+	expect(c.io.addrBuf(1).valid, 1)
+	expect(c.io.addrBuf(2).valid, 1)
+	expect(c.io.addrBuf(3).valid, 0)
 	expect(c.io.allocIQ(0).inst.valid, 0x1)
 	expect(c.io.allocIQ(1).inst.valid, 0x1)
 	expect(c.io.allocIQ(2).inst.valid, 0x1)
 	expect(c.io.allocIQ(3).inst.valid, 0x1)
 	expect(c.io.stall, 0x0)
+
+	// Test - 7  to check if all correct instructions are getting assigned
+	poke(c.io.inst(0).valid, 1)
+	poke(c.io.inst(1).valid, 1)
+	poke(c.io.inst(2).valid, 1)
+	poke(c.io.inst(3).valid, 1)
+  	poke(c.io.iqLen(0), 0x4)
+	poke(c.io.iqLen(1), 0x5)
+  	poke(c.io.iqLen(2), 0x6)
+	poke(c.io.iqLen(3), 0x7)
+	poke(c.io.addrBufLen, 0x7)
+
+	step(1)
+
+	expect(c.io.allocIQ(0).iqNum, 0x0)
+	expect(c.io.allocIQ(1).iqNum, 0x0)
+	expect(c.io.allocIQ(2).iqNum, 0x1)
+	expect(c.io.allocIQ(3).iqNum, 0x1)
+	expect(c.io.allocIQ(0).inst.valid, 0x1)
+	expect(c.io.allocIQ(1).inst.valid, 0x1)
+	expect(c.io.allocIQ(2).inst.valid, 0x1)
+	expect(c.io.allocIQ(3).inst.valid, 0x1)
+	expect(c.io.stall, 0x0)
+
 }
 
 class IqArbiterGenerator extends TestGenerator {

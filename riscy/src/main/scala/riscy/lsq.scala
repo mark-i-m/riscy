@@ -3,7 +3,7 @@ package riscy
 import Chisel._
 import scala.language.reflectiveCalls
 
-class LSQEntry extends AddBufEntry {
+class LSQEntry extends AddrBufEntry {
   val addr = Valid(UInt(OUTPUT, 32))
   val value = Valid(UInt(OUTPUT, 64))
   val ready  = Bool(OUTPUT) // Entry populated or not
@@ -11,26 +11,37 @@ class LSQEntry extends AddBufEntry {
 
 class LSQ extends Module {
   val io = new Bundle {
-    val resEntry = Vec.fill(4) { Valid(new AddBufEntry).flip }
+    val resEntry = Vec.fill(4) { Valid(new AddrBufEntry).flip }
     val robWbin = new RobWbStore(6).flip
     val stCommit = Vec(2, Valid(UInt(INPUT, 6)).asInput)
     val currentLen = UInt(OUTPUT, 4)
     val robWbOut = new RobWbInput(2).flip
+    val ldAddr = Valid(UInt(OUTPUT, 64))
+    val ldValue = UInt(INPUT, 64)
     val stAddr = Vec(2, Valid(UInt(OUTPUT, 64)))
     val stValue = Vec(2, UInt(OUTPUT, 64))
-    // TODO prune these
-    val pos1 = UInt(OUTPUT, 5)
-    val pos2 = UInt(OUTPUT, 5)
-    val pos3 = UInt(OUTPUT, 5)
-    val pos4 = UInt(OUTPUT, 5)
-    val dispatch = Vec.fill(32) { Bool(OUTPUT) }
+    val memStAddrPort = Vec(2, Valid(UInt(OUTPUT,64).asOutput))
+    val memStData = Vec(2, UInt(OUTPUT,64))
+    val memLdAddrPort = Valid(UInt(OUTPUT,64)).asOutput
+    val memLdData = Valid(UInt(INPUT,8 * 64)).asInput
   }
+
+  // The Data Cache
+  val dcache = Module(new DCache())
+
+  // Hook up D$ to memory
+  io.memStAddrPort := dcache.io.memStAddrPort
+  io.memStData := dcache.io.memStData
+  io.memLdAddrPort := dcache.io.memLdAddrPort
+  dcache.io.memLdData := io.memLdData
 
   val depMatrix = Vec.tabulate(32) { i => Reg(Valid(Vec.fill(32) { Bool() } )) }
   val depRow = Vec.tabulate(32) { i => Cat(Array.tabulate(32) { depMatrix(i).bits(_) }) }
 
   val addrqW = Vec.fill(32) { Valid(new LSQEntry) }
   val addrq = Vec.tabulate(32) { i => Reg(addrqW(i)) }
+
+  val pos = Vec(4, UInt(width=5))
 
   io.currentLen := PopCount(Array.tabulate(32) { addrq(_).valid })
 
@@ -57,216 +68,216 @@ class LSQ extends Module {
 
   // Allocation logic
   // Should clean up and move this to another module
-  io.pos1 := PriorityEncoder(Vec.tabulate(32) { i => !addrq(i).valid })
-  when(io.pos1 === UInt(1)) {
-    io.pos2 := UInt(2) + PriorityEncoder(Vec.tabulate(32-1-1) { i => !addrq(i+1+1).valid })
-  } .elsewhen (io.pos1 === UInt(2)) {
-    io.pos2 := UInt(3) + PriorityEncoder(Vec.tabulate(32-2-1) { i => !addrq(i+2+1).valid })
-  } .elsewhen (io.pos1 === UInt(3)) {
-    io.pos2 := UInt(4) + PriorityEncoder(Vec.tabulate(32-3-1) { i => !addrq(i+3+1).valid })
-  } .elsewhen (io.pos1 === UInt(4)) {
-    io.pos2 := UInt(5) + PriorityEncoder(Vec.tabulate(32-4-1) { i => !addrq(i+4+1).valid })
-  } .elsewhen (io.pos1 === UInt(5)) {
-    io.pos2 := UInt(6) + PriorityEncoder(Vec.tabulate(32-5-1) { i => !addrq(i+5+1).valid })
-  } .elsewhen (io.pos1 === UInt(6)) {
-    io.pos2 := UInt(7) + PriorityEncoder(Vec.tabulate(32-6-1) { i => !addrq(i+6+1).valid })
-  } .elsewhen (io.pos1 === UInt(7)) {
-    io.pos2 := UInt(8) + PriorityEncoder(Vec.tabulate(32-7-1) { i => !addrq(i+7+1).valid })
-  } .elsewhen (io.pos1 === UInt(8)) {
-    io.pos2 := UInt(9) + PriorityEncoder(Vec.tabulate(32-8-1) { i => !addrq(i+8+1).valid })
-  } .elsewhen (io.pos1 === UInt(9)) {
-    io.pos2 := UInt(10) + PriorityEncoder(Vec.tabulate(32-9-1) { i => !addrq(i+9+1).valid })
-  } .elsewhen (io.pos1 === UInt(10)) {
-    io.pos2 := UInt(11) + PriorityEncoder(Vec.tabulate(32-10-1) { i => !addrq(i+10+1).valid })
-  } .elsewhen (io.pos1 === UInt(11)) {
-    io.pos2 := UInt(12) + PriorityEncoder(Vec.tabulate(32-11-1) { i => !addrq(i+11+1).valid })
-  } .elsewhen (io.pos1 === UInt(12)) {
-    io.pos2 := UInt(13) + PriorityEncoder(Vec.tabulate(32-12-1) { i => !addrq(i+12+1).valid })
-  } .elsewhen (io.pos1 === UInt(13)) {
-    io.pos2 := UInt(14) + PriorityEncoder(Vec.tabulate(32-13-1) { i => !addrq(i+13+1).valid })
-  } .elsewhen (io.pos1 === UInt(14)) {
-    io.pos2 := UInt(15) + PriorityEncoder(Vec.tabulate(32-14-1) { i => !addrq(i+14+1).valid })
-  } .elsewhen (io.pos1 === UInt(15)) {
-    io.pos2 := UInt(16) + PriorityEncoder(Vec.tabulate(32-15-1) { i => !addrq(i+15+1).valid })
-  } .elsewhen (io.pos1 === UInt(16)) {
-    io.pos2 := UInt(17) + PriorityEncoder(Vec.tabulate(32-16-1) { i => !addrq(i+16+1).valid })
-  } .elsewhen (io.pos1 === UInt(17)) {
-    io.pos2 := UInt(18) + PriorityEncoder(Vec.tabulate(32-17-1) { i => !addrq(i+17+1).valid })
-  } .elsewhen (io.pos1 === UInt(18)) {
-    io.pos2 := UInt(19) + PriorityEncoder(Vec.tabulate(32-18-1) { i => !addrq(i+18+1).valid })
-  } .elsewhen (io.pos1 === UInt(19)) {
-    io.pos2 := UInt(20) + PriorityEncoder(Vec.tabulate(32-19-1) { i => !addrq(i+19+1).valid })
-  } .elsewhen (io.pos1 === UInt(20)) {
-    io.pos2 := UInt(21) + PriorityEncoder(Vec.tabulate(32-20-1) { i => !addrq(i+20+1).valid })
-  } .elsewhen (io.pos1 === UInt(21)) {
-    io.pos2 := UInt(22) + PriorityEncoder(Vec.tabulate(32-21-1) { i => !addrq(i+21+1).valid })
-  } .elsewhen (io.pos1 === UInt(22)) {
-    io.pos2 := UInt(23) + PriorityEncoder(Vec.tabulate(32-22-1) { i => !addrq(i+22+1).valid })
-  } .elsewhen (io.pos1 === UInt(23)) {
-    io.pos2 := UInt(24) + PriorityEncoder(Vec.tabulate(32-23-1) { i => !addrq(i+23+1).valid })
-  } .elsewhen (io.pos1 === UInt(24)) {
-    io.pos2 := UInt(25) + PriorityEncoder(Vec.tabulate(32-24-1) { i => !addrq(i+24+1).valid })
-  } .elsewhen (io.pos1 === UInt(25)) {
-    io.pos2 := UInt(26) + PriorityEncoder(Vec.tabulate(32-25-1) { i => !addrq(i+25+1).valid })
-  } .elsewhen (io.pos1 === UInt(26)) {
-    io.pos2 := UInt(27) + PriorityEncoder(Vec.tabulate(32-26-1) { i => !addrq(i+26+1).valid })
-  } .elsewhen (io.pos1 === UInt(27)) {
-    io.pos2 := UInt(28) + PriorityEncoder(Vec.tabulate(32-27-1) { i => !addrq(i+27+1).valid })
-  } .elsewhen (io.pos1 === UInt(28)) {
-    io.pos2 := UInt(29) + PriorityEncoder(Vec.tabulate(32-28-1) { i => !addrq(i+28+1).valid })
-  } .elsewhen (io.pos1 === UInt(29)) {
-    io.pos2 := UInt(30) + PriorityEncoder(Vec.tabulate(32-29-1) { i => !addrq(i+29+1).valid })
-  } .elsewhen (io.pos1 === UInt(30)) {
-    io.pos2 := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
-  } .elsewhen (io.pos1 === UInt(31)) {
-    io.pos2 := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
+  pos(0) := PriorityEncoder(Vec.tabulate(32) { i => !addrq(i).valid })
+  when(pos(0) === UInt(1)) {
+    pos(1) := UInt(2) + PriorityEncoder(Vec.tabulate(32-1-1) { i => !addrq(i+1+1).valid })
+  } .elsewhen (pos(0) === UInt(2)) {
+    pos(1) := UInt(3) + PriorityEncoder(Vec.tabulate(32-2-1) { i => !addrq(i+2+1).valid })
+  } .elsewhen (pos(0) === UInt(3)) {
+    pos(1) := UInt(4) + PriorityEncoder(Vec.tabulate(32-3-1) { i => !addrq(i+3+1).valid })
+  } .elsewhen (pos(0) === UInt(4)) {
+    pos(1) := UInt(5) + PriorityEncoder(Vec.tabulate(32-4-1) { i => !addrq(i+4+1).valid })
+  } .elsewhen (pos(0) === UInt(5)) {
+    pos(1) := UInt(6) + PriorityEncoder(Vec.tabulate(32-5-1) { i => !addrq(i+5+1).valid })
+  } .elsewhen (pos(0) === UInt(6)) {
+    pos(1) := UInt(7) + PriorityEncoder(Vec.tabulate(32-6-1) { i => !addrq(i+6+1).valid })
+  } .elsewhen (pos(0) === UInt(7)) {
+    pos(1) := UInt(8) + PriorityEncoder(Vec.tabulate(32-7-1) { i => !addrq(i+7+1).valid })
+  } .elsewhen (pos(0) === UInt(8)) {
+    pos(1) := UInt(9) + PriorityEncoder(Vec.tabulate(32-8-1) { i => !addrq(i+8+1).valid })
+  } .elsewhen (pos(0) === UInt(9)) {
+    pos(1) := UInt(10) + PriorityEncoder(Vec.tabulate(32-9-1) { i => !addrq(i+9+1).valid })
+  } .elsewhen (pos(0) === UInt(10)) {
+    pos(1) := UInt(11) + PriorityEncoder(Vec.tabulate(32-10-1) { i => !addrq(i+10+1).valid })
+  } .elsewhen (pos(0) === UInt(11)) {
+    pos(1) := UInt(12) + PriorityEncoder(Vec.tabulate(32-11-1) { i => !addrq(i+11+1).valid })
+  } .elsewhen (pos(0) === UInt(12)) {
+    pos(1) := UInt(13) + PriorityEncoder(Vec.tabulate(32-12-1) { i => !addrq(i+12+1).valid })
+  } .elsewhen (pos(0) === UInt(13)) {
+    pos(1) := UInt(14) + PriorityEncoder(Vec.tabulate(32-13-1) { i => !addrq(i+13+1).valid })
+  } .elsewhen (pos(0) === UInt(14)) {
+    pos(1) := UInt(15) + PriorityEncoder(Vec.tabulate(32-14-1) { i => !addrq(i+14+1).valid })
+  } .elsewhen (pos(0) === UInt(15)) {
+    pos(1) := UInt(16) + PriorityEncoder(Vec.tabulate(32-15-1) { i => !addrq(i+15+1).valid })
+  } .elsewhen (pos(0) === UInt(16)) {
+    pos(1) := UInt(17) + PriorityEncoder(Vec.tabulate(32-16-1) { i => !addrq(i+16+1).valid })
+  } .elsewhen (pos(0) === UInt(17)) {
+    pos(1) := UInt(18) + PriorityEncoder(Vec.tabulate(32-17-1) { i => !addrq(i+17+1).valid })
+  } .elsewhen (pos(0) === UInt(18)) {
+    pos(1) := UInt(19) + PriorityEncoder(Vec.tabulate(32-18-1) { i => !addrq(i+18+1).valid })
+  } .elsewhen (pos(0) === UInt(19)) {
+    pos(1) := UInt(20) + PriorityEncoder(Vec.tabulate(32-19-1) { i => !addrq(i+19+1).valid })
+  } .elsewhen (pos(0) === UInt(20)) {
+    pos(1) := UInt(21) + PriorityEncoder(Vec.tabulate(32-20-1) { i => !addrq(i+20+1).valid })
+  } .elsewhen (pos(0) === UInt(21)) {
+    pos(1) := UInt(22) + PriorityEncoder(Vec.tabulate(32-21-1) { i => !addrq(i+21+1).valid })
+  } .elsewhen (pos(0) === UInt(22)) {
+    pos(1) := UInt(23) + PriorityEncoder(Vec.tabulate(32-22-1) { i => !addrq(i+22+1).valid })
+  } .elsewhen (pos(0) === UInt(23)) {
+    pos(1) := UInt(24) + PriorityEncoder(Vec.tabulate(32-23-1) { i => !addrq(i+23+1).valid })
+  } .elsewhen (pos(0) === UInt(24)) {
+    pos(1) := UInt(25) + PriorityEncoder(Vec.tabulate(32-24-1) { i => !addrq(i+24+1).valid })
+  } .elsewhen (pos(0) === UInt(25)) {
+    pos(1) := UInt(26) + PriorityEncoder(Vec.tabulate(32-25-1) { i => !addrq(i+25+1).valid })
+  } .elsewhen (pos(0) === UInt(26)) {
+    pos(1) := UInt(27) + PriorityEncoder(Vec.tabulate(32-26-1) { i => !addrq(i+26+1).valid })
+  } .elsewhen (pos(0) === UInt(27)) {
+    pos(1) := UInt(28) + PriorityEncoder(Vec.tabulate(32-27-1) { i => !addrq(i+27+1).valid })
+  } .elsewhen (pos(0) === UInt(28)) {
+    pos(1) := UInt(29) + PriorityEncoder(Vec.tabulate(32-28-1) { i => !addrq(i+28+1).valid })
+  } .elsewhen (pos(0) === UInt(29)) {
+    pos(1) := UInt(30) + PriorityEncoder(Vec.tabulate(32-29-1) { i => !addrq(i+29+1).valid })
+  } .elsewhen (pos(0) === UInt(30)) {
+    pos(1) := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
+  } .elsewhen (pos(0) === UInt(31)) {
+    pos(1) := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
   } .otherwise {
-    io.pos2 := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !addrq(i+0+1).valid })
+    pos(1) := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !addrq(i+0+1).valid })
   }
 
-  when(io.pos2 === UInt(1)) {
-    io.pos3 := UInt(2) + PriorityEncoder(Vec.tabulate(32-1-1) { i => !addrq(i+1+1).valid })
-  } .elsewhen (io.pos2 === UInt(2)) {
-    io.pos3 := UInt(3) + PriorityEncoder(Vec.tabulate(32-2-1) { i => !addrq(i+2+1).valid })
-  } .elsewhen (io.pos2 === UInt(3)) {
-    io.pos3 := UInt(4) + PriorityEncoder(Vec.tabulate(32-3-1) { i => !addrq(i+3+1).valid })
-  } .elsewhen (io.pos2 === UInt(4)) {
-    io.pos3 := UInt(5) + PriorityEncoder(Vec.tabulate(32-4-1) { i => !addrq(i+4+1).valid })
-  } .elsewhen (io.pos2 === UInt(5)) {
-    io.pos3 := UInt(6) + PriorityEncoder(Vec.tabulate(32-5-1) { i => !addrq(i+5+1).valid })
-  } .elsewhen (io.pos2 === UInt(6)) {
-    io.pos3 := UInt(7) + PriorityEncoder(Vec.tabulate(32-6-1) { i => !addrq(i+6+1).valid })
-  } .elsewhen (io.pos2 === UInt(7)) {
-    io.pos3 := UInt(8) + PriorityEncoder(Vec.tabulate(32-7-1) { i => !addrq(i+7+1).valid })
-  } .elsewhen (io.pos2 === UInt(8)) {
-    io.pos3 := UInt(9) + PriorityEncoder(Vec.tabulate(32-8-1) { i => !addrq(i+8+1).valid })
-  } .elsewhen (io.pos2 === UInt(9)) {
-    io.pos3 := UInt(10) + PriorityEncoder(Vec.tabulate(32-9-1) { i => !addrq(i+9+1).valid })
-  } .elsewhen (io.pos2 === UInt(10)) {
-    io.pos3 := UInt(11) + PriorityEncoder(Vec.tabulate(32-10-1) { i => !addrq(i+10+1).valid })
-  } .elsewhen (io.pos2 === UInt(11)) {
-    io.pos3 := UInt(12) + PriorityEncoder(Vec.tabulate(32-11-1) { i => !addrq(i+11+1).valid })
-  } .elsewhen (io.pos2 === UInt(12)) {
-    io.pos3 := UInt(13) + PriorityEncoder(Vec.tabulate(32-12-1) { i => !addrq(i+12+1).valid })
-  } .elsewhen (io.pos2 === UInt(13)) {
-    io.pos3 := UInt(14) + PriorityEncoder(Vec.tabulate(32-13-1) { i => !addrq(i+13+1).valid })
-  } .elsewhen (io.pos2 === UInt(14)) {
-    io.pos3 := UInt(15) + PriorityEncoder(Vec.tabulate(32-14-1) { i => !addrq(i+14+1).valid })
-  } .elsewhen (io.pos2 === UInt(15)) {
-    io.pos3 := UInt(16) + PriorityEncoder(Vec.tabulate(32-15-1) { i => !addrq(i+15+1).valid })
-  } .elsewhen (io.pos2 === UInt(16)) {
-    io.pos3 := UInt(17) + PriorityEncoder(Vec.tabulate(32-16-1) { i => !addrq(i+16+1).valid })
-  } .elsewhen (io.pos2 === UInt(17)) {
-    io.pos3 := UInt(18) + PriorityEncoder(Vec.tabulate(32-17-1) { i => !addrq(i+17+1).valid })
-  } .elsewhen (io.pos2 === UInt(18)) {
-    io.pos3 := UInt(19) + PriorityEncoder(Vec.tabulate(32-18-1) { i => !addrq(i+18+1).valid })
-  } .elsewhen (io.pos2 === UInt(19)) {
-    io.pos3 := UInt(20) + PriorityEncoder(Vec.tabulate(32-19-1) { i => !addrq(i+19+1).valid })
-  } .elsewhen (io.pos2 === UInt(20)) {
-    io.pos3 := UInt(21) + PriorityEncoder(Vec.tabulate(32-20-1) { i => !addrq(i+20+1).valid })
-  } .elsewhen (io.pos2 === UInt(21)) {
-    io.pos3 := UInt(22) + PriorityEncoder(Vec.tabulate(32-21-1) { i => !addrq(i+21+1).valid })
-  } .elsewhen (io.pos2 === UInt(22)) {
-    io.pos3 := UInt(23) + PriorityEncoder(Vec.tabulate(32-22-1) { i => !addrq(i+22+1).valid })
-  } .elsewhen (io.pos2 === UInt(23)) {
-    io.pos3 := UInt(24) + PriorityEncoder(Vec.tabulate(32-23-1) { i => !addrq(i+23+1).valid })
-  } .elsewhen (io.pos2 === UInt(24)) {
-    io.pos3 := UInt(25) + PriorityEncoder(Vec.tabulate(32-24-1) { i => !addrq(i+24+1).valid })
-  } .elsewhen (io.pos2 === UInt(25)) {
-    io.pos3 := UInt(26) + PriorityEncoder(Vec.tabulate(32-25-1) { i => !addrq(i+25+1).valid })
-  } .elsewhen (io.pos2 === UInt(26)) {
-    io.pos3 := UInt(27) + PriorityEncoder(Vec.tabulate(32-26-1) { i => !addrq(i+26+1).valid })
-  } .elsewhen (io.pos2 === UInt(27)) {
-    io.pos3 := UInt(28) + PriorityEncoder(Vec.tabulate(32-27-1) { i => !addrq(i+27+1).valid })
-  } .elsewhen (io.pos2 === UInt(28)) {
-    io.pos3 := UInt(29) + PriorityEncoder(Vec.tabulate(32-28-1) { i => !addrq(i+28+1).valid })
-  } .elsewhen (io.pos2 === UInt(29)) {
-    io.pos3 := UInt(30) + PriorityEncoder(Vec.tabulate(32-29-1) { i => !addrq(i+29+1).valid })
-  } .elsewhen (io.pos2 === UInt(30)) {
-    io.pos3 := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
-  } .elsewhen (io.pos2 === UInt(31)) {
-    io.pos3 := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
+  when(pos(1) === UInt(1)) {
+    pos(2) := UInt(2) + PriorityEncoder(Vec.tabulate(32-1-1) { i => !addrq(i+1+1).valid })
+  } .elsewhen (pos(1) === UInt(2)) {
+    pos(2) := UInt(3) + PriorityEncoder(Vec.tabulate(32-2-1) { i => !addrq(i+2+1).valid })
+  } .elsewhen (pos(1) === UInt(3)) {
+    pos(2) := UInt(4) + PriorityEncoder(Vec.tabulate(32-3-1) { i => !addrq(i+3+1).valid })
+  } .elsewhen (pos(1) === UInt(4)) {
+    pos(2) := UInt(5) + PriorityEncoder(Vec.tabulate(32-4-1) { i => !addrq(i+4+1).valid })
+  } .elsewhen (pos(1) === UInt(5)) {
+    pos(2) := UInt(6) + PriorityEncoder(Vec.tabulate(32-5-1) { i => !addrq(i+5+1).valid })
+  } .elsewhen (pos(1) === UInt(6)) {
+    pos(2) := UInt(7) + PriorityEncoder(Vec.tabulate(32-6-1) { i => !addrq(i+6+1).valid })
+  } .elsewhen (pos(1) === UInt(7)) {
+    pos(2) := UInt(8) + PriorityEncoder(Vec.tabulate(32-7-1) { i => !addrq(i+7+1).valid })
+  } .elsewhen (pos(1) === UInt(8)) {
+    pos(2) := UInt(9) + PriorityEncoder(Vec.tabulate(32-8-1) { i => !addrq(i+8+1).valid })
+  } .elsewhen (pos(1) === UInt(9)) {
+    pos(2) := UInt(10) + PriorityEncoder(Vec.tabulate(32-9-1) { i => !addrq(i+9+1).valid })
+  } .elsewhen (pos(1) === UInt(10)) {
+    pos(2) := UInt(11) + PriorityEncoder(Vec.tabulate(32-10-1) { i => !addrq(i+10+1).valid })
+  } .elsewhen (pos(1) === UInt(11)) {
+    pos(2) := UInt(12) + PriorityEncoder(Vec.tabulate(32-11-1) { i => !addrq(i+11+1).valid })
+  } .elsewhen (pos(1) === UInt(12)) {
+    pos(2) := UInt(13) + PriorityEncoder(Vec.tabulate(32-12-1) { i => !addrq(i+12+1).valid })
+  } .elsewhen (pos(1) === UInt(13)) {
+    pos(2) := UInt(14) + PriorityEncoder(Vec.tabulate(32-13-1) { i => !addrq(i+13+1).valid })
+  } .elsewhen (pos(1) === UInt(14)) {
+    pos(2) := UInt(15) + PriorityEncoder(Vec.tabulate(32-14-1) { i => !addrq(i+14+1).valid })
+  } .elsewhen (pos(1) === UInt(15)) {
+    pos(2) := UInt(16) + PriorityEncoder(Vec.tabulate(32-15-1) { i => !addrq(i+15+1).valid })
+  } .elsewhen (pos(1) === UInt(16)) {
+    pos(2) := UInt(17) + PriorityEncoder(Vec.tabulate(32-16-1) { i => !addrq(i+16+1).valid })
+  } .elsewhen (pos(1) === UInt(17)) {
+    pos(2) := UInt(18) + PriorityEncoder(Vec.tabulate(32-17-1) { i => !addrq(i+17+1).valid })
+  } .elsewhen (pos(1) === UInt(18)) {
+    pos(2) := UInt(19) + PriorityEncoder(Vec.tabulate(32-18-1) { i => !addrq(i+18+1).valid })
+  } .elsewhen (pos(1) === UInt(19)) {
+    pos(2) := UInt(20) + PriorityEncoder(Vec.tabulate(32-19-1) { i => !addrq(i+19+1).valid })
+  } .elsewhen (pos(1) === UInt(20)) {
+    pos(2) := UInt(21) + PriorityEncoder(Vec.tabulate(32-20-1) { i => !addrq(i+20+1).valid })
+  } .elsewhen (pos(1) === UInt(21)) {
+    pos(2) := UInt(22) + PriorityEncoder(Vec.tabulate(32-21-1) { i => !addrq(i+21+1).valid })
+  } .elsewhen (pos(1) === UInt(22)) {
+    pos(2) := UInt(23) + PriorityEncoder(Vec.tabulate(32-22-1) { i => !addrq(i+22+1).valid })
+  } .elsewhen (pos(1) === UInt(23)) {
+    pos(2) := UInt(24) + PriorityEncoder(Vec.tabulate(32-23-1) { i => !addrq(i+23+1).valid })
+  } .elsewhen (pos(1) === UInt(24)) {
+    pos(2) := UInt(25) + PriorityEncoder(Vec.tabulate(32-24-1) { i => !addrq(i+24+1).valid })
+  } .elsewhen (pos(1) === UInt(25)) {
+    pos(2) := UInt(26) + PriorityEncoder(Vec.tabulate(32-25-1) { i => !addrq(i+25+1).valid })
+  } .elsewhen (pos(1) === UInt(26)) {
+    pos(2) := UInt(27) + PriorityEncoder(Vec.tabulate(32-26-1) { i => !addrq(i+26+1).valid })
+  } .elsewhen (pos(1) === UInt(27)) {
+    pos(2) := UInt(28) + PriorityEncoder(Vec.tabulate(32-27-1) { i => !addrq(i+27+1).valid })
+  } .elsewhen (pos(1) === UInt(28)) {
+    pos(2) := UInt(29) + PriorityEncoder(Vec.tabulate(32-28-1) { i => !addrq(i+28+1).valid })
+  } .elsewhen (pos(1) === UInt(29)) {
+    pos(2) := UInt(30) + PriorityEncoder(Vec.tabulate(32-29-1) { i => !addrq(i+29+1).valid })
+  } .elsewhen (pos(1) === UInt(30)) {
+    pos(2) := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
+  } .elsewhen (pos(1) === UInt(31)) {
+    pos(2) := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
   } .otherwise {
-    io.pos3 := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !addrq(i+0+1).valid })
+    pos(2) := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !addrq(i+0+1).valid })
   }
 
-  when(io.pos3 === UInt(1)) {
-    io.pos4 := UInt(2) + PriorityEncoder(Vec.tabulate(32-1-1) { i => !addrq(i+1+1).valid })
-  } .elsewhen (io.pos3 === UInt(2)) {
-    io.pos4 := UInt(3) + PriorityEncoder(Vec.tabulate(32-2-1) { i => !addrq(i+2+1).valid })
-  } .elsewhen (io.pos3 === UInt(3)) {
-    io.pos4 := UInt(4) + PriorityEncoder(Vec.tabulate(32-3-1) { i => !addrq(i+3+1).valid })
-  } .elsewhen (io.pos3 === UInt(4)) {
-    io.pos4 := UInt(5) + PriorityEncoder(Vec.tabulate(32-4-1) { i => !addrq(i+4+1).valid })
-  } .elsewhen (io.pos3 === UInt(5)) {
-    io.pos4 := UInt(6) + PriorityEncoder(Vec.tabulate(32-5-1) { i => !addrq(i+5+1).valid })
-  } .elsewhen (io.pos3 === UInt(6)) {
-    io.pos4 := UInt(7) + PriorityEncoder(Vec.tabulate(32-6-1) { i => !addrq(i+6+1).valid })
-  } .elsewhen (io.pos3 === UInt(7)) {
-    io.pos4 := UInt(8) + PriorityEncoder(Vec.tabulate(32-7-1) { i => !addrq(i+7+1).valid })
-  } .elsewhen (io.pos3 === UInt(8)) {
-    io.pos4 := UInt(9) + PriorityEncoder(Vec.tabulate(32-8-1) { i => !addrq(i+8+1).valid })
-  } .elsewhen (io.pos3 === UInt(9)) {
-    io.pos4 := UInt(10) + PriorityEncoder(Vec.tabulate(32-9-1) { i => !addrq(i+9+1).valid })
-  } .elsewhen (io.pos3 === UInt(10)) {
-    io.pos4 := UInt(11) + PriorityEncoder(Vec.tabulate(32-10-1) { i => !addrq(i+10+1).valid })
-  } .elsewhen (io.pos3 === UInt(11)) {
-    io.pos4 := UInt(12) + PriorityEncoder(Vec.tabulate(32-11-1) { i => !addrq(i+11+1).valid })
-  } .elsewhen (io.pos3 === UInt(12)) {
-    io.pos4 := UInt(13) + PriorityEncoder(Vec.tabulate(32-12-1) { i => !addrq(i+12+1).valid })
-  } .elsewhen (io.pos3 === UInt(13)) {
-    io.pos4 := UInt(14) + PriorityEncoder(Vec.tabulate(32-13-1) { i => !addrq(i+13+1).valid })
-  } .elsewhen (io.pos3 === UInt(14)) {
-    io.pos4 := UInt(15) + PriorityEncoder(Vec.tabulate(32-14-1) { i => !addrq(i+14+1).valid })
-  } .elsewhen (io.pos3 === UInt(15)) {
-    io.pos4 := UInt(16) + PriorityEncoder(Vec.tabulate(32-15-1) { i => !addrq(i+15+1).valid })
-  } .elsewhen (io.pos3 === UInt(16)) {
-    io.pos4 := UInt(17) + PriorityEncoder(Vec.tabulate(32-16-1) { i => !addrq(i+16+1).valid })
-  } .elsewhen (io.pos3 === UInt(17)) {
-    io.pos4 := UInt(18) + PriorityEncoder(Vec.tabulate(32-17-1) { i => !addrq(i+17+1).valid })
-  } .elsewhen (io.pos3 === UInt(18)) {
-    io.pos4 := UInt(19) + PriorityEncoder(Vec.tabulate(32-18-1) { i => !addrq(i+18+1).valid })
-  } .elsewhen (io.pos3 === UInt(19)) {
-    io.pos4 := UInt(20) + PriorityEncoder(Vec.tabulate(32-19-1) { i => !addrq(i+19+1).valid })
-  } .elsewhen (io.pos3 === UInt(20)) {
-    io.pos4 := UInt(21) + PriorityEncoder(Vec.tabulate(32-20-1) { i => !addrq(i+20+1).valid })
-  } .elsewhen (io.pos3 === UInt(21)) {
-    io.pos4 := UInt(22) + PriorityEncoder(Vec.tabulate(32-21-1) { i => !addrq(i+21+1).valid })
-  } .elsewhen (io.pos3 === UInt(22)) {
-    io.pos4 := UInt(23) + PriorityEncoder(Vec.tabulate(32-22-1) { i => !addrq(i+22+1).valid })
-  } .elsewhen (io.pos3 === UInt(23)) {
-    io.pos4 := UInt(24) + PriorityEncoder(Vec.tabulate(32-23-1) { i => !addrq(i+23+1).valid })
-  } .elsewhen (io.pos3 === UInt(24)) {
-    io.pos4 := UInt(25) + PriorityEncoder(Vec.tabulate(32-24-1) { i => !addrq(i+24+1).valid })
-  } .elsewhen (io.pos3 === UInt(25)) {
-    io.pos4 := UInt(26) + PriorityEncoder(Vec.tabulate(32-25-1) { i => !addrq(i+25+1).valid })
-  } .elsewhen (io.pos3 === UInt(26)) {
-    io.pos4 := UInt(27) + PriorityEncoder(Vec.tabulate(32-26-1) { i => !addrq(i+26+1).valid })
-  } .elsewhen (io.pos3 === UInt(27)) {
-    io.pos4 := UInt(28) + PriorityEncoder(Vec.tabulate(32-27-1) { i => !addrq(i+27+1).valid })
-  } .elsewhen (io.pos3 === UInt(28)) {
-    io.pos4 := UInt(29) + PriorityEncoder(Vec.tabulate(32-28-1) { i => !addrq(i+28+1).valid })
-  } .elsewhen (io.pos3 === UInt(29)) {
-    io.pos4 := UInt(30) + PriorityEncoder(Vec.tabulate(32-29-1) { i => !addrq(i+29+1).valid })
-  } .elsewhen (io.pos3 === UInt(30)) {
-    io.pos4 := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
-  } .elsewhen (io.pos3 === UInt(31)) {
-    io.pos4 := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
+  when(pos(2) === UInt(1)) {
+    pos(3) := UInt(2) + PriorityEncoder(Vec.tabulate(32-1-1) { i => !addrq(i+1+1).valid })
+  } .elsewhen (pos(2) === UInt(2)) {
+    pos(3) := UInt(3) + PriorityEncoder(Vec.tabulate(32-2-1) { i => !addrq(i+2+1).valid })
+  } .elsewhen (pos(2) === UInt(3)) {
+    pos(3) := UInt(4) + PriorityEncoder(Vec.tabulate(32-3-1) { i => !addrq(i+3+1).valid })
+  } .elsewhen (pos(2) === UInt(4)) {
+    pos(3) := UInt(5) + PriorityEncoder(Vec.tabulate(32-4-1) { i => !addrq(i+4+1).valid })
+  } .elsewhen (pos(2) === UInt(5)) {
+    pos(3) := UInt(6) + PriorityEncoder(Vec.tabulate(32-5-1) { i => !addrq(i+5+1).valid })
+  } .elsewhen (pos(2) === UInt(6)) {
+    pos(3) := UInt(7) + PriorityEncoder(Vec.tabulate(32-6-1) { i => !addrq(i+6+1).valid })
+  } .elsewhen (pos(2) === UInt(7)) {
+    pos(3) := UInt(8) + PriorityEncoder(Vec.tabulate(32-7-1) { i => !addrq(i+7+1).valid })
+  } .elsewhen (pos(2) === UInt(8)) {
+    pos(3) := UInt(9) + PriorityEncoder(Vec.tabulate(32-8-1) { i => !addrq(i+8+1).valid })
+  } .elsewhen (pos(2) === UInt(9)) {
+    pos(3) := UInt(10) + PriorityEncoder(Vec.tabulate(32-9-1) { i => !addrq(i+9+1).valid })
+  } .elsewhen (pos(2) === UInt(10)) {
+    pos(3) := UInt(11) + PriorityEncoder(Vec.tabulate(32-10-1) { i => !addrq(i+10+1).valid })
+  } .elsewhen (pos(2) === UInt(11)) {
+    pos(3) := UInt(12) + PriorityEncoder(Vec.tabulate(32-11-1) { i => !addrq(i+11+1).valid })
+  } .elsewhen (pos(2) === UInt(12)) {
+    pos(3) := UInt(13) + PriorityEncoder(Vec.tabulate(32-12-1) { i => !addrq(i+12+1).valid })
+  } .elsewhen (pos(2) === UInt(13)) {
+    pos(3) := UInt(14) + PriorityEncoder(Vec.tabulate(32-13-1) { i => !addrq(i+13+1).valid })
+  } .elsewhen (pos(2) === UInt(14)) {
+    pos(3) := UInt(15) + PriorityEncoder(Vec.tabulate(32-14-1) { i => !addrq(i+14+1).valid })
+  } .elsewhen (pos(2) === UInt(15)) {
+    pos(3) := UInt(16) + PriorityEncoder(Vec.tabulate(32-15-1) { i => !addrq(i+15+1).valid })
+  } .elsewhen (pos(2) === UInt(16)) {
+    pos(3) := UInt(17) + PriorityEncoder(Vec.tabulate(32-16-1) { i => !addrq(i+16+1).valid })
+  } .elsewhen (pos(2) === UInt(17)) {
+    pos(3) := UInt(18) + PriorityEncoder(Vec.tabulate(32-17-1) { i => !addrq(i+17+1).valid })
+  } .elsewhen (pos(2) === UInt(18)) {
+    pos(3) := UInt(19) + PriorityEncoder(Vec.tabulate(32-18-1) { i => !addrq(i+18+1).valid })
+  } .elsewhen (pos(2) === UInt(19)) {
+    pos(3) := UInt(20) + PriorityEncoder(Vec.tabulate(32-19-1) { i => !addrq(i+19+1).valid })
+  } .elsewhen (pos(2) === UInt(20)) {
+    pos(3) := UInt(21) + PriorityEncoder(Vec.tabulate(32-20-1) { i => !addrq(i+20+1).valid })
+  } .elsewhen (pos(2) === UInt(21)) {
+    pos(3) := UInt(22) + PriorityEncoder(Vec.tabulate(32-21-1) { i => !addrq(i+21+1).valid })
+  } .elsewhen (pos(2) === UInt(22)) {
+    pos(3) := UInt(23) + PriorityEncoder(Vec.tabulate(32-22-1) { i => !addrq(i+22+1).valid })
+  } .elsewhen (pos(2) === UInt(23)) {
+    pos(3) := UInt(24) + PriorityEncoder(Vec.tabulate(32-23-1) { i => !addrq(i+23+1).valid })
+  } .elsewhen (pos(2) === UInt(24)) {
+    pos(3) := UInt(25) + PriorityEncoder(Vec.tabulate(32-24-1) { i => !addrq(i+24+1).valid })
+  } .elsewhen (pos(2) === UInt(25)) {
+    pos(3) := UInt(26) + PriorityEncoder(Vec.tabulate(32-25-1) { i => !addrq(i+25+1).valid })
+  } .elsewhen (pos(2) === UInt(26)) {
+    pos(3) := UInt(27) + PriorityEncoder(Vec.tabulate(32-26-1) { i => !addrq(i+26+1).valid })
+  } .elsewhen (pos(2) === UInt(27)) {
+    pos(3) := UInt(28) + PriorityEncoder(Vec.tabulate(32-27-1) { i => !addrq(i+27+1).valid })
+  } .elsewhen (pos(2) === UInt(28)) {
+    pos(3) := UInt(29) + PriorityEncoder(Vec.tabulate(32-28-1) { i => !addrq(i+28+1).valid })
+  } .elsewhen (pos(2) === UInt(29)) {
+    pos(3) := UInt(30) + PriorityEncoder(Vec.tabulate(32-29-1) { i => !addrq(i+29+1).valid })
+  } .elsewhen (pos(2) === UInt(30)) {
+    pos(3) := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
+  } .elsewhen (pos(2) === UInt(31)) {
+    pos(3) := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !addrq(i+30+1).valid })
   } .otherwise {
-    io.pos4 := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !addrq(i+0+1).valid })
+    pos(3) := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !addrq(i+0+1).valid })
   }
 
   for (i <- 0 until 32) {
-    when (UInt(i) === io.pos1) {
+    when (UInt(i) === pos(0)) {
     addrq(i) := io.resEntry(0)
     }
-    when (UInt(i) === io.pos2) {
+    when (UInt(i) === pos(1)) {
     addrq(i) := io.resEntry(1)
     }
-    when (UInt(i) === io.pos3) {
+    when (UInt(i) === pos(2)) {
     addrq(i) := io.resEntry(2)
     }
-    when (UInt(i) === io.pos4) {
+    when (UInt(i) === pos(3)) {
     addrq(i) := io.resEntry(3)
     }
   }
@@ -314,7 +325,62 @@ class LSQ extends Module {
     }
   }
 
+  val loads = Vec.tabulate(32) { i => (addrq(i).valid
+              && !addrq(i).bits.st_nld && !addrq(i).bits.value.valid
+              && addrq(i).bits.addr.valid)}
+
+  val isLoad = Cat(Array.tabulate(32) {loads(_)})
+  when (isLoad.orR) {
+    dcache.io.ldReq.addr.valid := Bool(true)
+    dcache.io.ldReq.addr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
+    when (dcache.io.ldReq.data.valid && !addrq(PriorityEncoder(loads)).bits.value.valid) {
+      switch (addrq(PriorityEncoder(loads)).bits.funct3) {
+        is (UInt(0x3)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data.bits
+        }
+        is (UInt(0x2)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(32,dcache.io.ldReq.data.bits(31)),
+              dcache.io.ldReq.data.bits(31,0))
+        }
+        is (UInt(0x6)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(32,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(31,0))
+        }
+        is (UInt(0x1)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(48,dcache.io.ldReq.data.bits(15)),
+              dcache.io.ldReq.data.bits(15,0))
+        }
+        is (UInt(0x5)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(48,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(15,0))
+        }
+        is (UInt(0x0)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(56,dcache.io.ldReq.data.bits(7)),
+              dcache.io.ldReq.data.bits(7,0))
+        }
+        is (UInt(0x4)) {
+          addrq(PriorityEncoder(loads)).bits.value.bits :=
+            Cat(Fill(56,UInt(0,width=1)),
+              dcache.io.ldReq.data.bits(7,0))
+        }
+      }
+      addrq(PriorityEncoder(loads)).bits.value.valid := Bool(true)
+    }
+  } .otherwise {
+    dcache.io.ldReq.addr.valid := Bool(false)
+    dcache.io.ldReq.addr.bits := UInt(0xdead)
+  }
+
   val CamStCommit = Module(new CAM(2, DEPTH, 6))
+  val stCommitRow = Vec(2, Vec(DEPTH, Bool()))
+  val stCommitSet = Vec(2, Bool())
+  val ldIssueRow = Vec(2, Vec(DEPTH, Bool()))
+  val ldIssueSet = Vec(2, Bool())
 
   for ( i <- 0 until 32) {
     CamStCommit.io.input_bits(i) := addrq(i).bits.robLoc
@@ -324,53 +390,69 @@ class LSQ extends Module {
     CamStCommit.io.compare_bits(i) := io.stCommit(i).bits
   }
 
-
-
+  val dispatch = Vec.fill(32) { Bool() }
   for (i <- 0 until DEPTH) {
-    when (addrq(i).valid && addrq(i).bits.st_nld
+    when (addrq(i).valid
           && addrq(i).bits.addr.valid && addrq(i).bits.value.valid) {
       addrq(i).bits.ready := Bool(true)
       when (!depRow(i).orR) {
-        io.dispatch(i) := Bool(true)
+        dispatch(i) := Bool(true)
       }
     } .otherwise {
       addrq(i).bits.ready := Bool(false)
-      io.dispatch(i) := Bool(false)
+      dispatch(i) := Bool(false)
     }
 
     for (j <- 0 until 2) {
-      when(io.dispatch(i)) {
+      when(dispatch(i)) {
         printf("Ready to dispatch %d\n", UInt(i))
           for(k <- 0 until DEPTH) {
             depMatrix(k).bits(i) := Bool(false)
           }
           when (!addrq(i).bits.st_nld) {
-            io.robWbOut.entry(j).data := addrq(i).bits.value.bits
-            io.robWbOut.entry(j).is_addr := Bool(true)
-            io.robWbOut.entry(j).operand := addrq(i).bits.robLoc
-            io.robWbOut.entry(j).valid := Bool(true)
+            ldIssueRow(j)(i) := Bool(true)
             addrq(i).bits.addr.valid := Bool(false)
+            addrq(i).bits.value.valid := Bool(false)
             addrq(i).valid := Bool(false)
           } 
           when (CamStCommit.io.hit(j)(i)) {
             printf("St dispatch on %d\n", UInt(j))
-            io.stAddr(j).bits := addrq(i).bits.addr.bits
             printf("St dispatch addr %d\n", addrq(i).bits.addr.bits)
-            io.stAddr(j).valid := io.stCommit(j).valid
-            io.stValue(j) := addrq(i).bits.value.bits
             printf("St dispatch value %d\n", addrq(i).bits.value.bits)
             addrq(i).bits.addr.valid := Bool(false)
             addrq(i).valid := Bool(false)
+            stCommitRow(j)(i) := Bool(true)
           }
       } .otherwise {
-        io.robWbOut.entry(j).data := addrq(i).bits.value.bits
-        io.robWbOut.entry(j).is_addr := Bool(false)
-        io.robWbOut.entry(j).operand := addrq(i).bits.robLoc
-        io.robWbOut.entry(j).valid := Bool(false)
-        io.stAddr(j).bits := addrq(i).bits.addr.bits
-        io.stAddr(j).valid := Bool(false)
-        io.stValue(j) := addrq(i).bits.value.bits
+        stCommitRow(j)(i) := Bool(false)
+        ldIssueRow(j)(i) := Bool(false)
       }
+    }
+  }
+
+  for (i <- 0 until 2) {
+    stCommitSet(i) := Cat(Array.tabulate(32) { stCommitRow(i)(_) }).orR
+    when (stCommitSet(i)) {
+      dcache.io.stReq(i).addr.valid := Bool(true)
+      dcache.io.stReq(i).addr.bits := addrq(PriorityEncoder(stCommitRow(i))).bits.addr.bits
+      dcache.io.stReq(i).data := addrq(PriorityEncoder(stCommitRow(i))).bits.value.bits
+    } .otherwise {
+      dcache.io.stReq(i).addr.valid := Bool(false)
+      dcache.io.stReq(i).addr.bits := UInt(0xdead)
+      dcache.io.stReq(i).data := UInt(0xdead)
+    }
+
+    ldIssueSet(i) := Cat(Array.tabulate(32) { ldIssueRow(i)(_) }).orR
+    when(ldIssueSet(i)) {
+      io.robWbOut.data(i) := addrq(PriorityEncoder(ldIssueRow(i))).bits.value.bits
+      io.robWbOut.is_addr(i) := Bool(false)
+      io.robWbOut.operand(i) := addrq(PriorityEncoder(ldIssueRow(i))).bits.robLoc
+      io.robWbOut.valid(i) := Bool(true)
+    } .otherwise {
+      io.robWbOut.data(i) := UInt(0xdead)
+      io.robWbOut.is_addr(i) := Bool(false)
+      io.robWbOut.operand(i) := UInt(0x0)
+      io.robWbOut.valid(i) := Bool(false)
     }
   }
 }
@@ -380,12 +462,6 @@ class LSQTests(c: LSQ) extends Tester(c) {
   expect(c.io.currentLen, 0)
   expect(c.addrq(0).bits.st_nld, 0)
   expect(c.depMatrix(1).bits(0), false)
-
-  // Positions in queue available for reservations from arbiter
-  expect(c.io.pos1, 0)
-  expect(c.io.pos2, 1)
-  expect(c.io.pos3, 2)
-  expect(c.io.pos4, 3)
 
   // Reserve one entry from the arbiter
   poke(c.io.resEntry(0).bits.st_nld, 1)
@@ -406,10 +482,6 @@ class LSQTests(c: LSQ) extends Tester(c) {
   // Queue has one entry
   expect(c.io.currentLen, 1)
 
-  // Incoming entries should occupy these positions in the queue
-  expect(c.io.pos1, 1)
-  expect(c.io.pos2, 2)
-  
   // Reserve two entries from the arbiter
   poke(c.io.resEntry(0).bits.robLoc, 4)
   poke(c.io.resEntry(1).bits.st_nld, 0)
@@ -427,11 +499,6 @@ class LSQTests(c: LSQ) extends Tester(c) {
   expect(c.addrq(2).valid, 1)
 
   expect(c.io.currentLen, 3)
-
-  expect(c.io.pos1, 3)
-  expect(c.io.pos2, 4)
-  expect(c.io.pos3, 5)
-  expect(c.io.pos4, 6)
 
   // Reserve four entries
   poke(c.io.resEntry(2).bits.st_nld, 0)
@@ -497,7 +564,6 @@ class LSQTests(c: LSQ) extends Tester(c) {
   expect(c.addrq(0).bits.value.bits, 0xff)
   expect(c.addrq(1).bits.addr.bits, 0x10000)
   expect(c.addrq(0).bits.value.valid, true)
-  expect(c.io.dispatch(0), true)
   step(1)
   // Cycle 4
 
@@ -508,15 +574,11 @@ class LSQTests(c: LSQ) extends Tester(c) {
   poke(c.io.stCommit(0).valid, true)
   poke(c.io.stCommit(0).bits, 6)
   expect(c.CamStCommit.io.hit(0)(0), true)
-  expect(c.io.dispatch(0), true)
-  // TODO WHY???
-  //expect(c.io.stAddr(0).valid, true)
-  //expect(c.io.stAddr(0).bits, 0x10000)
+  expect(c.dcache.io.stReq(0).addr.valid, true)
+  expect(c.dcache.io.stReq(0).addr.bits, 0x10000)
 
   step(1)
   expect(c.depMatrix(1).bits(0), false)
-  expect(c.io.dispatch(0), false)
-  expect(c.io.pos1, 0)
 }
 
 class LSQGenerator extends TestGenerator {

@@ -4,43 +4,60 @@ import Chisel._
 
 class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, latency: Int) extends Module {
   val io = new Bundle {
-    val readPorts = Vec.fill(numRPorts) { Valid(UInt(INPUT, 64)) }
-    val readData = Vec.fill(numRPorts) { Valid(UInt(OUTPUT, lineBytes*8)) }
+    val readPorts = Vec.fill(numRPorts) { Valid(UInt(INPUT, 64)).asInput }
+    val readData = Vec.fill(numRPorts) { Valid(UInt(OUTPUT, lineBytes*8)).asOutput }
 
-    val writePorts = Vec.fill(numWPorts) { Valid(UInt(INPUT, 64)) }
-    val writeData = Vec.fill(numWPorts) { UInt(INPUT, 64) }
+    val writePorts = Vec.fill(numWPorts) { Valid(UInt(INPUT, 64)).asInput }
+    val writeData = Vec.fill(numWPorts) { UInt(INPUT, 64).asInput }
   }
 
   println("Creating BigMemory of size " + ((lineBytes * numLines) >> 10) + " kB")
 
-  val memBank = Mem(Bits(width = 8 * lineBytes), numLines)
+  val memBank = Mem(UInt(width = 8), numLines * lineBytes)
 
-  // Hook up read ports
-  val readValue = Vec.fill(numRPorts) { Valid(UInt(width = 64)) }
-
+  // Read ports
   for(i <- 0 until numRPorts) {
-    readValue(i).valid := io.readPorts(i).valid
-    readValue(i).bits := memBank(io.readPorts(i).bits)
-
-    if(latency > 0) {
-      io.readData(i) := Pipe(readValue(i), latency)
+    val reqDelayed = if(latency > 0) {
+      Pipe(io.readPorts(i), latency)
     } else {
-      io.readData(i) := readValue(i)
+      io.readPorts(i)
     }
+
+    val data = UInt(width = lineBytes * 8)
+    data := UInt(0)
+
+    when(reqDelayed.valid) {
+      val dataBytes = Array.tabulate(lineBytes) {
+        j => memBank(reqDelayed.bits + UInt(j))
+      }
+
+      for(j <- 0 until lineBytes) {
+        data((j+1)*8-1,j*8) := dataBytes(j)
+      }
+    } .otherwise {
+      data := UInt(0) // Please chisel with a default value
+    }
+
+    io.readData(i).valid := reqDelayed.valid
+    io.readData(i).bits := data
   }
 
   // Hook up write ports
-  val wPipes = Array.tabulate(numWPorts) { i => {
-    val wdata = Valid(new WriteData)
-    wdata.valid := io.writePorts(i).valid
-    wdata.bits.addr := io.writePorts(i).bits
-    wdata.bits.data := io.writeData(i)
-    Pipe(wdata)
-  }}
-
   for(i <- 0 until numWPorts) {
-    when(wPipes(i).valid) {
-      memBank(wPipes(i).bits.addr) := wPipes(i).bits.data
+    val reqDelayed = {
+      val wdata = Valid(new WriteData)
+      wdata.valid := io.writePorts(i).valid
+      wdata.bits.addr := io.writePorts(i).bits
+      wdata.bits.data := io.writeData(i)
+      Pipe(wdata, latency-1)
+    }
+
+    when(reqDelayed.valid) {
+      for(j <- 0 until 8) { // 8B-words
+        memBank(reqDelayed.bits.addr + UInt(j)) := reqDelayed.bits.data((j+1)*8-1,j*8)
+      }
+
+      printf("MEM[%x] = %x\n", reqDelayed.bits.addr, reqDelayed.bits.data)
     }
   }
 }
@@ -48,4 +65,80 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
 class WriteData extends Bundle {
   val addr = UInt(INPUT, 64)
   val data = UInt(INPUT, 64)
+}
+
+class MemoryTests(c: BigMemory) extends Tester(c) {
+  def wait(n: Int) {
+    for(i <- 0 until n) {
+      expect(c.io.readData(0).valid, false)
+      step(1)
+    }
+  }
+
+  // Read address 0x0
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0)
+
+  // Read address 0x10
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0)
+
+  // Write address 0x0
+  poke(c.io.writePorts(0).valid, true)
+  poke(c.io.writePorts(0).bits, 0x0)
+  poke(c.io.writeData(0), 0xDEADBEEF)
+
+  step(1)
+
+  poke(c.io.writePorts(0).valid, false)
+
+  // Read address 0x0
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0xDEADBEEF)
+
+  // Read again
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0xDEADBEEF)
+}
+
+class MemoryGenerator extends TestGenerator {
+  def genMod(): Module = Module(new BigMemory(4, 16, 1, 1, 4))
+  def genTest[T <: Module](c: T): Tester[T] =
+    (new MemoryTests(c.asInstanceOf[BigMemory])).asInstanceOf[Tester[T]]
 }

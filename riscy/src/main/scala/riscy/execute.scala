@@ -7,12 +7,17 @@ class Execute extends Module {
     // Instructions to execute
     val issued_inst = Vec(4, Valid(new ROBEntry).asInput)
 
+    // Speculation info related to bypassing, given by IQ
+    val specIssue = Vec(4, Valid(new SpeculativeIssue).asInput)
+
     // Stored values for 2 cycles which can be used for bypass
     val rob_wb_store = new RobWbStore(6) // OUTPUT
 
     // These values are to be written back to the ROB
     val rob_wb_output = new RobWbOutput(6) // OUTPUT
 
+    // Values coming in from LSQ for WB structure
+    val rob_wb_input = new RobWbInput(2)
   }
 
   val alu = Array.fill(4)(Module(new ALU(64)))
@@ -32,6 +37,10 @@ class Execute extends Module {
     alu(i).io.inst.immB   := io.issued_inst(i).bits.immB
     alu(i).io.inst.immU   := io.issued_inst(i).bits.immU
     alu(i).io.inst.immJ   := io.issued_inst(i).bits.immJ
+
+    // Hook up speculative info related to bypassing
+    alu(i).io.specIssue   := io.specIssue(i)
+    alu(i).io.rob_wb_store <> rob_writeback.io.store
   }
 
   // Hook up the output of ALUs to ROB writeback structure
@@ -45,6 +54,14 @@ class Execute extends Module {
     rob_writeback.io.input.entry(i).branch_target         := alu(i).io.out
     rob_writeback.io.input.entry(i).branch_tag            := io.issued_inst(i).bits.tag
     rob_writeback.io.input.entry(i).branch_PC             := io.issued_inst(i).bits.pc
+  }
+
+  // Hook up the output of LSQ to ROB writeback structure
+  for(i <- 0 until 2) {
+    rob_writeback.io.input.entry(4+i).data    := io.rob_wb_input.entry(i).data
+    rob_writeback.io.input.entry(4+i).is_addr := io.rob_wb_input.entry(i).is_addr
+    rob_writeback.io.input.entry(4+i).operand := io.rob_wb_input.entry(i).operand
+    rob_writeback.io.input.entry(4+i).valid   := io.rob_wb_input.entry(i).valid
   }
 
   // Hookup the output of ROB writeback structure to the outside world
