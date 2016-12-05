@@ -136,24 +136,19 @@ class TopLevelTests(c: Riscy) extends Tester(c) {
 
   step(1)
 
-  poke(c.io.ins(0).bits, genAddRI(5,5,5))
+  poke(c.io.ins(0).bits, 0xFFFFFFFF)
   poke(c.io.ins(0).valid, true)
 
-  poke(c.io.ins(1).bits, genAddRI(6,6,6))
+  poke(c.io.ins(1).bits, 0xFFFFFFFF)
   poke(c.io.ins(1).valid, true)
 
-  poke(c.io.ins(2).bits, genAddRI(7,7,7))
-  poke(c.io.ins(2).valid, true)
-
-  poke(c.io.ins(3).bits, genAddRI(8,8,8))
-  poke(c.io.ins(3).valid, true)
+  poke(c.io.ins(2).valid, false)
+  poke(c.io.ins(3).valid, false)
 
   step(1)
 
   poke(c.io.ins(0).valid, false)
   poke(c.io.ins(1).valid, false)
-  poke(c.io.ins(2).valid, false)
-  poke(c.io.ins(3).valid, false)
 
   step(30)
 
