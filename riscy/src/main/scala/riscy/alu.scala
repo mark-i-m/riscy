@@ -342,25 +342,25 @@ class ALU(xLen : Int) extends Module {
 
   val bypass_in1 = MuxLookup(bypass_a1, UInt(0), Seq(
     BYPASS_0 -> UInt(0),
-    BYPASS_1 -> io.rob_wb_store.data_s1(0),
-    BYPASS_2 -> io.rob_wb_store.data_s1(1),
-    BYPASS_3 -> io.rob_wb_store.data_s1(2),
-    BYPASS_4 -> io.rob_wb_store.data_s1(3),
-    BYPASS_5 -> io.rob_wb_store.data_s2(0),
-    BYPASS_6 -> io.rob_wb_store.data_s2(1),
-    BYPASS_7 -> io.rob_wb_store.data_s2(2),
-    BYPASS_8 -> io.rob_wb_store.data_s2(3)
+    BYPASS_1 -> io.rob_wb_store.entry_s1(0).data,
+    BYPASS_2 -> io.rob_wb_store.entry_s1(1).data,
+    BYPASS_3 -> io.rob_wb_store.entry_s1(2).data,
+    BYPASS_4 -> io.rob_wb_store.entry_s1(3).data,
+    BYPASS_5 -> io.rob_wb_store.entry_s2(0).data,
+    BYPASS_6 -> io.rob_wb_store.entry_s2(1).data,
+    BYPASS_7 -> io.rob_wb_store.entry_s2(2).data,
+    BYPASS_8 -> io.rob_wb_store.entry_s2(3).data
   ))
   val bypass_in2 = MuxLookup(bypass_a2, UInt(0), Seq(
     BYPASS_0 -> UInt(0),
-    BYPASS_1 -> io.rob_wb_store.data_s1(0),
-    BYPASS_2 -> io.rob_wb_store.data_s1(1),
-    BYPASS_3 -> io.rob_wb_store.data_s1(2),
-    BYPASS_4 -> io.rob_wb_store.data_s1(3),
-    BYPASS_5 -> io.rob_wb_store.data_s2(0),
-    BYPASS_6 -> io.rob_wb_store.data_s2(1),
-    BYPASS_7 -> io.rob_wb_store.data_s2(2),
-    BYPASS_8 -> io.rob_wb_store.data_s2(3)
+    BYPASS_1 -> io.rob_wb_store.entry_s1(0).data,
+    BYPASS_2 -> io.rob_wb_store.entry_s1(1).data,
+    BYPASS_3 -> io.rob_wb_store.entry_s1(2).data,
+    BYPASS_4 -> io.rob_wb_store.entry_s1(3).data,
+    BYPASS_5 -> io.rob_wb_store.entry_s2(0).data,
+    BYPASS_6 -> io.rob_wb_store.entry_s2(1).data,
+    BYPASS_7 -> io.rob_wb_store.entry_s2(2).data,
+    BYPASS_8 -> io.rob_wb_store.entry_s2(3).data
   ))
   // Pick either the rs values passed along or the bypassed values
   val rs1_val = Mux(io.specIssue.bits.rs1IsSpec, bypass_in1, io.rs1_val)
@@ -2040,9 +2040,9 @@ class ALUTests(c: ALU) extends Tester(c) {
 
   def set_rob_wb_store(cycles : Int, index : Int, data : Int) = {
     if (cycles == 0) {
-      poke(c.io.rob_wb_store.data_s1(index), data)
+      poke(c.io.rob_wb_store.entry_s1(index).data, data)
     } else if (cycles == 1) {
-      poke(c.io.rob_wb_store.data_s2(index), data)
+      poke(c.io.rob_wb_store.entry_s2(index).data, data)
     } else {
       assert(false,
         "ROB writeback does not store results from " + (cycles+1) + " cycles ago")
