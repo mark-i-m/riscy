@@ -234,12 +234,20 @@ class ExecuteTests(c: Execute) extends Tester(c) {
   expect(c.io.rob_wb_output.entry(2).data, 10400)
   expect(c.io.rob_wb_output.entry(2).is_addr, true)
   expect(c.io.rob_wb_output.entry(2).operand, 3)
+  expect(c.io.rob_wb_output.entry(2).is_branch_taken.valid, true)
+  expect(c.io.rob_wb_output.entry(2).is_branch_taken.bits, false)
+  expect(c.io.rob_wb_output.entry(2).branch_tag, 3)
+  expect(c.io.rob_wb_output.entry(2).branch_PC, 10000)
 
   // Check BNE result
   expect(c.io.rob_wb_output.entry(3).valid, true)
   expect(c.io.rob_wb_output.entry(3).data, 10400)
   expect(c.io.rob_wb_output.entry(3).is_addr, true)
   expect(c.io.rob_wb_output.entry(3).operand, 4)
+  expect(c.io.rob_wb_output.entry(3).is_branch_taken.valid, true)
+  expect(c.io.rob_wb_output.entry(3).is_branch_taken.bits, true)
+  expect(c.io.rob_wb_output.entry(3).branch_tag, 4)
+  expect(c.io.rob_wb_output.entry(3).branch_PC, 10000)
 
   // Check LSQ inputs
   expect(c.io.rob_wb_output.entry(4).valid, true)
