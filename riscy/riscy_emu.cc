@@ -60,9 +60,9 @@ int main(int argc, char** argv) {
     // The Riscy generated code
     Riscy_t* riscy = new Riscy_t;
 
-    // Set random seed -- Don't randomize... our processor doesn't have proper initialization code
+    // Set random seed
     srand(random_seed);
-    //riscy->init(random_seed != 0);
+    riscy->init();
 
     // Load memory from file
     std::ifstream in(loadmem);
@@ -114,17 +114,17 @@ int main(int argc, char** argv) {
 
     // Run the emulation
     while(trace_count < max_cycles) {
-        if(riscy->Riscy_rob__io_halt.to_bool()) {
-            std::cerr << "Processor Halted." << std::endl;
-            break;
-        }
-
-        riscy->clock_lo(LIT<1>(0));
+        riscy->clock_lo(LIT<1>(trace_count == 0));
 
         riscy->print(logfile);
         riscy->dump(vcdfile, trace_count);
 
-        riscy->clock_hi(LIT<1>(0));
+        riscy->clock_hi(LIT<1>(trace_count == 0));
+
+        if(riscy->Riscy_rob__io_halt.to_bool()) {
+            std::cerr << "Processor Halted." << std::endl;
+            break;
+        }
 
         trace_count++;
     }
