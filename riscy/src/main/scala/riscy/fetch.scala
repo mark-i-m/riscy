@@ -42,8 +42,7 @@ class Fetch extends Module {
    * 0x0 */
   val PC = Reg(init = UInt(0x10, width = 64))
 
-  val nextAddr = UInt(width=64)
-  nextAddr := Mux(io.isBranchTaken, io.btbAddr, PC)
+  val nextAddr = Mux(io.isBranchTaken, io.btbAddr, PC)
 
   val addr = UInt(width = 64)
   val addrSelect = UInt(width = 2)
