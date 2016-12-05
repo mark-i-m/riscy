@@ -80,16 +80,16 @@ class Riscy(blackbox: Boolean = false) extends Module {
 
   // Hook up Exec and ROB
   for(i <- 0 until 6) {
-    rob.io.wbValues(i).id.valid := exec.io.rob_wb_output.valid(i)
-    rob.io.wbValues(i).id.bits := exec.io.rob_wb_output.operand(i)
-    rob.io.wbValues(i).value := exec.io.rob_wb_output.data(i)
-    rob.io.wbValues(i).isAddr := exec.io.rob_wb_output.is_addr(i)
+    rob.io.wbValues(i).id.valid := exec.io.rob_wb_output.entry(i).valid
+    rob.io.wbValues(i).id.bits := exec.io.rob_wb_output.entry(i).operand
+    rob.io.wbValues(i).value := exec.io.rob_wb_output.entry(i).data
+    rob.io.wbValues(i).isAddr := exec.io.rob_wb_output.entry(i).is_addr
     // TODO taken bit
   }
 
   // LSQ and Exec
   lsq.io.robWbin := exec.io.rob_wb_store
-  exec.io.rob_wb_input <> lsq.io.robWbOut
+  exec.io.lsq_input <> lsq.io.robWbOut
 
   // Issue and Exec
   exec.io.issued_inst := issue.io.issuedEntry
