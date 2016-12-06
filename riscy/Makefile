@@ -4,12 +4,12 @@ MODULES = Fetch ICache DecodeSingle OpDecode Alloc ROB
 # Backend
 MODULES += IssueQueue IqArbiter LSQ Issue ALU RobWriteback Execute Stall
 # Util
-MODULES += HelloModule MultiCounter CAM RegFile Memory DCache
+MODULES += HelloModule MultiCounter CAM RegFile Memory DCache AddrQueueAlloc
 
 ###############################################################################
 # Some configurations
 TOP = ..
-SBT ?= java -Xmx2G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
+SBT ?= java -Xmx4G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
 
 ###############################################################################
 # Rules for running benchmarks and unit tests
