@@ -304,11 +304,11 @@ class IssueQueue extends Module {
 							for (k <- 0 until 6) {
 								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-									iqueue(j).bits.rs1Val.valid := Bool(true)
+								//	iqueue(j).bits.rs1Val.valid := Bool(true)
 								}
 								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-									iqueue(j).bits.rs2Val.valid := Bool(true)
+								//	iqueue(j).bits.rs2Val.valid := Bool(true)
 								} 	
 							}
 							iqueue(15).bits.rs1Val.valid := Bool(false)
@@ -328,11 +328,11 @@ class IssueQueue extends Module {
 							for (k <- 0 until 6) {
 								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-									iqueue(j).bits.rs1Val.valid := Bool(true)
+								//	iqueue(j).bits.rs1Val.valid := Bool(true)
 								}
 								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-									iqueue(j).bits.rs2Val.valid := Bool(true)
+								//	iqueue(j).bits.rs2Val.valid := Bool(true)
 								} 	
 							}
 							iqueue(15).bits.rs1Val.valid := Bool(false)
@@ -344,11 +344,11 @@ class IssueQueue extends Module {
 					for (k <- 0 until 6) {
 						when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 							iqueue(l).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-							iqueue(l).bits.rs1Val.valid := Bool(true)
+						//	iqueue(l).bits.rs1Val.valid := Bool(true)
 						}
 						when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 							iqueue(l).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-							iqueue(l).bits.rs2Val.valid := Bool(true)
+						//	iqueue(l).bits.rs2Val.valid := Bool(true)
 						} 	
 					}
 				}
@@ -361,11 +361,11 @@ class IssueQueue extends Module {
 			for (k <- 0 until 6) {
 				when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 					iqueue(l).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-					iqueue(l).bits.rs1Val.valid := Bool(true)
+				//	iqueue(l).bits.rs1Val.valid := Bool(true)
 				}
 				when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 					iqueue(l).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-					iqueue(l).bits.rs2Val.valid := Bool(true)
+				//	iqueue(l).bits.rs2Val.valid := Bool(true)
 				} 	
 			}
 		}
