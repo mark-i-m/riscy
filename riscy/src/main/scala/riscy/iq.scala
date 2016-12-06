@@ -232,18 +232,18 @@ class IssueQueue extends Module {
 				when (io.newEntry(i).valid) {
 					iqueue(counter.value + isAssigned(i)) := io.newEntry(i)
 					isAssigned(i+1) := isAssigned(i) + UInt(1)
+					for (k <- 0 until 6) {
+						when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+							iqueue(counter.value + isAssigned(i)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
+							iqueue(counter.value + isAssigned(i)).bits.rs1Val.valid := Bool(true)
+						}
+						when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+							iqueue(counter.value + isAssigned(i)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
+							iqueue(counter.value + isAssigned(i)).bits.rs2Val.valid := Bool(true)
+						} 	
+					}
 				} .otherwise {
 					isAssigned(i+1) := isAssigned(i) + UInt(0)
-				}
-				for (k <- 0 until 6) {
-					when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
-						iqueue(counter.value + isAssigned(i)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-						iqueue(counter.value + isAssigned(i)).bits.rs1Val.valid := Bool(true)
-					}
-					when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
-						iqueue(counter.value + isAssigned(i)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-						iqueue(counter.value + isAssigned(i)).bits.rs2Val.valid := Bool(true)
-					} 	
 				}
 			}
 		} .otherwise {
@@ -251,18 +251,18 @@ class IssueQueue extends Module {
 				when (io.newEntry(i).valid) {
 					iqueue(counter.value + isAssigned(i) - UInt(1)) := io.newEntry(i)
 					isAssigned(i+1) := isAssigned(i) + UInt(1)
+					for (k <- 0 until 6) {
+						when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
+							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs1Val.valid := Bool(true)
+						}
+						when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
+							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs2Val.valid := Bool(true)
+						} 	
+					}
 				} .otherwise {
 					isAssigned(i+1) := isAssigned(i) + UInt(0)
-				}
-				for (k <- 0 until 6) {
-					when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
-						iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-						iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs1Val.valid := Bool(true)
-					}
-					when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
-						iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-						iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs2Val.valid := Bool(true)
-					} 	
 				}
 			}
 		}
