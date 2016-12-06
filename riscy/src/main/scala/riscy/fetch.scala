@@ -36,19 +36,14 @@ class Fetch extends Module {
     val memReadPort = Valid(UInt(OUTPUT, 64)).asOutput
   }
   val icache = Module(new ICache())
+  icache.io.resp.stall := io.stall
 
   /* PC value takes a cycle to reach Icache. We start it at 0x10 so that we
    * don't lose the first cycle. The pipeline register which PC feeds starts at
    * 0x0 */
   val PC = Reg(init = UInt(0x10, width = 64))
 
-  val inited = Reg(init = Bool(false), next = Bool(true))
-  val nextAddr = UInt(width=64)
-  when (inited) {
-    nextAddr := Mux(io.isBranchTaken, io.btbAddr, PC)
-  } .otherwise {
-    nextAddr := Mux(io.isBranchTaken, io.btbAddr, UInt(0x10))
-  }
+  val nextAddr = Mux(io.isBranchTaken, io.btbAddr, PC)
 
   val addr = UInt(width = 64)
   val addrSelect = UInt(width = 2)
@@ -182,8 +177,15 @@ class FetchTests(c: Fetch) extends Tester(c) {
   poke(c.io.branchMispredTarget, 0xeeeeeeee)
   poke(c.io.isBranchMispred, false)
   poke(c.io.isReturn, false)
-  poke(c.io.stall, false)
   poke(c.io.memReadData.valid, false)
+  // Stall the Fetch module
+  poke(c.io.stall, true)
+
+  // We expect the Icache to not be ready for taking requests.
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  // Unstall the Fetch module
+  poke(c.io.stall, false)
 
   // We expect the Icache to be ready for taking responses ie. idle should be
   // true. 

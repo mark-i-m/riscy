@@ -37,17 +37,6 @@ class ROBEntry extends DecodeIns {
   val isMispredicted = Bool(OUTPUT)
 }
 
-class WBValue extends Bundle {
-  // Which physical reg?
-  val id = Valid(UInt(INPUT, 6))
-  // The value to write back
-  val value = UInt(INPUT, 64)
-  // Is this a taken branch
-  val taken = Bool(INPUT) // TODO
-  // Is this a computed address
-  val isAddr = Bool(INPUT)
-}
-
 class ROB extends Module {
   val io = new Bundle {
     // Get signals from allocate
@@ -70,8 +59,8 @@ class ROB extends Module {
 
     // Get signals from the FOO for WB
     // - ALU 0-3
-    // - LSQ 0, 1
-    val wbValues = Vec.fill(6) { (new WBValue).asInput }
+    // - LSQ 4-5
+    val wbValues = Vec.fill(6) { (new RobWbEntry).asInput }
 
     // Signal to load/store to actually issue a store.
     // There is exactly one store that could be at the head of the LSQ, so we
@@ -106,9 +95,6 @@ class ROB extends Module {
     val halt = Bool(OUTPUT)
   }
 
-  // A hack to make sure things are initialized properly
-  val inited = Reg(init = Bool(false), next = Bool(true))
-
   // Purely for emulation purposes
   // halt when the "halt" instruction commits
   val halt = Reg(init = Bool(false)) 
@@ -141,7 +127,7 @@ class ROB extends Module {
   var freeInc = UInt()
   val free = Reg(init = UInt(64), next = freeInc)
 
-  when(io.mispredPC.valid || !inited) {
+  when(io.mispredPC.valid) {
     freeInc := UInt(64)
     head.reset
   } .otherwise {
@@ -235,16 +221,17 @@ class ROB extends Module {
   // number will not match, so they will be ignored, but this case is not
   // guaranteed, so how to handle?
   for(i <- 0 until 6) {
-    when(io.wbValues(i).id.valid && !io.wbValues(i).isAddr) {
-      robW(io.wbValues(i).id.bits).valid := Bool(true)
+    when(io.wbValues(i).valid && !io.wbValues(i).is_addr) {
+      robW(io.wbValues(i).operand).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
-      robW(io.wbValues(i).id.bits).bits := rob(io.wbValues(i).id.bits)
-      robW(io.wbValues(i).id.bits).bits.rdVal.valid := Bool(true)
-      robW(io.wbValues(i).id.bits).bits.rdVal.bits := io.wbValues(i).value
-      robW(io.wbValues(i).id.bits).bits.isMispredicted :=
-        io.wbValues(i).taken ^ robW(io.wbValues(i).id.bits).bits.predTaken
+      robW(io.wbValues(i).operand).bits := rob(io.wbValues(i).operand)
+      robW(io.wbValues(i).operand).bits.rdVal.valid := Bool(true)
+      robW(io.wbValues(i).operand).bits.rdVal.bits := io.wbValues(i).data
+      robW(io.wbValues(i).operand).bits.isMispredicted :=
+        io.wbValues(i).is_branch_taken.valid &&
+        io.wbValues(i).is_branch_taken.bits ^ robW(io.wbValues(i).operand).bits.predTaken
 
-      printf("WB value to ROB%d: %x\n", io.wbValues(i).id.bits, io.wbValues(i).value)
+      printf("WB value to ROB%d: %x\n", io.wbValues(i).operand, io.wbValues(i).data)
     }
   }
 
@@ -538,14 +525,15 @@ class ROBTests(c: ROB) extends Tester(c) {
     rob foreach { x => expect(c.io.robDest(x._1).bits, x._2) }
 
   def pokeWB(port: Int, id: Int, value: Int, taken: Boolean = false) = {
-    poke(c.io.wbValues(port).id.valid, true)
-    poke(c.io.wbValues(port).id.bits, id)
-    poke(c.io.wbValues(port).value, value)
-    poke(c.io.wbValues(port).taken, taken)
+    poke(c.io.wbValues(port).valid, true)
+    poke(c.io.wbValues(port).operand, id)
+    poke(c.io.wbValues(port).data, value)
+    poke(c.io.wbValues(port).is_branch_taken.valid, true)
+    poke(c.io.wbValues(port).is_branch_taken.bits, taken)
   }
 
   def pokeWBInvalid(ports: Array[Int]) =
-    ports foreach { port => poke(c.io.wbValues(port).id.valid, false) }
+    ports foreach { port => poke(c.io.wbValues(port).valid, false) }
 
   def expectStCommit(st: Array[(Boolean, Int)]) =
     for(i <- 0 until 4) { 
