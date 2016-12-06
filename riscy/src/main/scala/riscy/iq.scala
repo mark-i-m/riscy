@@ -248,10 +248,6 @@ class IssueQueue extends Module {
 	// shift will happen only if one instruction is issued with valid
 	when (issuedPipelineValid === Bool(true)) {
 		for (i <- 0 to 14) {
-			// Special case for 0 is needed
-			when (counter.value === UInt(0)) {
-				iqueue(0) := iqueue(1)
-			}
 			// Select if this instruction was issued
 			when (issuedNumOH(i) === UInt (1)) {
 				for (j <- i to 14) {
