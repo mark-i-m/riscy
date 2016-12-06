@@ -81,10 +81,10 @@ class RiscyAlloc extends Module {
   val renamedRs1 = Vec.tabulate(4) { i => 
     PriorityMux(
       ((Array.tabulate(i) { j => (
-        io.inst(j).bits.rd === io.inst(i).bits.rs1,
+        pipelinedInst(j).bits.rd === pipelinedInst(i).bits.rs1,
         {
           val renamed = Valid(UInt(6))
-          renamed.valid := Bool(true)
+          renamed.valid := pipelinedOpDecode(j).hasRd 
           renamed.bits  := renamedDest(j)
           renamed
         }
@@ -94,10 +94,10 @@ class RiscyAlloc extends Module {
   val renamedRs2 = Vec.tabulate(4) { i => 
     PriorityMux(
       ((Array.tabulate(i) { j => (
-        io.inst(j).bits.rd === io.inst(i).bits.rs2,
+        pipelinedInst(j).bits.rd === pipelinedInst(i).bits.rs2,
         {
           val renamed = Valid(UInt(6))
-          renamed.valid := Bool(true)
+          renamed.valid := pipelinedOpDecode(j).hasRd 
           renamed.bits  := renamedDest(j)
           renamed
         }
