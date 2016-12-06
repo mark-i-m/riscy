@@ -287,6 +287,9 @@ class IssueQueue extends Module {
 	// shift will happen only if one instruction is issued with valid
 	when (issuedPipelineValid === Bool(true)) {
 		for (i <- 0 to 14) {
+			when (counter.value === UInt (1)) {
+				iqueue(0) := iqueue(1)
+			}
 			// Select if this instruction was issued
 			when (issuedNumOH(i) === UInt (1)) {
 				for (j <- i to 14) {
@@ -304,11 +307,11 @@ class IssueQueue extends Module {
 							for (k <- 0 until 6) {
 								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-								//	iqueue(j).bits.rs1Val.valid := Bool(true)
+									iqueue(j).bits.rs1Val.valid := Bool(true)
 								}
 								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-								//	iqueue(j).bits.rs2Val.valid := Bool(true)
+									iqueue(j).bits.rs2Val.valid := Bool(true)
 								} 	
 							}
 							iqueue(15).bits.rs1Val.valid := Bool(false)
@@ -328,11 +331,11 @@ class IssueQueue extends Module {
 							for (k <- 0 until 6) {
 								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-								//	iqueue(j).bits.rs1Val.valid := Bool(true)
+									iqueue(j).bits.rs1Val.valid := Bool(true)
 								}
 								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-								//	iqueue(j).bits.rs2Val.valid := Bool(true)
+									iqueue(j).bits.rs2Val.valid := Bool(true)
 								} 	
 							}
 							iqueue(15).bits.rs1Val.valid := Bool(false)
@@ -344,11 +347,11 @@ class IssueQueue extends Module {
 					for (k <- 0 until 6) {
 						when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 							iqueue(l).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-						//	iqueue(l).bits.rs1Val.valid := Bool(true)
+							iqueue(l).bits.rs1Val.valid := Bool(true)
 						}
 						when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 							iqueue(l).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-						//	iqueue(l).bits.rs2Val.valid := Bool(true)
+							iqueue(l).bits.rs2Val.valid := Bool(true)
 						} 	
 					}
 				}
@@ -361,11 +364,11 @@ class IssueQueue extends Module {
 			for (k <- 0 until 6) {
 				when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 					iqueue(l).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-				//	iqueue(l).bits.rs1Val.valid := Bool(true)
+					iqueue(l).bits.rs1Val.valid := Bool(true)
 				}
 				when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 					iqueue(l).bits.rs2Val.bits := io.robWb.entry_s1(k).data
-				//	iqueue(l).bits.rs2Val.valid := Bool(true)
+					iqueue(l).bits.rs2Val.valid := Bool(true)
 				} 	
 			}
 		}
