@@ -38,6 +38,9 @@ class RiscyAlloc extends Module {
 
     // Should alloc stall?
     val allocStall = Bool(INPUT)
+
+		// Era for misspeculation handling
+		val allocEra = UInt(INPUT, 7)
   }
 
   // For each instruction, determine what resources/registers it needs.
@@ -128,8 +131,9 @@ class RiscyAlloc extends Module {
     robEntry.isLd := pipelinedOpDecode(i).isLd
     robEntry.isHalt := pipelinedOpDecode(i).isHalt
     robEntry.hasRd := pipelinedOpDecode(i).hasRd
-
-    // Destination
+		robEntry.era := io.allocEra
+    
+		// Destination
     robEntry.rd := pipelinedInst(i).bits.rd
 
     // Immediates
