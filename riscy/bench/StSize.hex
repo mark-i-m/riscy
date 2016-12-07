@@ -1,0 +1,4 @@
+00101c2300100c23        sb 0x18[r0] <- r1, sh 0x18[r0] <- r1
+00103c2300102c23        sw 0x18[r0] <- r1, sd 0x18[r0] <- r1
+FFFFFFFFFFFFFFFF        halt
+
