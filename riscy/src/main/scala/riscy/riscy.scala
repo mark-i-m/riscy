@@ -69,11 +69,17 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // Hook up all signals between Allocation and ROB
   alloc <> rob
 
+	// Hook up rob to alloc era
+	issue.io.allocEra := rob.io.robEra
+
   // Hook up Allocation and IssueStage
   // ROB entries come directly from Alloc
   issue.io.inst := alloc.io.allocROB
 
-  // Hook up IssueStage and LSQ (Addr Q)
+  //ROB to issue stage era
+	issue.io.era := rob.io.robEra
+	
+	// Hook up IssueStage and LSQ (Addr Q)
   lsq.io.resEntry     := issue.io.addrBuf
   issue.io.addrBufLen  := lsq.io.currentLen
 
