@@ -22,8 +22,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // Memory for both data and instructions
   // - Port 0 => Instruction/Fetch
   // - Port 1 => Data/LSQ
-  //var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 100)) // 64kB memory, 8 word cache lines
-  var memory = Module(new BigMemory(64, 1 << 2, 2, 2, 5)) // 64kB memory, 8 word cache lines
+  var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 5)) // 64kB memory, 8 word cache lines, 5 cycle latency
 
   //TODO val bp = Module(new BP)
   var fetch = Module(new Fetch)
@@ -80,16 +79,12 @@ class Riscy(blackbox: Boolean = false) extends Module {
 
   // Hook up Exec and ROB
   for(i <- 0 until 6) {
-    rob.io.wbValues(i).id.valid := exec.io.rob_wb_output.valid(i)
-    rob.io.wbValues(i).id.bits := exec.io.rob_wb_output.operand(i)
-    rob.io.wbValues(i).value := exec.io.rob_wb_output.data(i)
-    rob.io.wbValues(i).isAddr := exec.io.rob_wb_output.is_addr(i)
-    // TODO taken bit
+    rob.io.wbValues(i) := exec.io.rob_wb_output.entry(i)
   }
 
   // LSQ and Exec
   lsq.io.robWbin := exec.io.rob_wb_store
-  exec.io.rob_wb_input <> lsq.io.robWbOut
+  exec.io.lsq_input <> lsq.io.robWbOut
 
   // Issue and Exec
   exec.io.issued_inst := issue.io.issuedEntry
@@ -137,24 +132,19 @@ class TopLevelTests(c: Riscy) extends Tester(c) {
 
   step(1)
 
-  poke(c.io.ins(0).bits, genAddRI(5,5,5))
+  poke(c.io.ins(0).bits, 0xFFFFFFFF)
   poke(c.io.ins(0).valid, true)
 
-  poke(c.io.ins(1).bits, genAddRI(6,6,6))
+  poke(c.io.ins(1).bits, 0xFFFFFFFF)
   poke(c.io.ins(1).valid, true)
 
-  poke(c.io.ins(2).bits, genAddRI(7,7,7))
-  poke(c.io.ins(2).valid, true)
-
-  poke(c.io.ins(3).bits, genAddRI(8,8,8))
-  poke(c.io.ins(3).valid, true)
+  poke(c.io.ins(2).valid, false)
+  poke(c.io.ins(3).valid, false)
 
   step(1)
 
   poke(c.io.ins(0).valid, false)
   poke(c.io.ins(1).valid, false)
-  poke(c.io.ins(2).valid, false)
-  poke(c.io.ins(3).valid, false)
 
   step(30)
 

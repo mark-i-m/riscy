@@ -81,10 +81,10 @@ class RiscyAlloc extends Module {
   val renamedRs1 = Vec.tabulate(4) { i => 
     PriorityMux(
       ((Array.tabulate(i) { j => (
-        io.inst(j).bits.rd === io.inst(i).bits.rs1,
+        pipelinedInst(j).bits.rd === pipelinedInst(i).bits.rs1,
         {
           val renamed = Valid(UInt(6))
-          renamed.valid := Bool(true)
+          renamed.valid := pipelinedOpDecode(j).hasRd 
           renamed.bits  := renamedDest(j)
           renamed
         }
@@ -94,10 +94,10 @@ class RiscyAlloc extends Module {
   val renamedRs2 = Vec.tabulate(4) { i => 
     PriorityMux(
       ((Array.tabulate(i) { j => (
-        io.inst(j).bits.rd === io.inst(i).bits.rs2,
+        pipelinedInst(j).bits.rd === pipelinedInst(i).bits.rs2,
         {
           val renamed = Valid(UInt(6))
-          renamed.valid := Bool(true)
+          renamed.valid := pipelinedOpDecode(j).hasRd 
           renamed.bits  := renamedDest(j)
           renamed
         }
@@ -139,11 +139,13 @@ class RiscyAlloc extends Module {
     robEntry.immU := pipelinedInst(i).bits.immU
     robEntry.immJ := pipelinedInst(i).bits.immJ
 
-    // If this is a halt instruction, then we are always ready to commit!
-    robEntry.rdVal.valid := pipelinedOpDecode(i).isHalt
-
     // First operand
-    when (renamedRs1(i).valid) {
+    when (pipelinedOpDecode(i).isHalt) {
+      // If this is a halt, do not rename instructions
+      robEntry.rs1Rename := UInt(0)
+      robEntry.rs1Val.valid := Bool(true)
+      robEntry.rs1Val.bits := UInt(0)
+    } .elsewhen (renamedRs1(i).valid) {
       // Getting from ROB
       //robEntry.rs1Map := Bool(true)
       robEntry.rs1Rename := renamedRs1(i).bits
@@ -158,7 +160,12 @@ class RiscyAlloc extends Module {
     }
 
     // Second operand
-    when (pipelinedOpDecode(i).hasRs2) {
+    when(pipelinedOpDecode(i).isHalt) {
+      // If this is a halt, do not rename instructions
+      robEntry.rs2Rename := UInt(0)
+      robEntry.rs2Val.valid := Bool(true)
+      robEntry.rs2Val.bits := UInt(0)
+    } .elsewhen (pipelinedOpDecode(i).hasRs2) {
       // Second operand is a register
       when (renamedRs2(i).valid) {
         // Getting from ROB
