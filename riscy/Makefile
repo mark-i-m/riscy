@@ -17,11 +17,14 @@ SBT ?= java -Xmx4G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
 SCALA_FILES=$(wildcard src/main/scala/riscy/*.scala)
 TESTS=$(patsubst %, %.test, $(MODULES))
 BENCHES=$(patsubst bench/%, %.bench, $(wildcard bench/*.hex))
+CHECKS=$(patsubst bench/%, %.check, $(wildcard bench/*.hex))
 
 # Target to run all tests
 test: $(TESTS)
 
 bench: $(BENCHES)
+
+check: $(CHECKS)
 
 # Run unit tests with `make <Module name>.test`
 $(TESTS) : %.test :
@@ -33,6 +36,10 @@ TopLevel.test:
 # Run benchmarks with `make <Bench name>.bench`
 $(BENCHES) : %.bench : ./riscy_emu
 	./riscy_emu bench/$* $*.log $*.vcd
+
+# Run %.bench and compare the output with bench/%.ok
+$(CHECKS) : %.check : %.bench
+	./check_output.py $*.log bench/$*.ok
 
 # Build the emulator
 emulator.h Riscy.h Riscy.cpp: $(SCALA_FILES)
