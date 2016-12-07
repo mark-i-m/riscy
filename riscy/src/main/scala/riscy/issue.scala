@@ -82,6 +82,11 @@ class Issue extends Module {
   issueQ2.io.robWb            := io.robWb
   issueQ3.io.robWb            := io.robWb
 
+	issueQ0.io.issueEra         := io.issueEra
+  issueQ1.io.issueEra         := io.issueEra
+  issueQ2.io.issueEra         := io.issueEra
+  issueQ3.io.issueEra         := io.issueEra
+
   // Collecting issued inst from all issue queues
   io.issuedEntry(0)       := issueQ0.io.issuedEntry
   io.issuedEntry(1)       := issueQ1.io.issuedEntry
