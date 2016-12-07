@@ -21,6 +21,16 @@ class ROBEntry extends DecodeIns {
   val pc = UInt(OUTPUT, 64)
   val tag = UInt(OUTPUT, 6)
 
+  // Distinguishes instructions in the same ROB entry with the same PC but with
+  // different mispeculation eras. i.e. what if an instruction on the correct
+  // taken branch ends up in the same ROB position as it was in before.
+  //
+  // 7b is overkill, but it makes it easy to prove correctness. Ideally, we
+  // could make it 2 or 3 bits, but then we would need to check that we don't
+  // reuse an era number while there are still active instructions from that
+  // era.
+  val era = UInt(OUTPUT, 7)
+
   // From OpDecode:
   // - does this instruction have a dest reg
   // - is this instruction a jump
@@ -53,6 +63,7 @@ class ROB extends Module {
     val robDest = Vec.fill(8) { Valid(UInt(OUTPUT, 64)).asOutput }
     val robFree = UInt(OUTPUT, 7) // How many free entries
     val robFirst = UInt(OUTPUT, 6) // Index of the first free entry
+    val robEra = UInt(OUTPUT, 7) // Current mispeculation era
 
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()).flip }
     val allocROB = Vec.fill(4) { Valid(new ROBEntry()).flip }
