@@ -22,6 +22,7 @@ class LSQ extends Module {
     val stValue = Vec(2, UInt(OUTPUT, 64))
     val memStAddrPort = Vec(2, Valid(UInt(OUTPUT,64).asOutput))
     val memStData = Vec(2, UInt(OUTPUT,64))
+    val memStSize = Vec(2, UInt(OUTPUT,3))
     val memLdAddrPort = Valid(UInt(OUTPUT,64)).asOutput
     val memLdData = Valid(UInt(INPUT,8 * 64)).asInput
   }
@@ -32,6 +33,7 @@ class LSQ extends Module {
   // Hook up D$ to memory
   io.memStAddrPort := dcache.io.memStAddrPort
   io.memStData := dcache.io.memStData
+  io.memStSize := dcache.io.memStSize
   io.memLdAddrPort := dcache.io.memLdAddrPort
   dcache.io.memLdData := io.memLdData
 
