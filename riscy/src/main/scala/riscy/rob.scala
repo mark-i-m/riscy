@@ -138,9 +138,19 @@ class ROB extends Module {
   var freeInc = UInt()
   val free = Reg(init = UInt(64), next = freeInc)
 
+  // Era number
+  // - Every time there is a mispeculation, we start a new era
+  // - Incoming instructions get the new era number
+  // - On commit, need to check that the era number of the writtenback
+  //   instructions matches the current era. Otherwise, we might writeback to
+  //   flushed instructions.
+  var era = new MultiCounter(128)
+  io.robEra := era.value
+
   when(io.mispredPC.valid) {
     freeInc := UInt(64)
     head.reset
+    era.inc(1)
   } .otherwise {
     freeInc := free + headInc - tailInc
     head.inc(headInc)
@@ -227,12 +237,14 @@ class ROB extends Module {
 
   /////////////////////////////////////////////////////////////////////////////
   // Writeback logic
+  // 
+  // We should writeback values to the ROB iff
+  //  - the WB signal is valid AND
+  //  - the WB signal is not the address of a load
   /////////////////////////////////////////////////////////////////////////////
-  // TODO: How to ignore flushed instructions? In all likelihood, the ROB entry
-  // number will not match, so they will be ignored, but this case is not
-  // guaranteed, so how to handle?
   for(i <- 0 until 6) {
-    when(io.wbValues(i).valid && !io.wbValues(i).is_addr) {
+    when(io.wbValues(i).valid && 
+         !io.wbValues(i).is_addr) {
       robW(io.wbValues(i).operand).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
       robW(io.wbValues(i).operand).bits := rob(io.wbValues(i).operand)
