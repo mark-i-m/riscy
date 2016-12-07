@@ -221,7 +221,7 @@ class ROB extends Module {
   // number will not match, so they will be ignored, but this case is not
   // guaranteed, so how to handle?
   for(i <- 0 until 6) {
-    when(io.wbValues(i).valid && !io.wbValues(i).is_addr) {
+    when(io.wbValues(i).valid && (!io.wbValues(i).is_addr || rob(io.wbValues(i).operand).isSt)) {
       robW(io.wbValues(i).operand).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
       robW(io.wbValues(i).operand).bits := rob(io.wbValues(i).operand)
