@@ -65,7 +65,7 @@ class LSQ extends Module {
   }
 
   // The Allocation logic
-  val addrqAlloc = Module(new AddrQueueAlloc())
+  val addrqAlloc = Module(new AddrQueueAlloc)
   addrqAlloc.io.validEntries := Array.tabulate(32) { addrq(_).valid }
   pos := addrqAlloc.io.pos
 
@@ -181,8 +181,10 @@ class LSQ extends Module {
   val CamStCommit = Module(new CAM(2, DEPTH, 6))
   val stCommitRow = Vec(2, Vec(DEPTH, Bool()))
   val stCommitSet = Vec(2, Bool())
-  val ldIssueRow = Vec(2, Vec(DEPTH, Bool()))
-  val ldIssueSet = Vec(2, Bool())
+  val ldIssueRow = Vec(DEPTH, Bool())
+  // Load selection logic
+  val ldSelect = Module(new AddrQueueAlloc)
+  ldSelect.io.validEntries := Array.tabulate(32) { ldIssueRow(_) }
 
   for ( i <- 0 until 32) {
     CamStCommit.io.input_bits(i) := addrq(i).bits.robLoc
@@ -212,7 +214,7 @@ class LSQ extends Module {
             depMatrix(k).bits(i) := Bool(false)
           }
           when (!addrq(i).bits.st_nld) {
-            ldIssueRow(j)(i) := Bool(true)
+            ldIssueRow(i) := Bool(true)
             addrq(i).bits.addr.valid := Bool(false)
             addrq(i).bits.value.valid := Bool(false)
             addrq(i).valid := Bool(false)
@@ -226,7 +228,7 @@ class LSQ extends Module {
           }
       } .otherwise {
         stCommitRow(j)(i) := Bool(false)
-        ldIssueRow(j)(i) := Bool(false)
+        ldIssueRow(i) := Bool(false)
       }
     }
   }
@@ -243,11 +245,12 @@ class LSQ extends Module {
       dcache.io.stReq(i).data := UInt(0xdead)
     }
 
-    ldIssueSet(i) := Cat(Array.tabulate(32) { ldIssueRow(i)(_) }).orR
-    when(ldIssueSet(i)) {
-      io.robWbOut.entry(i).data := addrq(PriorityEncoder(ldIssueRow(i))).bits.value.bits
+    val ldIssueSet = Cat(Array.tabulate(32) { ldIssueRow(_) }).orR
+
+    when(ldIssueSet) {
+      io.robWbOut.entry(i).data := addrq(ldSelect.io.pos(i)).bits.value.bits
       io.robWbOut.entry(i).is_addr := Bool(false)
-      io.robWbOut.entry(i).operand := addrq(PriorityEncoder(ldIssueRow(i))).bits.robLoc
+      io.robWbOut.entry(i).operand := addrq(ldSelect.io.pos(i)).bits.robLoc
       io.robWbOut.entry(i).valid := Bool(true)
     } .otherwise {
       io.robWbOut.entry(i).data := UInt(0xdead)
