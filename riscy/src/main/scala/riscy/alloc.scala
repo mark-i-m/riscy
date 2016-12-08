@@ -30,6 +30,7 @@ class RiscyAlloc extends Module {
     val robDest = Vec.fill(8) { Valid(UInt(INPUT, 64)).asInput }
     val robFree = UInt(INPUT, 6) // How many free entries TODO: do we even need this? -MM
     val robFirst = UInt(INPUT, 6) // Index of the first free entry
+    val robEra = UInt(INPUT, 7) // What misspeculation era are we in?
 
     // Outputs to the Remap table and the ROB with the correct values to update
     // for this cycle. 
@@ -38,9 +39,6 @@ class RiscyAlloc extends Module {
 
     // Should alloc stall?
     val allocStall = Bool(INPUT)
-
-		// Era for misspeculation handling
-		val allocEra = UInt(INPUT, 7)
   }
 
   // For each instruction, determine what resources/registers it needs.
@@ -131,7 +129,7 @@ class RiscyAlloc extends Module {
     robEntry.isLd := pipelinedOpDecode(i).isLd
     robEntry.isHalt := pipelinedOpDecode(i).isHalt
     robEntry.hasRd := pipelinedOpDecode(i).hasRd
-		robEntry.era := io.allocEra
+    robEntry.era := io.robEra
     
 		// Destination
     robEntry.rd := pipelinedInst(i).bits.rd
