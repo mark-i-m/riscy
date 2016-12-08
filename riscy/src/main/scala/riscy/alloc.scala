@@ -58,6 +58,10 @@ class RiscyAlloc extends Module {
     i => RegEnable(io.inst(i), !io.allocStall)
   }
 
+  val pipelinedPc = Vec.tabulate(4) {
+    i => RegEnable(io.pc(i), !io.allocStall)
+  }
+
   // Do a simple addition to rename the instructions. Every instruction gets
   // an ROB entry, regardless of how many registers it reads or writes. The
   // valid bits of the instructions and the number of free ROB entries determines
@@ -77,10 +81,10 @@ class RiscyAlloc extends Module {
   val renamedRs1 = Vec.tabulate(4) { i => 
     PriorityMux(
       ((Array.tabulate(i) { j => (
-        io.inst(j).bits.rd === io.inst(i).bits.rs1,
+        pipelinedInst(j).bits.rd === pipelinedInst(i).bits.rs1,
         {
           val renamed = Valid(UInt(6))
-          renamed.valid := Bool(true)
+          renamed.valid := pipelinedOpDecode(j).hasRd 
           renamed.bits  := renamedDest(j)
           renamed
         }
@@ -90,10 +94,10 @@ class RiscyAlloc extends Module {
   val renamedRs2 = Vec.tabulate(4) { i => 
     PriorityMux(
       ((Array.tabulate(i) { j => (
-        io.inst(j).bits.rd === io.inst(i).bits.rs2,
+        pipelinedInst(j).bits.rd === pipelinedInst(i).bits.rs2,
         {
           val renamed = Valid(UInt(6))
-          renamed.valid := Bool(true)
+          renamed.valid := pipelinedOpDecode(j).hasRd 
           renamed.bits  := renamedDest(j)
           renamed
         }
@@ -115,13 +119,33 @@ class RiscyAlloc extends Module {
     val robEntry = io.allocROB(i).bits // convenience
 
     // Operation
+    robEntry.tag := renamedDest(i)
+    robEntry.pc := pipelinedPc(i)
     robEntry.op := pipelinedInst(i).bits.op
     robEntry.funct3 := pipelinedInst(i).bits.funct3
     robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
-		robEntry.isSt := pipelinedOpDecode(i).isSt
-		robEntry.isLd := pipelinedOpDecode(i).isLd
+    robEntry.isSt := pipelinedOpDecode(i).isSt
+    robEntry.isLd := pipelinedOpDecode(i).isLd
+    robEntry.isHalt := pipelinedOpDecode(i).isHalt
+    robEntry.hasRd := pipelinedOpDecode(i).hasRd
+
+    // Destination
+    robEntry.rd := pipelinedInst(i).bits.rd
+
+    // Immediates
+    robEntry.immI := pipelinedInst(i).bits.immI
+    robEntry.immS := pipelinedInst(i).bits.immS
+    robEntry.immB := pipelinedInst(i).bits.immB
+    robEntry.immU := pipelinedInst(i).bits.immU
+    robEntry.immJ := pipelinedInst(i).bits.immJ
+
     // First operand
-    when (renamedRs1(i).valid) {
+    when (pipelinedOpDecode(i).isHalt) {
+      // If this is a halt, do not rename instructions
+      robEntry.rs1Rename := UInt(0)
+      robEntry.rs1Val.valid := Bool(true)
+      robEntry.rs1Val.bits := UInt(0)
+    } .elsewhen (renamedRs1(i).valid) {
       // Getting from ROB
       //robEntry.rs1Map := Bool(true)
       robEntry.rs1Rename := renamedRs1(i).bits
@@ -136,7 +160,12 @@ class RiscyAlloc extends Module {
     }
 
     // Second operand
-    when (pipelinedOpDecode(i).hasRs2) {
+    when(pipelinedOpDecode(i).isHalt) {
+      // If this is a halt, do not rename instructions
+      robEntry.rs2Rename := UInt(0)
+      robEntry.rs2Val.valid := Bool(true)
+      robEntry.rs2Val.bits := UInt(0)
+    } .elsewhen (pipelinedOpDecode(i).hasRs2) {
       // Second operand is a register
       when (renamedRs2(i).valid) {
         // Getting from ROB
@@ -226,6 +255,13 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   poke(c.io.remapMapping(3).valid, 0)
   step(1)
 
+  // Control
+  // TODO expect pc
+  expect(c.io.allocROB(0).bits.tag, 0)
+  expect(c.io.allocROB(0).bits.hasRd, true)
+  expect(c.io.allocROB(0).bits.isSt, false)
+  expect(c.io.allocROB(0).bits.isLd, false)
+  expect(c.io.allocROB(0).bits.isHalt, false)
   // Should map r1 to ROB0
   expect(c.io.allocRemap(0).valid, 1)
   expect(c.io.allocRemap(0).bits.reg, 1)
@@ -243,6 +279,7 @@ class RiscyAllocTests(c: RiscyAlloc) extends Tester(c) {
   expect(c.io.allocROB(0).bits.rs2Rename, 0x0)
   expect(c.io.allocROB(0).bits.rs2Val.valid, true)
   expect(c.io.allocROB(0).bits.rs2Val.bits, 0xFFFF)
+
 
   // Should map r2 to ROB1
   expect(c.io.allocRemap(1).valid, 1)
