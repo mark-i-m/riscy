@@ -81,6 +81,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   issue.io.addrBufLen  := lsq.io.currentLen
 
   // Hook up Exec and ROB
+  exec.io.rob_era := rob.io.robEra
   for(i <- 0 until 6) {
     rob.io.wbValues(i) := exec.io.rob_wb_output.entry(i)
   }
