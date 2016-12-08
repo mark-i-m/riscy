@@ -100,6 +100,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   for(i <- 0 until 2) { // Write ports
     memory.io.writePorts(i) := lsq.io.memStAddrPort(i)
     memory.io.writeData(i) := lsq.io.memStData(i)
+    memory.io.writeSize(i) := lsq.io.memStSize(i)
   }
 
   memory.io.readPorts(1) := lsq.io.memLdAddrPort
