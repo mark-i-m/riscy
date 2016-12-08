@@ -186,7 +186,7 @@ class LSQ extends Module {
   val ldIssueRow = Vec(DEPTH, Bool())
   // Load selection logic
   val ldSelect = Module(new AddrQueueAlloc)
-  ldSelect.io.validEntries := Array.tabulate(32) { ldIssueRow(_) }
+  ldSelect.io.validEntries := Array.tabulate(32) { !ldIssueRow(_) }
 
   for ( i <- 0 until 32) {
     CamStCommit.io.input_bits(i) := addrq(i).bits.robLoc
