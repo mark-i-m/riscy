@@ -138,6 +138,7 @@ class LSQ extends Module {
     dcache.io.ldReq.addr.valid := Bool(true)
     dcache.io.ldReq.addr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
     when (dcache.io.ldReq.data.valid && !addrq(PriorityEncoder(loads)).bits.value.valid) {
+      printf("LSQ: Loading valid data from D$ to address queue entry %d\n", UInt(PriorityEncoder(loads)));
       switch (addrq(PriorityEncoder(loads)).bits.funct3) {
         is (UInt(0x3)) {
           addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data.bits
@@ -209,28 +210,35 @@ class LSQ extends Module {
       dispatch(i) := Bool(false)
     }
 
-    for (j <- 0 until 2) {
-      when(dispatch(i)) {
-        printf("Ready to dispatch %d\n", UInt(i))
-          for(k <- 0 until DEPTH) {
-            depMatrix(k).bits(i) := Bool(false)
-          }
-          when (!addrq(i).bits.st_nld) {
-            ldIssueRow(i) := Bool(true)
-            addrq(i).bits.addr.valid := Bool(false)
-            addrq(i).bits.value.valid := Bool(false)
-            addrq(i).valid := Bool(false)
-          } .elsewhen (CamStCommit.io.hit(j)(i)) {
-            printf("St dispatch on %d\n", UInt(j))
-            printf("St dispatch addr %d\n", addrq(i).bits.addr.bits)
-            printf("St dispatch value %d\n", addrq(i).bits.value.bits)
+    when (dispatch(i)) {
+      printf("LSQ: Ready to dispatch entry %d\n", UInt(i))
+
+      for(k <- 0 until DEPTH) {
+        depMatrix(k).bits(i) := Bool(false)
+      }
+      when (!addrq(i).bits.st_nld) {
+        ldIssueRow(i) := Bool(true)
+        printf("LSQ: Invalidating load entry on address queue\n");
+        addrq(i).bits.addr.valid := Bool(false)
+        addrq(i).bits.value.valid := Bool(false)
+        addrq(i).valid := Bool(false)
+      } .otherwise {
+        for (j <- 0 until 2) {
+          when (CamStCommit.io.hit(j)(i)) {
+            printf("LSQ: St dispatch on %d\n", UInt(j))
+            printf("LSQ: St dispatch addr %d\n", addrq(i).bits.addr.bits)
+            printf("LSQ: St dispatch value %d\n", addrq(i).bits.value.bits)
+            printf("LSQ: Invalidating store entry on address queue\n");
             addrq(i).bits.addr.valid := Bool(false)
             addrq(i).valid := Bool(false)
             stCommitRow(j)(i) := Bool(true)
           }
-      } .otherwise {
+        }
+      }
+    } .otherwise {
+      ldIssueRow(i) := Bool(false)
+      for (j <- 0 until 2) {
         stCommitRow(j)(i) := Bool(false)
-        ldIssueRow(i) := Bool(false)
       }
     }
   }
@@ -238,6 +246,7 @@ class LSQ extends Module {
   for (i <- 0 until 2) {
     stCommitSet(i) := Cat(Array.tabulate(32) { stCommitRow(i)(_) }).orR
     when (stCommitSet(i)) {
+      printf("LSQ: Storing to D$ on port %d\n", UInt(i));
       dcache.io.stReq(i).addr.valid := Bool(true)
       dcache.io.stReq(i).addr.bits := addrq(PriorityEncoder(stCommitRow(i))).bits.addr.bits
       dcache.io.stReq(i).data := addrq(PriorityEncoder(stCommitRow(i))).bits.value.bits
@@ -248,15 +257,32 @@ class LSQ extends Module {
       dcache.io.stReq(i).data := UInt(0xdead)
       dcache.io.stReq(i).size := UInt(0x3)
     }
+  }
 
-    val ldIssueSet = Cat(Array.tabulate(32) { ldIssueRow(_) }).orR
+  val ldIssueSet = Cat(Array.tabulate(32) { ldIssueRow(_) }).orR
+  val numLoads = PopCount(Array.tabulate(32) { ldIssueRow(_) })
 
-    when(ldIssueSet) {
+  when (ldIssueSet && numLoads === UInt(2)) {
+    printf("LSQ: Sending two completed loads to ROB WB: %d and %d\n",addrq(ldSelect.io.pos(0)).bits.robLoc,addrq(ldSelect.io.pos(1)).bits.robLoc);
+    for (i <- 0 until 2) {
       io.robWbOut.entry(i).data := addrq(ldSelect.io.pos(i)).bits.value.bits
       io.robWbOut.entry(i).is_addr := Bool(false)
       io.robWbOut.entry(i).operand := addrq(ldSelect.io.pos(i)).bits.robLoc
       io.robWbOut.entry(i).valid := Bool(true)
-    } .otherwise {
+    }
+  } .elsewhen (ldIssueSet && numLoads === UInt(1)) {
+    printf("LSQ: Sending one completed load to ROB WB: %d\n", addrq(ldSelect.io.pos(0)).bits.robLoc);
+    io.robWbOut.entry(0).data := addrq(ldSelect.io.pos(0)).bits.value.bits
+    io.robWbOut.entry(0).is_addr := Bool(false)
+    io.robWbOut.entry(0).operand := addrq(ldSelect.io.pos(0)).bits.robLoc
+    io.robWbOut.entry(0).valid := Bool(true)
+    // Second entry is not valid
+    io.robWbOut.entry(1).data := addrq(ldSelect.io.pos(1)).bits.value.bits
+    io.robWbOut.entry(1).is_addr := Bool(false)
+    io.robWbOut.entry(1).operand := addrq(ldSelect.io.pos(1)).bits.robLoc
+    io.robWbOut.entry(1).valid := Bool(false)
+  } .otherwise {
+    for (i <- 0 until 2) {
       io.robWbOut.entry(i).data := UInt(0xdead)
       io.robWbOut.entry(i).is_addr := Bool(false)
       io.robWbOut.entry(i).operand := UInt(0x0)
