@@ -51,4 +51,4 @@ riscy_emu: riscy_emu.cc emulator.h Riscy.h Riscy.cpp
 # Clean up!
 clean: 
 	rm -f *.h *.cpp *.o *.vcd *.log riscy_emu
-	find -type f -executable -exec rm -f {} \;
+	find -type f -executable ! -name check_output.py -exec rm -f {} \;
