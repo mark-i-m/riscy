@@ -17,11 +17,14 @@ SBT ?= java -Xmx4G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
 SCALA_FILES=$(wildcard src/main/scala/riscy/*.scala)
 TESTS=$(patsubst %, %.test, $(MODULES))
 BENCHES=$(patsubst bench/%, %.bench, $(wildcard bench/*.hex))
+CHECKS=$(patsubst bench/%, %.check, $(wildcard bench/*.hex))
 
 # Target to run all tests
 test: $(TESTS)
 
 bench: $(BENCHES)
+
+check: $(CHECKS)
 
 # Run unit tests with `make <Module name>.test`
 $(TESTS) : %.test :
@@ -34,6 +37,10 @@ TopLevel.test:
 $(BENCHES) : %.bench : ./riscy_emu
 	./riscy_emu bench/$* $*.log $*.vcd
 
+# Run %.bench and compare the output with bench/%.ok
+$(CHECKS) : %.check : %.bench
+	./check_output.py $*.log bench/$*.ok
+
 # Build the emulator
 emulator.h Riscy.h Riscy.cpp: $(SCALA_FILES)
 	$(SBT) run
@@ -44,4 +51,4 @@ riscy_emu: riscy_emu.cc emulator.h Riscy.h Riscy.cpp
 # Clean up!
 clean: 
 	rm -f *.h *.cpp *.o *.vcd *.log riscy_emu
-	find -type f -executable -exec rm -f {} \;
+	find -type f -executable ! -name check_output.py -exec rm -f {} \;
