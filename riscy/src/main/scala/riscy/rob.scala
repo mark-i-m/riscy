@@ -130,8 +130,12 @@ class ROB extends Module {
   when(io.mispredPC.valid) {
     freeInc := UInt(64)
     head.reset
-  } .otherwise {
+    //era.inc(1) // TODO enable this when we merge mispec
+  } .elsewhen (!io.robStallReq) {
     freeInc := free + headInc - tailInc
+    head.inc(headInc)
+  } .otherwise {
+    freeInc := free + headInc
     head.inc(headInc)
   }
 
