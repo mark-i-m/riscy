@@ -132,9 +132,6 @@ class IqArbiter extends Module {
 		} .otherwise {
 			io.addrBuf(i).valid := Bool(false)
 			io.addrBuf(i).bits.st_nld := Bool(true)
-		} .otherwise {
-			io.addrBuf(i).valid := Bool(false)
-			io.addrBuf(i).bits.st_nld := Bool(false)
 		}
 		io.addrBuf(i).bits.robLoc 		:= io.inst(i).bits.tag
 		io.addrBuf(i).bits.funct3 		:= io.inst(i).bits.funct3
@@ -142,7 +139,7 @@ class IqArbiter extends Module {
 		io.addrBuf(i).bits.rs1Val 		:= io.inst(i).bits.rs1Val
 		io.addrBuf(i).bits.rs2Rename 	:= io.inst(i).bits.rs2Rename
 		io.addrBuf(i).bits.rs2Val 		:= io.inst(i).bits.rs2Val
-		io.addrBuf(i).bits.era		:= io.inst(i).bits.era
+        io.addrBuf(i).bits.era		    := io.inst(i).bits.era
 	}
 }
 
