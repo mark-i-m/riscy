@@ -123,8 +123,6 @@ class IssueQueue extends Module {
 		isIssued(i+1) := isIssued(i) || allReady(i)
 	}
 	
-	
-	io.currentLen := counter.value
 
 	// Issuing the oldest ready instruction
 	// If none of the instructions are ready queue will give 
@@ -154,7 +152,12 @@ class IssueQueue extends Module {
 	}
 
 	val specInfo = Valid(new SpeculativeIssue()) 
-	
+
+	specInfo.bits.rs1WbLocation		:= UInt(0)
+  specInfo.bits.rs1CycleNum 		:= UInt(0)
+	specInfo.bits.rs2WbLocation		:= UInt(0)
+  specInfo.bits.rs2CycleNum 		:= UInt(0)
+
 	// Generating speculative bit value
 	when (issuedPipelineBits.rs1Val.valid === Bool(false)) {
 		specInfo.bits.rs1IsSpec 			:= Bool(true) 
@@ -162,11 +165,7 @@ class IssueQueue extends Module {
 		specInfo.bits.rs1IsSpec			 	:= Bool(false)
 	}
 	
-	specInfo.bits.rs1WbLocation		:= UInt(0)
-  specInfo.bits.rs1CycleNum 		:= UInt(0)
-	specInfo.bits.rs2WbLocation		:= UInt(0)
-  specInfo.bits.rs2CycleNum 		:= UInt(0)
-
+	// Logic to rovide info to EXE logic about WB location
 	for (i <- 0 until 8) {
 		when (specCamRs1.io.hit(0)(i) && issuedPrev2Pipeline(i).valid) {
 			if (i < 4) {
@@ -197,6 +196,7 @@ class IssueQueue extends Module {
 		} 
 	}
 
+  // woken up inst is speculative if one of the rs1 or rs2 is not ready
 	specInfo.valid := specInfo.bits.rs1IsSpec || specInfo.bits.rs2IsSpec
 	
 	//val specPipelined = Reg(next = specInfo)
@@ -213,6 +213,7 @@ class IssueQueue extends Module {
 	
 	// Assigning entries to current issue queue entries
 	// New entries are assigned only if valid bit is set
+	// also logic to update the new entry with ROB structure
 	
 	when (counter.value === UInt(0)) {
 		for (i <- 0 until 4) {
@@ -287,6 +288,8 @@ class IssueQueue extends Module {
    	counter.dec(1)
 	}
 
+	io.currentLen := counter.value
+	
 	// First case is when instruction is issued from issue queue
 	// Logic to shift instructions up in the order
 	// if ith instruction is issued, we have to shift 
@@ -388,6 +391,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.issuedEntry.valid, 0)
 
 	println("// Test1 - assigning 4 enries to issue queue")
+	
 	for (i <- 0 to 3) {
 		poke(c.io.newEntry(i).valid, 1)
 		poke(c.io.newEntry(i).bits.tag, i)
@@ -401,6 +405,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.issuedEntry.valid, 0)
 	
 	println("// Test1a - no new entries, issue queue should issue one entry")
+
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -410,12 +415,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+
 	expect(c.io.currentLen, 3)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 0)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test1b - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -425,12 +432,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 2)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test1c - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -440,12 +449,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 2)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test1d - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -455,12 +466,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 3)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test1d - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -470,10 +483,12 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 	
 	println("// Test2 - assigning 4 enries to issue queue")
+	
 	for (i <- 0 to 3) {
 		poke(c.io.newEntry(i).valid, 1)
 		poke(c.io.newEntry(i).bits.tag, i)
@@ -487,22 +502,27 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.issuedEntry.valid, 0)
 	
 	println("// Test2a - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
+	
 	for (i <- 0 to 3) {
 		poke(c.io.newEntry(i).valid, 1)
 		poke(c.io.newEntry(i).bits.tag, 4+i)
 		poke(c.io.newEntry(i).bits.rs1Val.valid, 1)
 		poke(c.io.newEntry(i).bits.rs2Val.valid, 1)
 	}
+	
 	step(1)
+	
 	expect(c.io.currentLen, 7)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 0)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test2b - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -512,12 +532,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 6)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test2c - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -527,11 +549,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 5)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 2)
 
 	println("// Test2d - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -541,11 +565,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 4)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 3)
 
 	println("// Test2e - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -555,11 +581,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+
 	expect(c.io.currentLen, 3)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 4)
 
 	println("// Test2f - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -569,11 +597,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 2)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 5)
 
 	println("// Test2g - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -583,11 +613,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 6)
 
 	println("// Test2h - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -597,11 +629,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 7)
 
 	println("// Test2i - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -611,6 +645,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -625,12 +660,15 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	}
 	
 	step(1)
+	
 	expect(c.io.currentLen, 4)
 	expect(c.io.issuedEntry.valid, 0)
 	
 	println("// Test3a")
+	
 	poke(c.io.issuedPrev2(0).bits,5)
 	poke(c.io.issuedPrev2(0).valid,1)
+	
 	for (i <- 1 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -642,6 +680,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(0).valid, 1)
 		
 	step(1)
+	
 	expect(c.io.currentLen, 3)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 0)
@@ -651,48 +690,58 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.specIssue.valid, 1)
 
 	println("// Test3b")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
-  poke(c.io.newEntry(0).valid, 0)
+  
+	poke(c.io.newEntry(0).valid, 0)
 	poke(c.io.newEntry(1).valid, 0)
 	poke(c.io.newEntry(2).valid, 0)
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 2)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
 
 	println("// Test3c")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
-  poke(c.io.newEntry(0).valid, 0)
+  
+	poke(c.io.newEntry(0).valid, 0)
 	poke(c.io.newEntry(1).valid, 0)
 	poke(c.io.newEntry(2).valid, 0)
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 2)
 
 	println("// Test3d")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
-  poke(c.io.newEntry(0).valid, 0)
+  
+	poke(c.io.newEntry(0).valid, 0)
 	poke(c.io.newEntry(1).valid, 0)
 	poke(c.io.newEntry(2).valid, 0)
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 3)
 
 	println("// Test3e")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -702,6 +751,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -723,7 +773,9 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 		for (i <- 0 to 7) {
 			poke(c.io.issuedPrev2(i).valid,0)
 	  }
+		
 		step(1)
+		
 		expect(c.io.currentLen, 4*(j+1))
 		expect(c.io.issuedEntry.valid, 0)
 		expect(c.io.issuedEntry.bits.tag, 0)
@@ -743,6 +795,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(0).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 16)
 	expect(c.io.issuedEntry.valid, 0)
   
@@ -778,6 +831,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -817,6 +871,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
@@ -835,6 +890,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 0)
@@ -850,6 +906,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -859,6 +916,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(0).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -882,6 +940,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(0).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 4)
 	expect(c.io.issuedEntry.valid, 0)
 	
@@ -913,6 +972,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(3).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 2)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
@@ -929,6 +989,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(3).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 2)
@@ -945,6 +1006,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(3).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 3)
@@ -961,6 +1023,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(3).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 }

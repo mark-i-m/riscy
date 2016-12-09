@@ -55,8 +55,8 @@ with open(logname, 'r') as log:
             regs[reg] = val
 
         elif mem_m is not None:
-            adr = int(reg_m.group(1), 16)
-            val = int(reg_m.group(2), 16)
+            adr = int(mem_m.group(1), 16)
+            val = int(mem_m.group(2), 16)
 
             stores.append((adr, val))
 

@@ -2,10 +2,10 @@
 # Front end
 MODULES = Fetch ICache DecodeSingle OpDecode Alloc ROB 
 # Backend
-MODULES += IssueQueue IqArbiter LSQ Issue ALU RobWriteback Execute Stall
+MODULES += IssueQueue IqArbiter LSQ ALU RobWriteback Execute Stall
 # Util
-MODULES += HelloModule MultiCounter CAM RegFile Memory DCache AddrQueueAlloc
-
+MODULES += HelloModule MultiCounter CAM RegFile Memory DCache AddrQueueAlloc 
+MODULES += NBDCache 
 ###############################################################################
 # Some configurations
 TOP = ..
@@ -29,6 +29,9 @@ check: $(CHECKS)
 # Run unit tests with `make <Module name>.test`
 $(TESTS) : %.test :
 	$(SBT) "run riscy.$*Generator"
+
+Issue.test:
+	$(SBT) "run riscy.IssueGenerator"
 
 TopLevel.test:
 	$(SBT) "run riscy.TopLevelGenerator"

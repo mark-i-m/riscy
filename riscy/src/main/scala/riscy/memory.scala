@@ -9,6 +9,7 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
 
     val writePorts = Vec.fill(numWPorts) { Valid(UInt(INPUT, 64)).asInput }
     val writeData = Vec.fill(numWPorts) { UInt(INPUT, 64).asInput }
+    val writeSize = Vec.fill(numWPorts) { UInt(INPUT, 3).asInput }
   }
 
   println("Creating BigMemory of size " + ((lineBytes * numLines) >> 10) + " kB")
@@ -49,12 +50,27 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
       wdata.valid := io.writePorts(i).valid
       wdata.bits.addr := io.writePorts(i).bits
       wdata.bits.data := io.writeData(i)
+      wdata.bits.size := io.writeSize(i)
       Pipe(wdata, latency-1)
     }
 
     when(reqDelayed.valid) {
-      for(j <- 0 until 8) { // 8B-words
-        memBank(reqDelayed.bits.addr + UInt(j)) := reqDelayed.bits.data((j+1)*8-1,j*8)
+      when(reqDelayed.bits.size === UInt(0)) { // lb -- 1B
+        for(j <- 0 until 1) {
+          memBank(reqDelayed.bits.addr + UInt(j)) := reqDelayed.bits.data((j+1)*8-1,j*8)
+        }
+      } .elsewhen(reqDelayed.bits.size === UInt(1)) { // lh -- 2B
+        for(j <- 0 until 2) {
+          memBank(reqDelayed.bits.addr + UInt(j)) := reqDelayed.bits.data((j+1)*8-1,j*8)
+        }
+      } .elsewhen(reqDelayed.bits.size === UInt(2)) { // lw -- 4B
+        for(j <- 0 until 4) {
+          memBank(reqDelayed.bits.addr + UInt(j)) := reqDelayed.bits.data((j+1)*8-1,j*8)
+        }
+      } .elsewhen(reqDelayed.bits.size === UInt(3)) { // ld -- 8B
+        for(j <- 0 until 8) {
+          memBank(reqDelayed.bits.addr + UInt(j)) := reqDelayed.bits.data((j+1)*8-1,j*8)
+        }
       }
 
       printf("MEM[%x] = %x\n", reqDelayed.bits.addr, reqDelayed.bits.data)
@@ -65,6 +81,7 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
 class WriteData extends Bundle {
   val addr = UInt(INPUT, 64)
   val data = UInt(INPUT, 64)
+  val size = UInt(INPUT,  3)
 }
 
 class MemoryTests(c: BigMemory) extends Tester(c) {
