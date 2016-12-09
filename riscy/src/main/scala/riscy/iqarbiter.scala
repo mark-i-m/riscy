@@ -118,12 +118,12 @@ class IqArbiter extends Module {
 		}
 
 		// Logic to generate the entry for LS Buffer
-		when (io.inst(i).bits.isLd === Bool(true)) {
+		when (io.inst(i).valid === Bool(true) && io.inst(i).bits.isLd === Bool(true)) {
 			io.addrBuf(i).valid := Bool(true)
 			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
 			io.addrBuf(i).bits.st_nld := Bool(false)
-		} .elsewhen (io.inst(i).bits.isSt === Bool(true)) {
+		} .elsewhen (io.inst(i).valid === Bool(true) && io.inst(i).bits.isSt === Bool(true)) {
 			io.addrBuf(i).valid := Bool(true)
 			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3

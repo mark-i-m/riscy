@@ -91,44 +91,49 @@ class NBDCache extends Module {
 	// Assigning ld to mem
 	
 	// miss state definition
-	val s0_ready :: s0_miss :: s0_mem_init :: s0_mem_wait :: s0_mem_done :: Nil = Enum(UInt(), 5)
+	val s0_ready :: s0_request :: s0_refill_init :: s0_refill_wait :: s0_refill_done :: Nil = Enum(UInt(), 5)
   val state_0 = Reg(init=s0_ready)
 
-	val s1_ready :: s1_miss :: s1_mem_init :: s1_mem_wait :: s1_mem_done :: Nil = Enum(UInt(), 5)
+	val s1_ready :: s1_request :: s1_refill_init :: s1_refill_wait :: s1_refill_done :: Nil = Enum(UInt(), 5)
   val state_1 = Reg(init=s1_ready)
 
-	val s2_ready :: s2_miss :: s2_mem_init :: s2_mem_wait :: s2_mem_done :: Nil = Enum(UInt(), 5)
+	val s2_ready :: s2_request :: s2_refill_init :: s2_refill_wait :: s2_refill_done :: Nil = Enum(UInt(), 5)
   val state_2 = Reg(init=s2_ready)
 
-	val s3_ready :: s3_miss :: s3_mem_init :: s3_mem_wait :: s3_mem_done :: Nil = Enum(UInt(), 5)
+	val s3_ready :: s3_request :: s3_refill_init :: s3_refill_wait :: s3_refill_done :: Nil = Enum(UInt(), 5)
   val state_3 = Reg(init=s3_ready)
 
 	val incrMiss = Bool(false)
+
+	val s0_miss = Bool(false)
+	val s1_miss = Bool(false)
+	val s2_miss = Bool(false)
+	val s3_miss = Bool(false)
 
   when (!io.stall && io.ldReq.addr.valid && rand >= UInt(16384)) {
 		incrMiss := Bool(true)
 		switch (missCounter.value) {
       is (Bits(0)) {
       	missAddr(0) := io.ldReq.addr.bits
-				state_0 := s0_miss
+				s0_miss			:= Bool(true)
       }
       is (Bits(1)) {
         missAddr(1) := io.ldReq.addr.bits
-				state_1 := s1_miss
+				s1_miss			:= Bool(true)
       }
       is (Bits(2)) {
         missAddr(2) := io.ldReq.addr.bits
-				state_2 := s2_miss
+				s2_miss			:= Bool(true)
       }
 			is (Bits(3)) {
         missAddr(3) := io.ldReq.addr.bits
-				state_3 := s3_miss
+				s3_miss			:= Bool(true)
       }
 		}
 		memory.io.readPorts(0).valid := Bool(false)
 		memory.io.readPorts(0).bits := io.ldReq.addr.bits
-  	io.ldReq.data.bits := memory.io.readData(0).bits(63,0)
-  	io.ldReq.data.valid := Bool(false)
+  	io.ldReq.data.bits := memory.io.readData(1).bits(63,0)
+  	io.ldReq.data.valid := memory.io.readData(1).valid
 	} .elsewhen (io.stall) {
 	} .otherwise {
 		incrMiss := Bool(false)
@@ -136,7 +141,24 @@ class NBDCache extends Module {
 		memory.io.readPorts(0).bits := io.ldReq.addr.bits
 		io.ldReq.data.bits := memory.io.readData(0).bits(63,0)
   	io.ldReq.data.valid := memory.io.readData(0).valid
-	}	
+	}
+
+	switch (state_0) {
+    is (s0_ready) {
+      when (s0_miss) { state_0 := s0_refill_init }
+    }
+    is (s0_request) {
+    }
+    is (s0_refill_init) {
+      state_0 := s0_refill_wait
+    }
+    is (s0_refill_wait) {
+      when (io.ldReq.data.valid) { state_0 := s0_refill_done }
+    }
+    is (s0_refill_done) {
+      state_0 := s0_ready
+    }
+  }
 }
 
 class NBDCacheTests(c: NBDCache) extends Tester(c) {
