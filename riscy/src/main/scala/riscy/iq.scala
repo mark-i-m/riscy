@@ -31,12 +31,16 @@ class IssueQueue extends Module {
 	val counter = new MultiCounter(17)
 
 	//CAM to update RS1, RS2 values based on ROB_wb
-	val wbCamRs1 = Module (new CAM(6, 16, 6))
-	val wbCamRs2 = Module (new CAM(6, 16, 6))
+	val wbCamRs1 = Module (new CAM(6, 20, 6))
+	val wbCamRs2 = Module (new CAM(6, 20, 6))
 
 	for (i <- 0 until 16) {
 		wbCamRs1.io.input_bits(i) := iqueue(i).bits.rs1Rename
 		wbCamRs2.io.input_bits(i) := iqueue(i).bits.rs2Rename
+	}
+	for (i <- 16 until 20) {
+		wbCamRs1.io.input_bits(i) := io.newEntry(i-16).bits.rs1Rename
+    wbCamRs2.io.input_bits(i) := io.newEntry(i-16).bits.rs2Rename
 	}
 	for (i <- 0 until 6) {
 		wbCamRs1.io.compare_bits(i) := io.robWb.entry_s1(i).operand
@@ -112,10 +116,7 @@ class IssueQueue extends Module {
 	for (i <- 0 to 15) {
 		isIssued(i+1) := isIssued(i) || allReady(i)
 	}
-	val issuedPipelineValid = isIssued(16)
-	io.issuedEntry.valid := Reg(next = issuedPipelineValid)
 	
-	io.currentLen := counter.value
 
 	// Issuing the oldest ready instruction
 	// If none of the instructions are ready queue will give 
@@ -124,7 +125,13 @@ class IssueQueue extends Module {
 	val issuedNumOH = UIntToOH(issuedNum)
 	val issuedPipelineBits = Reg(next = MuxLookup(issuedNum, iqueue(0).bits, 
 	Array.tabulate(16) {i => UInt (i) -> iqueue(i).bits}))
-  
+
+	// for 0th instruction it is possible that rs1 and rs2 valid have stuck at one fault
+	// so check if issued inst is valid or not
+	val issuedPipelineValid = isIssued(16) 
+	io.issuedEntry.valid := Reg(next = issuedPipelineValid)
+ 
+	// Logic to provide speculative location to execute
 	val issuedPrev2Pipeline = Vec.tabulate(8) { i => Reg(next = io.issuedPrev2(i)) }
 	val specCamRs1 = Module (new CAM(1, 8, 6))
 	val specCamRs2 = Module (new CAM(1, 8, 6))
@@ -138,7 +145,12 @@ class IssueQueue extends Module {
 	}
 
 	val specInfo = Valid(new SpeculativeIssue()) 
-	
+
+	specInfo.bits.rs1WbLocation		:= UInt(0)
+  specInfo.bits.rs1CycleNum 		:= UInt(0)
+	specInfo.bits.rs2WbLocation		:= UInt(0)
+  specInfo.bits.rs2CycleNum 		:= UInt(0)
+
 	// Generating speculative bit value
 	when (issuedPipelineBits.rs1Val.valid === Bool(false)) {
 		specInfo.bits.rs1IsSpec 			:= Bool(true) 
@@ -146,11 +158,7 @@ class IssueQueue extends Module {
 		specInfo.bits.rs1IsSpec			 	:= Bool(false)
 	}
 	
-	specInfo.bits.rs1WbLocation		:= UInt(0)
-  specInfo.bits.rs1CycleNum 		:= UInt(0)
-	specInfo.bits.rs2WbLocation		:= UInt(0)
-  specInfo.bits.rs2CycleNum 		:= UInt(0)
-
+	// Logic to rovide info to EXE logic about WB location
 	for (i <- 0 until 8) {
 		when (specCamRs1.io.hit(0)(i) && issuedPrev2Pipeline(i).valid) {
 			if (i < 4) {
@@ -181,6 +189,7 @@ class IssueQueue extends Module {
 		} 
 	}
 
+  // woken up inst is speculative if one of the rs1 or rs2 is not ready
 	specInfo.valid := specInfo.bits.rs1IsSpec || specInfo.bits.rs2IsSpec
 	
 	//val specPipelined = Reg(next = specInfo)
@@ -197,12 +206,23 @@ class IssueQueue extends Module {
 	
 	// Assigning entries to current issue queue entries
 	// New entries are assigned only if valid bit is set
+	// also logic to update the new entry with ROB structure
 	
 	when (counter.value === UInt(0)) {
 		for (i <- 0 until 4) {
 			when (io.newEntry(i).valid) {
 				iqueue(counter.value + isAssigned(i)) := io.newEntry(i)
 				isAssigned(i+1) := isAssigned(i) + UInt(1)
+				for (k <- 0 until 6) {
+					when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+						iqueue(counter.value + isAssigned(i)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
+						iqueue(counter.value + isAssigned(i)).bits.rs1Val.valid := Bool(true)
+					}
+					when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+						iqueue(counter.value + isAssigned(i)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
+						iqueue(counter.value + isAssigned(i)).bits.rs2Val.valid := Bool(true)
+					} 	
+				}
 			} .otherwise {
 				isAssigned(i+1) := isAssigned(i) + UInt(0)
 			}
@@ -213,6 +233,16 @@ class IssueQueue extends Module {
 				when (io.newEntry(i).valid) {
 					iqueue(counter.value + isAssigned(i)) := io.newEntry(i)
 					isAssigned(i+1) := isAssigned(i) + UInt(1)
+					for (k <- 0 until 6) {
+						when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+							iqueue(counter.value + isAssigned(i)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
+							iqueue(counter.value + isAssigned(i)).bits.rs1Val.valid := Bool(true)
+						}
+						when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+							iqueue(counter.value + isAssigned(i)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
+							iqueue(counter.value + isAssigned(i)).bits.rs2Val.valid := Bool(true)
+						} 	
+					}
 				} .otherwise {
 					isAssigned(i+1) := isAssigned(i) + UInt(0)
 				}
@@ -222,6 +252,16 @@ class IssueQueue extends Module {
 				when (io.newEntry(i).valid) {
 					iqueue(counter.value + isAssigned(i) - UInt(1)) := io.newEntry(i)
 					isAssigned(i+1) := isAssigned(i) + UInt(1)
+					for (k <- 0 until 6) {
+						when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
+							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs1Val.valid := Bool(true)
+						}
+						when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
+							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs2Val.valid := Bool(true)
+						} 	
+					}
 				} .otherwise {
 					isAssigned(i+1) := isAssigned(i) + UInt(0)
 				}
@@ -241,6 +281,8 @@ class IssueQueue extends Module {
    	counter.dec(1)
 	}
 
+	io.currentLen := counter.value
+	
 	// First case is when instruction is issued from issue queue
 	// Logic to shift instructions up in the order
 	// if ith instruction is issued, we have to shift 
@@ -248,10 +290,9 @@ class IssueQueue extends Module {
 	// shift will happen only if one instruction is issued with valid
 	when (issuedPipelineValid === Bool(true)) {
 		for (i <- 0 to 14) {
-			// Special case for 0 is needed
-			when (counter.value === UInt(0)) {
-				iqueue(0) := iqueue(1)
-			}
+			//when (counter.value === UInt (1)) {
+			//	iqueue(0) := iqueue(1)
+			//}
 			// Select if this instruction was issued
 			when (issuedNumOH(i) === UInt (1)) {
 				for (j <- i to 14) {
@@ -267,11 +308,11 @@ class IssueQueue extends Module {
 							// from issued to last entry compare with next one 
 							// as they are shifted
 							for (k <- 0 until 6) {
-								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j).valid) {
+								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-									iqueue(j).bits.rs1Val.bits := Bool(true)
+									iqueue(j).bits.rs1Val.valid := Bool(true)
 								}
-								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j).valid) {
+								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 									iqueue(j).bits.rs2Val.valid := Bool(true)
 								} 	
@@ -291,11 +332,11 @@ class IssueQueue extends Module {
 							// from issued to last entry compare with next one 
 							// as they are shifted
 							for (k <- 0 until 6) {
-								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j).valid) {
+								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-									iqueue(j).bits.rs1Val.bits := Bool(true)
+									iqueue(j).bits.rs1Val.valid := Bool(true)
 								}
-								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j).valid) {
+								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
 									iqueue(j).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 									iqueue(j).bits.rs2Val.valid := Bool(true)
 								} 	
@@ -309,7 +350,7 @@ class IssueQueue extends Module {
 					for (k <- 0 until 6) {
 						when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 							iqueue(l).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-							iqueue(l).bits.rs1Val.bits := Bool(true)
+							iqueue(l).bits.rs1Val.valid := Bool(true)
 						}
 						when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 							iqueue(l).bits.rs2Val.bits := io.robWb.entry_s1(k).data
@@ -326,7 +367,7 @@ class IssueQueue extends Module {
 			for (k <- 0 until 6) {
 				when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 					iqueue(l).bits.rs1Val.bits := io.robWb.entry_s1(k).data
-					iqueue(l).bits.rs1Val.bits := Bool(true)
+					iqueue(l).bits.rs1Val.valid := Bool(true)
 				}
 				when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
 					iqueue(l).bits.rs2Val.bits := io.robWb.entry_s1(k).data
@@ -343,6 +384,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.issuedEntry.valid, 0)
 
 	println("// Test1 - assigning 4 enries to issue queue")
+	
 	for (i <- 0 to 3) {
 		poke(c.io.newEntry(i).valid, 1)
 		poke(c.io.newEntry(i).bits.tag, i)
@@ -356,6 +398,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.issuedEntry.valid, 0)
 	
 	println("// Test1a - no new entries, issue queue should issue one entry")
+
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -365,12 +408,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+
 	expect(c.io.currentLen, 3)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 0)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test1b - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -380,12 +425,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 2)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test1c - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -395,12 +442,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 2)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test1d - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -410,12 +459,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 3)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test1d - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -425,10 +476,12 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 	
 	println("// Test2 - assigning 4 enries to issue queue")
+	
 	for (i <- 0 to 3) {
 		poke(c.io.newEntry(i).valid, 1)
 		poke(c.io.newEntry(i).bits.tag, i)
@@ -442,22 +495,27 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.issuedEntry.valid, 0)
 	
 	println("// Test2a - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
+	
 	for (i <- 0 to 3) {
 		poke(c.io.newEntry(i).valid, 1)
 		poke(c.io.newEntry(i).bits.tag, 4+i)
 		poke(c.io.newEntry(i).bits.rs1Val.valid, 1)
 		poke(c.io.newEntry(i).bits.rs2Val.valid, 1)
 	}
+	
 	step(1)
+	
 	expect(c.io.currentLen, 7)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 0)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test2b - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -467,12 +525,14 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 6)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
 	expect(c.io.specIssue.valid, 0)
 
 	println("// Test2c - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -482,11 +542,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 5)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 2)
 
 	println("// Test2d - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -496,11 +558,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 4)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 3)
 
 	println("// Test2e - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -510,11 +574,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+
 	expect(c.io.currentLen, 3)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 4)
 
 	println("// Test2f - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -524,11 +590,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 2)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 5)
 
 	println("// Test2g - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -538,11 +606,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 6)
 
 	println("// Test2h - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -552,11 +622,13 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 7)
 
 	println("// Test2i - no new entries, issue queue should issue one entry")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -566,6 +638,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -580,12 +653,15 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	}
 	
 	step(1)
+	
 	expect(c.io.currentLen, 4)
 	expect(c.io.issuedEntry.valid, 0)
 	
 	println("// Test3a")
+	
 	poke(c.io.issuedPrev2(0).bits,5)
 	poke(c.io.issuedPrev2(0).valid,1)
+	
 	for (i <- 1 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -597,6 +673,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(0).valid, 1)
 		
 	step(1)
+	
 	expect(c.io.currentLen, 3)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 0)
@@ -606,48 +683,58 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	expect(c.io.specIssue.valid, 1)
 
 	println("// Test3b")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
-  poke(c.io.newEntry(0).valid, 0)
+  
+	poke(c.io.newEntry(0).valid, 0)
 	poke(c.io.newEntry(1).valid, 0)
 	poke(c.io.newEntry(2).valid, 0)
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 2)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
 
 	println("// Test3c")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
-  poke(c.io.newEntry(0).valid, 0)
+  
+	poke(c.io.newEntry(0).valid, 0)
 	poke(c.io.newEntry(1).valid, 0)
 	poke(c.io.newEntry(2).valid, 0)
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 2)
 
 	println("// Test3d")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
-  poke(c.io.newEntry(0).valid, 0)
+  
+	poke(c.io.newEntry(0).valid, 0)
 	poke(c.io.newEntry(1).valid, 0)
 	poke(c.io.newEntry(2).valid, 0)
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 3)
 
 	println("// Test3e")
+	
 	for (i <- 0 to 7) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}
@@ -657,6 +744,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -678,7 +766,9 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 		for (i <- 0 to 7) {
 			poke(c.io.issuedPrev2(i).valid,0)
 	  }
+		
 		step(1)
+		
 		expect(c.io.currentLen, 4*(j+1))
 		expect(c.io.issuedEntry.valid, 0)
 		expect(c.io.issuedEntry.bits.tag, 0)
@@ -698,6 +788,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(0).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 16)
 	expect(c.io.issuedEntry.valid, 0)
   
@@ -733,6 +824,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -772,6 +864,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 1)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 1)
@@ -790,6 +883,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 1)
 	expect(c.io.issuedEntry.bits.tag, 0)
@@ -805,6 +899,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.newEntry(3).valid, 0)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
@@ -814,9 +909,116 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	poke(c.io.robWb.entry_s1(0).valid, 1)
 
 	step(1)
+	
 	expect(c.io.currentLen, 0)
 	expect(c.io.issuedEntry.valid, 0)
 
+	println("// Test7 - if incoming inst takes value from WB")
+	for (i <- 0 to 7) {
+		poke(c.io.issuedPrev2(i).valid,0)
+	}
+	poke(c.io.newEntry(0).valid, 1)
+	poke(c.io.newEntry(0).bits.tag, 0)
+	poke(c.io.newEntry(0).bits.rs1Val.valid, 0)
+	poke(c.io.newEntry(0).bits.rs2Val.valid, 1)
+	poke(c.io.newEntry(0).bits.rs1Rename, 1)
+	
+	for (i <- 1 to 3) {
+		poke(c.io.newEntry(i).valid, 1)
+		poke(c.io.newEntry(i).bits.tag, i)
+		poke(c.io.newEntry(i).bits.rs1Val.valid, 1)
+		poke(c.io.newEntry(i).bits.rs2Val.valid, 1)
+	}
+	poke(c.io.robWb.entry_s1(0).operand, 1)
+	poke(c.io.robWb.entry_s1(0).valid, 1)
+
+	step(1)
+	
+	expect(c.io.currentLen, 4)
+	expect(c.io.issuedEntry.valid, 0)
+	
+	println("// Test7a - instruction should be issued in this cycle")
+
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+	poke(c.io.robWb.entry_s1(0).valid, 1)
+	poke(c.io.robWb.entry_s1(1).valid, 1)
+	poke(c.io.robWb.entry_s1(2).valid, 1)
+	poke(c.io.robWb.entry_s1(3).valid, 1)
+
+	step(1)
+	expect(c.io.currentLen, 3)
+	expect(c.io.issuedEntry.valid, 1)
+	expect(c.io.issuedEntry.bits.tag, 0)
+
+	println("// Test7b - instruction should be issued in this cycle")
+
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+	poke(c.io.robWb.entry_s1(0).valid, 1)
+	poke(c.io.robWb.entry_s1(1).valid, 1)
+	poke(c.io.robWb.entry_s1(2).valid, 1)
+	poke(c.io.robWb.entry_s1(3).valid, 1)
+
+	step(1)
+	
+	expect(c.io.currentLen, 2)
+	expect(c.io.issuedEntry.valid, 1)
+	expect(c.io.issuedEntry.bits.tag, 1)
+
+	println("// Test7c - instruction should be issued in this cycle")
+
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+	poke(c.io.robWb.entry_s1(0).valid, 1)
+	poke(c.io.robWb.entry_s1(1).valid, 1)
+	poke(c.io.robWb.entry_s1(2).valid, 1)
+	poke(c.io.robWb.entry_s1(3).valid, 1)
+
+	step(1)
+	
+	expect(c.io.currentLen, 1)
+	expect(c.io.issuedEntry.valid, 1)
+	expect(c.io.issuedEntry.bits.tag, 2)
+
+	println("// Test7c - instruction should be issued in this cycle")
+
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+	poke(c.io.robWb.entry_s1(0).valid, 1)
+	poke(c.io.robWb.entry_s1(1).valid, 1)
+	poke(c.io.robWb.entry_s1(2).valid, 1)
+	poke(c.io.robWb.entry_s1(3).valid, 1)
+
+	step(1)
+	
+	expect(c.io.currentLen, 0)
+	expect(c.io.issuedEntry.valid, 1)
+	expect(c.io.issuedEntry.bits.tag, 3)
+
+	println("// Test7d - instruction should be issued in this cycle")
+
+	poke(c.io.newEntry(0).valid, 0)
+	poke(c.io.newEntry(1).valid, 0)
+	poke(c.io.newEntry(2).valid, 0)
+	poke(c.io.newEntry(3).valid, 0)
+	poke(c.io.robWb.entry_s1(0).valid, 1)
+	poke(c.io.robWb.entry_s1(1).valid, 1)
+	poke(c.io.robWb.entry_s1(2).valid, 1)
+	poke(c.io.robWb.entry_s1(3).valid, 1)
+
+	step(1)
+	
+	expect(c.io.currentLen, 0)
+	expect(c.io.issuedEntry.valid, 0)
 }
 
 class IssueQueueGenerator extends TestGenerator {

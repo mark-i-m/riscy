@@ -118,12 +118,12 @@ class IqArbiter extends Module {
 		}
 
 		// Logic to generate the entry for LS Buffer
-		when (io.inst(i).bits.op === UInt(0x03)) {
+		when (io.inst(i).valid === Bool(true) && io.inst(i).bits.isLd === Bool(true)) {
 			io.addrBuf(i).valid := Bool(true)
 			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
 			io.addrBuf(i).bits.st_nld := Bool(false)
-		} .elsewhen (io.inst(i).bits.op === UInt(0x0b)) {
+		} .elsewhen (io.inst(i).valid === Bool(true) && io.inst(i).bits.isSt === Bool(true)) {
 			io.addrBuf(i).valid := Bool(true)
 			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
 			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
@@ -273,10 +273,10 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.inst(1).valid, 1)
 	poke(c.io.inst(2).valid, 1)
 	poke(c.io.inst(3).valid, 1)
-	poke(c.io.inst(0).bits.op, 0x03)
-	poke(c.io.inst(1).bits.op, 0x0b)
-	poke(c.io.inst(2).bits.op, 0x03)
-	poke(c.io.inst(3).bits.op, 0x4)
+	poke(c.io.inst(0).bits.isLd, 1)
+	poke(c.io.inst(1).bits.isSt, 1)
+	poke(c.io.inst(2).bits.isLd, 1)
+	poke(c.io.inst(3).bits.isSt, 0)
   	poke(c.io.iqLen(0), 0x9)
 	poke(c.io.iqLen(1), 0x6)
   	poke(c.io.iqLen(2), 0x2)

@@ -95,9 +95,6 @@ class ROB extends Module {
     val halt = Bool(OUTPUT)
   }
 
-  // A hack to make sure things are initialized properly
-  val inited = Reg(init = Bool(false), next = Bool(true))
-
   // Purely for emulation purposes
   // halt when the "halt" instruction commits
   val halt = Reg(init = Bool(false)) 
@@ -130,7 +127,7 @@ class ROB extends Module {
   var freeInc = UInt()
   val free = Reg(init = UInt(64), next = freeInc)
 
-  when(io.mispredPC.valid || !inited) {
+  when(io.mispredPC.valid) {
     freeInc := UInt(64)
     head.reset
   } .otherwise {
@@ -224,7 +221,7 @@ class ROB extends Module {
   // number will not match, so they will be ignored, but this case is not
   // guaranteed, so how to handle?
   for(i <- 0 until 6) {
-    when(io.wbValues(i).valid && !io.wbValues(i).is_addr) {
+    when(io.wbValues(i).valid && (!io.wbValues(i).is_addr || rob(io.wbValues(i).operand).isSt)) {
       robW(io.wbValues(i).operand).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
       robW(io.wbValues(i).operand).bits := rob(io.wbValues(i).operand)

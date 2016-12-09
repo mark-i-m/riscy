@@ -16,15 +16,8 @@ class Stall extends Module {
     val allocStall = Bool(OUTPUT)
   }
 
-  val inited = Reg(init = Bool(false), next = Bool(true))
-
-  when(inited) {
-    io.fetchStall := io.allocStall
-    io.allocStall := io.arbiterStallReq || io.robStallReq
-  } .otherwise {
-    io.fetchStall := Bool(false)
-    io.allocStall := Bool(false)
-  }
+  io.fetchStall := io.allocStall
+  io.allocStall := io.arbiterStallReq || io.robStallReq
 }
 
 class StallTests(c: Stall) extends Tester(c) {

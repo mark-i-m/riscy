@@ -6,3 +6,8 @@ project/target
 *.log
 *.vcd
 *.pdf
+*.o
+*.h
+*.cpp
+riscy_emu
+riscv

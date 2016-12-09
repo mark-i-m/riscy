@@ -22,8 +22,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // Memory for both data and instructions
   // - Port 0 => Instruction/Fetch
   // - Port 1 => Data/LSQ
-  //var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 100)) // 64kB memory, 8 word cache lines
-  var memory = Module(new BigMemory(64, 1 << 2, 2, 2, 5)) // 64kB memory, 8 word cache lines
+  var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 5)) // 64kB memory, 8 word cache lines, 5 cycle latency
 
   //TODO val bp = Module(new BP)
   var fetch = Module(new Fetch)
@@ -101,6 +100,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   for(i <- 0 until 2) { // Write ports
     memory.io.writePorts(i) := lsq.io.memStAddrPort(i)
     memory.io.writeData(i) := lsq.io.memStData(i)
+    memory.io.writeSize(i) := lsq.io.memStSize(i)
   }
 
   memory.io.readPorts(1) := lsq.io.memLdAddrPort
@@ -132,24 +132,19 @@ class TopLevelTests(c: Riscy) extends Tester(c) {
 
   step(1)
 
-  poke(c.io.ins(0).bits, genAddRI(5,5,5))
+  poke(c.io.ins(0).bits, 0xFFFFFFFF)
   poke(c.io.ins(0).valid, true)
 
-  poke(c.io.ins(1).bits, genAddRI(6,6,6))
+  poke(c.io.ins(1).bits, 0xFFFFFFFF)
   poke(c.io.ins(1).valid, true)
 
-  poke(c.io.ins(2).bits, genAddRI(7,7,7))
-  poke(c.io.ins(2).valid, true)
-
-  poke(c.io.ins(3).bits, genAddRI(8,8,8))
-  poke(c.io.ins(3).valid, true)
+  poke(c.io.ins(2).valid, false)
+  poke(c.io.ins(3).valid, false)
 
   step(1)
 
   poke(c.io.ins(0).valid, false)
   poke(c.io.ins(1).valid, false)
-  poke(c.io.ins(2).valid, false)
-  poke(c.io.ins(3).valid, false)
 
   step(30)
 
