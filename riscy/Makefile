@@ -4,8 +4,8 @@ MODULES = Fetch ICache DecodeSingle OpDecode Alloc ROB
 # Backend
 MODULES += IssueQueue IqArbiter LSQ ALU RobWriteback Execute Stall
 # Util
-MODULES += HelloModule MultiCounter CAM RegFile Memory DCache AddrQueueAlloc
-
+MODULES += HelloModule MultiCounter CAM RegFile Memory DCache AddrQueueAlloc 
+MODULES += NBDCache 
 ###############################################################################
 # Some configurations
 TOP = ..
