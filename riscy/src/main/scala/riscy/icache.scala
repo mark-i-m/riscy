@@ -11,9 +11,13 @@ object IcParams {
   val insts_per_cache_line = fetch_width * 2
   val cache_line_width = inst_width * insts_per_cache_line
 
-  val tag_bits = 21
+  val prefetch_buffer_len = 4
+  val prefetch_offset_bits = 5
+  val prefetch_tag_bits = addr_width - prefetch_offset_bits
+
   val index_bits = 6
   val offset_bits = 5
+  val tag_bits = addr_width - index_bits - offset_bits
 }
 
 class ICacheReq extends Bundle {
@@ -53,8 +57,9 @@ class ICache extends Module {
     val resp = new ICacheResp
 
     // Interface with memory
-    val memReadPort = Valid(UInt(OUTPUT, 64)).asOutput
-    val memReadData = Valid(UInt(INPUT, 64 * 8)).asInput
+    val memReadPort = Valid(UInt(OUTPUT, IcParams.addr_width)).asOutput
+    val memReadData = Valid(UInt(INPUT, IcParams.cache_line_width *
+                                        (IcParams.prefetch_buffer_len + 1))).asInput
   }
   require(isPow2(IcParams.nSets) && isPow2(IcParams.nWays))
 
@@ -82,21 +87,41 @@ class ICache extends Module {
 
   // output signals - Two cycle latency
   val s2_hit = Reg(init=Bool(false))
+  val s2_prefetch_hit = Reg(init=Bool(false))
   val s2_miss = Reg(init=Bool(false))
   val s2_tag_hit = Vec(IcParams.nWays, Reg(init=Bool(false)))
+  val s2_prefetch_tag_hit = Vec(IcParams.prefetch_buffer_len, Reg(init=Bool(false)))
   val s2_dout = Vec(IcParams.nWays, Reg(UInt(width = IcParams.cache_line_width/2)))
+  val s2_prefetch_out = Reg(UInt(width = IcParams.cache_line_width/2))
   val s2_vaddr = Reg(UInt(0, width = IcParams.addr_width))
 
+  // Prefetch related wires
+  val s1_prefetch_tag_match = Vec(IcParams.prefetch_buffer_len, Bool())
+  val s1_prefetch_tag_hit = Vec(IcParams.prefetch_buffer_len, Bool())
+  val s1_any_prefetch_tag_hit = Wire(Bool())
+  val s1_prefetch_hit = Wire(Bool())
+  val s1_prefetch_out = Bits(width = IcParams.cache_line_width)
+
+  // Circular buffer of 4 entries to store extra cache lines received from
+  // memory. This is to basically simulate prefetching
+  val prefetch_tag = Vec(IcParams.prefetch_buffer_len,
+                         Reg(UInt(width = IcParams.prefetch_tag_bits)))
+  val prefetch_line = Vec(IcParams.prefetch_buffer_len,
+                          Reg(UInt(width = IcParams.cache_line_width)))
+  val prefetch_valid = Vec(IcParams.prefetch_buffer_len, Reg(init=Bool(false)))
+
   // Time starts now!
-  s1_hit := s1_valid && s1_any_tag_hit && !io.s1_kill
-  s1_miss := s1_valid && !s1_any_tag_hit && !io.s1_kill
+  // We can say we got a "hit" if any of the tags matched in either the cache
+  // tag array or the prefetch buffer.
+  s1_hit := s1_valid && (s1_any_tag_hit || s1_any_prefetch_tag_hit) && !io.s1_kill
+  s1_miss := s1_valid && (!s1_any_tag_hit && !s1_any_prefetch_tag_hit) && !io.s1_kill
   rdy := state === s_ready && !s1_miss
 
-  val dout = Mux1H(s2_tag_hit, s2_dout)
+  // The final output will be either from the data array or the prefetch buffer
+  val dout = Mux(s2_prefetch_hit, s2_prefetch_out, Mux1H(s2_tag_hit, s2_dout))
   for (i <- 0 until IcParams.fetch_width) {
     io.resp.inst(i) := dout(32*i+31, 32*i)
   }
-  // 
   io.resp.valid := s2_hit
   // The Icache is deemed idle if it saw a hit or didn't see a miss.
   // This is basically useful for the first few cycles where we will have
@@ -104,16 +129,21 @@ class ICache extends Module {
   io.resp.idle := (s2_hit) || (!s2_miss && !stall && state === s_ready)
   io.resp.addr := s2_vaddr
 
+  // These s0_* values represent the addresses to be checked in this cycle
   val s0_valid = Mux(io.req.valid && rdy && !stall, io.req.valid, s1_valid)
   val s0_vaddr = Mux(io.req.valid && rdy && !stall, io.req.addr, s1_vaddr)
   val s0_idx = s0_vaddr(IcParams.offset_bits+IcParams.index_bits-1,
                         IcParams.offset_bits)
 
+  // These s1_* values represent the addresses that were checked 1 cycle ago
   val s1_tag = s1_vaddr(IcParams.addr_width-1,
                         IcParams.offset_bits+IcParams.index_bits)
   val s1_idx = s1_vaddr(IcParams.offset_bits+IcParams.index_bits-1,
                         IcParams.offset_bits)
   val s1_offset = s1_vaddr(IcParams.offset_bits-1, 0)
+  // This wire will be needed for checking the prefetch buffer.
+  val s1_pf_tag = s1_vaddr(IcParams.addr_width-1,
+                           IcParams.prefetch_offset_bits)
 
   // Check if we got a miss. If we did, we need to refill from memory
   val refill_addr = Reg(UInt(width = IcParams.addr_width))
@@ -121,27 +151,40 @@ class ICache extends Module {
     // s1_vaddr contains the address for which the data and tag arrays were
     // consulted 1 cycle ago and it generated a miss.
     refill_addr := s1_vaddr
-    //printf("Need to refill: %x, %x, %x\n", io.req.addr, s0_vaddr, s1_vaddr)
   }
 
+  // Refill logic
   val refill_tag = refill_addr(IcParams.addr_width-1,
                                IcParams.offset_bits+IcParams.index_bits)
   val refill_idx = refill_addr(IcParams.offset_bits+IcParams.index_bits-1,
                                IcParams.offset_bits)
-  val repl_way = LFSR16(s1_miss)(log2Up(IcParams.nWays)-1,0)
+  val replace_way = LFSR16(s1_miss)(0)
+
+  // Seems like we are waiting for refill and the memory has responded. Update
+  // the tag and data arrays.
   when (state === s_refill_wait && io.memReadData.valid) {
-    // TODO kbavishi: Need a smarter cache line replacement policy. Right now,
-    // I'm updating lines in both the ways in a set.
-    tag_array.write(refill_idx, Vec.fill(IcParams.nWays)(refill_tag))
-    data_array.write(refill_idx, Vec.fill(IcParams.nWays)(io.memReadData.bits(IcParams.cache_line_width,0)))
-    vb_array := vb_array.bitSet(Cat(Bits(0), refill_idx), Bool(true))
+    // Our cache line replacement policy is random replacement
+    tag_array.write(refill_idx, Vec.fill(IcParams.nWays)(refill_tag),
+                    Vec.tabulate(IcParams.nWays)(replace_way === Bits(_)))
+    data_array.write(refill_idx,
+      Vec.fill(IcParams.nWays)(io.memReadData.bits(IcParams.cache_line_width-1,0)))
+    vb_array := vb_array.bitSet(Cat(replace_way, refill_idx), Bool(true))
+
+    // Also fill the prefetch buffer with 4 additional lines
+    for (i <- 0 until IcParams.prefetch_buffer_len) {
+      prefetch_line(i) := io.memReadData.bits(IcParams.cache_line_width * (i+2) - 1,
+                                              IcParams.cache_line_width * (i+1))
+      prefetch_valid(i) := Bool(true)
+      prefetch_tag(i)   := refill_addr(IcParams.addr_width-1,
+                                       IcParams.prefetch_offset_bits) + UInt(i+1)
+    }
   }
 
   val refill_in_progress = state === s_refill_init || 
                            state === s_refill_wait || 
                            state === s_refill_done
 
-  // Initiate a memory request
+  // Initiate a memory request if we encountered a miss
   when(state === s_refill_init) {
     io.memReadPort.valid := Bool(true)
     io.memReadPort.bits  := refill_addr
@@ -160,16 +203,30 @@ class ICache extends Module {
   }
   s1_any_tag_hit := s1_tag_hit.reduceLeft(_||_)
 
-  // Perform data array match
+  // Perform data array match in parallel
   s1_dout := data_array.read(s0_idx, s0_valid && !refill_in_progress)
 
-  // Perform updates useful for next cycle
-  s2_hit := s1_hit && !stall && !io.s2_kill
-  s2_miss := s1_miss && !stall && !io.s2_kill
-  s2_tag_hit := s1_tag_hit
-  s2_vaddr := s1_vaddr
+  // Also perform tag match against prefetch buffer tags in parallel
+  for (i <- 0 until IcParams.prefetch_buffer_len) {
+    s1_prefetch_tag_match(i) := prefetch_tag(i) === s1_pf_tag
+    s1_prefetch_tag_hit(i)   := (prefetch_valid(i) && s1_prefetch_tag_match(i) &&
+                                 !refill_in_progress)
+  }
+  s1_any_prefetch_tag_hit := s1_prefetch_tag_hit.reduceLeft(_||_)
+  s1_prefetch_hit  := s1_valid && s1_any_prefetch_tag_hit && !io.s1_kill
 
-  // Need to rotate data out here
+  // Perform prefetch data match in parallel
+  s1_prefetch_out  := Mux1H(s1_prefetch_tag_hit, prefetch_line)
+
+  // Perform updates useful for next cycle
+  s2_hit              := s1_hit && !stall && !io.s2_kill
+  s2_prefetch_hit     := s1_prefetch_hit && !stall && !io.s2_kill
+  s2_miss             := s1_miss && !stall && !io.s2_kill
+  s2_tag_hit          := s1_tag_hit
+  s2_prefetch_tag_hit := s1_prefetch_tag_hit
+  s2_vaddr            := s1_vaddr
+
+  // Need to rotate data array output here
   for (i <- 0 until IcParams.nWays) {
     switch (s1_offset) {
       is (Bits(0)) {
@@ -196,6 +253,33 @@ class ICache extends Module {
       is (Bits(28)) {
         s2_dout(i) := Cat(Bits(0), s1_dout(i)(255, 224))
       }
+    }
+  }
+  // Rotate prefetch buffer output
+  switch (s1_offset) {
+    is (Bits(0)) {
+      s2_prefetch_out := s1_prefetch_out(127, 0)
+    }
+    is (Bits(4)) {
+      s2_prefetch_out := s1_prefetch_out(159, 32)
+    }
+    is (Bits(8)) {
+      s2_prefetch_out := s1_prefetch_out(191, 64)
+    }
+    is (Bits(12)) {
+      s2_prefetch_out := s1_prefetch_out(223, 96)
+    }
+    is (Bits(16)) {
+      s2_prefetch_out := s1_prefetch_out(255, 128)
+    }
+    is (Bits(20)) {
+      s2_prefetch_out := Cat(Bits(0), s1_prefetch_out(255, 160))
+    }
+    is (Bits(24)) {
+      s2_prefetch_out := Cat(Bits(0), s1_prefetch_out(255, 192))
+    }
+    is (Bits(28)) {
+      s2_prefetch_out := Cat(Bits(0), s1_prefetch_out(255, 224))
     }
   }
 
@@ -278,7 +362,7 @@ class ICacheTests(c: ICache) extends Tester(c) {
   poke(c.io.req.addr, 0x4)
   step(1)
 
-  for (i <- 2 until 8) {
+  for (i <- 2 until 40) {
     expect(c.io.resp.valid, true)
     expect(c.io.resp.idle, true)
     expect(c.io.resp.addr, (i-2)*4)
@@ -288,35 +372,36 @@ class ICacheTests(c: ICache) extends Tester(c) {
     poke(c.io.req.addr, i*4)
     step(1)
   }
-  // Cycle 12
+  // Cycle 44
   expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
-  expect(c.io.resp.addr, 24)
+  expect(c.io.resp.addr, 152)
   expect(c.io.memReadPort.valid, false)
   peek(c.io.resp.inst)
-  poke(c.io.req.addr, 32)
+  poke(c.io.req.addr, 160)
   step(1)
 
-  // Cycle 13
+  // Cycle 45
   expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
-  expect(c.io.resp.addr, 28)
+  expect(c.io.resp.addr, 156)
   expect(c.io.memReadPort.valid, false)
   peek(c.io.resp.inst)
+  poke(c.io.req.addr, 164)
   step(1)
 
-  // Cycle 14 - We expect a miss because of the request for addr 32.
+  // Cycle 46 - We expect a miss because of the request for addr 160.
   // This will take 3 cycles to refill and 1 more cycle to get result
   expect(c.io.resp.valid, false)
   expect(c.io.resp.idle, false)
 
   // Memory request from I$
   expect(c.io.memReadPort.valid, true)
-  expect(c.io.memReadPort.bits, 0x20)
+  expect(c.io.memReadPort.bits, 160)
   peek(c.io.resp.inst)
   step(1)
 
-  // Cycle 15 - Refill going on
+  // Cycle 47 - Refill going on
   expect(c.io.resp.valid, false)
   expect(c.io.resp.idle, false)
 
@@ -326,24 +411,24 @@ class ICacheTests(c: ICache) extends Tester(c) {
   peek(c.io.resp.inst)
   step(2)
 
-  // Cycle 17 - Refill finished. Should get hit in next cycle
+  // Cycle 49 - Refill finished. Should get hit in next cycle
   expect(c.io.resp.valid, false)
   expect(c.io.resp.idle, false)
   peek(c.io.resp.inst)
-  poke(c.io.req.addr, 36)
+  poke(c.io.req.addr, 164)
   step(1)
 
-  // Cycle 18 - Should get hit.
+  // Cycle 50 - Should get hit.
   expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
-  expect(c.io.resp.addr, 32)
+  expect(c.io.resp.addr, 160)
   peek(c.io.resp.inst)
   // Lets stall the Icache.
   poke(c.io.resp.stall, true)
-  poke(c.io.req.addr, 40)
+  poke(c.io.req.addr, 168)
   step(1)
 
-  // Cycle 19 - Should not get a valid response since Icache is stalled
+  // Cycle 51 - Should not get a valid response since Icache is stalled
   expect(c.io.resp.valid, false)
   expect(c.io.resp.idle, false)
   peek(c.io.resp.inst)
@@ -351,21 +436,21 @@ class ICacheTests(c: ICache) extends Tester(c) {
   poke(c.io.resp.stall, false)
   step(1)
 
-  // Cycle 20 - Should get hit for 36 since we are unstalled.
+  // Cycle 52 - Should get hit for 164 since we are unstalled.
   expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
-  expect(c.io.resp.addr, 36)
+  expect(c.io.resp.addr, 164)
   peek(c.io.resp.inst)
   // Kill request issued 2 cycles ago
   poke(c.io.s2_kill, true)
   poke(c.io.req.addr, 4)
   step(1)
 
-  // Cycle 21 - Response for addr 40 should be invalidated because of our kill
+  // Cycle 53 - Response for addr 168 should be invalidated because of our kill
   // request
   expect(c.io.resp.valid, false)
   expect(c.io.resp.idle, true)
-  expect(c.io.resp.addr, 40)
+  expect(c.io.resp.addr, 168)
   peek(c.io.resp.inst)
   poke(c.io.s2_kill, false)
   // Kill request for addr 4 issued 1 cycle ago
@@ -373,7 +458,7 @@ class ICacheTests(c: ICache) extends Tester(c) {
   poke(c.io.req.addr, 8)
   step(1)
 
-  // Cycle 22 - Response for addr 4 should be invalidated because of our kill
+  // Cycle 54 - Response for addr 4 should be invalidated because of our kill
   // request
   expect(c.io.resp.valid, false)
   expect(c.io.resp.idle, true)
@@ -385,7 +470,7 @@ class ICacheTests(c: ICache) extends Tester(c) {
   step(1)
 
   // Verify that everything proceeds as normal once all kill requests have been
-  // reset. Cycle 23 - Response for addr 8 should be received correctly
+  // reset. Cycle 55 - Response for addr 8 should be received correctly
   expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 8)
@@ -393,7 +478,7 @@ class ICacheTests(c: ICache) extends Tester(c) {
   poke(c.io.req.addr, 16)
   step(1)
 
-  // Cycle 24 - Response for addr 12 should be received correctly
+  // Cycle 56 - Response for addr 12 should be received correctly
   expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 12)

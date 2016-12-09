@@ -268,26 +268,21 @@ class FetchTests(c: Fetch) extends Tester(c) {
   peek_regs(c)
   step(1)
 
-  // Cycle 8 - This should be a miss since the 0x20 requested 2 cycles ago
-  // doesn't exist in cache
-  expect(c.icache.io.resp.valid, false)
-  expect(c.icache.io.resp.idle, false)
-  expect(c.icache.io.req.addr, 0x30)
-  expect_all_inst_validity(c, false)
-
-  // Memory fullfills I$ request
-  poke(c.io.memReadData.valid, true)
-  poke(c.io.memReadData.bits, 0x30)
-
+  // Cycle 8 - This should not be a miss thanks to the prefetch buffer
+  expect(c.icache.io.resp.valid, true)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.resp.addr, 0x20)
+  expect(c.icache.io.req.addr, 0x40)
+  expect_all_inst_validity(c, true)
   peek_regs(c)
   step(1)
 
-  // Cycle 9 - Icache busy filling response
-  expect(c.icache.io.resp.valid, false)
-  expect(c.icache.io.resp.idle, false)
-  expect(c.icache.io.req.addr, 0x30)
-  expect_all_inst_validity(c, false)
-  expect(c.io.memReadPort.valid, false)
+  // Cycle 9 - Another hit
+  expect(c.icache.io.resp.valid, true)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.resp.addr, 0x30)
+  expect(c.icache.io.req.addr, 0x50)
+  expect_all_inst_validity(c, true)
   peek_regs(c)
 } 
 
