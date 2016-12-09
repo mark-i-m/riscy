@@ -6,6 +6,7 @@ import scala.language.reflectiveCalls
 class LSQEntry extends AddrBufEntry {
   val addr = Valid(UInt(OUTPUT, 32))
   val value = Valid(UInt(OUTPUT, 64))
+  val fired = Bool(OUTPUT)
   val ready  = Bool(OUTPUT) // Entry populated or not
 }
 
@@ -89,22 +90,24 @@ class LSQ extends Module {
   for ( i <- 0 until DEPTH) {
     for ( j <- 0 until 4) {
       when (WbCamAddr.io.hit(j)(i) && io.robWbin.entry_s1(j).valid
-              && io.robWbin.entry_s1(j).is_addr) {
+              && io.robWbin.entry_s1(j).is_addr && addrq(i).valid) {
         addrq(i).bits.addr.valid := Bool(true)
         addrq(i).bits.addr.bits := io.robWbin.entry_s1(j).data
       } .elsewhen (WbCamAddr.io.hit(j+4)(i) && io.robWbin.entry_s2(j).valid
-                    && io.robWbin.entry_s2(j).is_addr) {
+                    && io.robWbin.entry_s2(j).is_addr && addrq(i).valid) {
         addrq(i).bits.addr.valid := Bool(true)
         addrq(i).bits.addr.bits := io.robWbin.entry_s2(j).data
       }
     }
     for ( j <- 0 until 6) {
       when (WbCamValue.io.hit(j)(i) && io.robWbin.entry_s1(j).valid
-              && !io.robWbin.entry_s1(j).is_addr && addrq(i).bits.st_nld) {
+              && !io.robWbin.entry_s1(j).is_addr && addrq(i).bits.st_nld
+              && addrq(i).valid) {
         addrq(i).bits.value.valid := Bool(true)
         addrq(i).bits.value.bits := io.robWbin.entry_s1(j).data
       } .elsewhen (WbCamValue.io.hit(j+6)(i) && io.robWbin.entry_s2(j).valid
-                    && !io.robWbin.entry_s2(j).is_addr && addrq(i).bits.st_nld) {
+                    && !io.robWbin.entry_s2(j).is_addr && addrq(i).bits.st_nld
+                    && addrq(i).valid) {
         addrq(i).bits.value.valid := Bool(true)
         addrq(i).bits.value.bits := io.robWbin.entry_s2(j).data
       }
@@ -122,7 +125,7 @@ class LSQ extends Module {
       if (i != j) {
         when (addrq(i).valid && addrq(i).bits.addr.valid 
               && addrq(j).bits.addr.valid && CamAddrMatch.io.hit(j)(i)
-              && (addrq(i).bits.robLoc < addrq(j).bits.robLoc)) {
+              && (addrq(i).bits.robLoc > addrq(j).bits.robLoc)) {
           depMatrix(i).bits(j) := Bool(true)
         }
       }
@@ -131,54 +134,72 @@ class LSQ extends Module {
 
   val loads = Vec.tabulate(32) { i => (addrq(i).valid
               && !addrq(i).bits.st_nld && !addrq(i).bits.value.valid
-              && addrq(i).bits.addr.valid)}
+              && addrq(i).bits.addr.valid && !addrq(i).bits.fired)}
+  val firedloads = Vec.tabulate(32) { i => (addrq(i).valid
+              && !addrq(i).bits.st_nld && !addrq(i).bits.value.valid
+              && addrq(i).bits.addr.valid && addrq(i).bits.fired)}
 
   val isLoad = Cat(Array.tabulate(32) {loads(_)})
+  // Queue to buffer loads in-flight to memory
+  val ldReqBuffer = Module(new Queue(UInt(width=64),32))
+
   when (isLoad.orR) {
+    ldReqBuffer.io.enq.valid := Bool(true)
+    ldReqBuffer.io.enq.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
+
     dcache.io.ldReq.addr.valid := Bool(true)
     dcache.io.ldReq.addr.bits := addrq(PriorityEncoder(loads)).bits.addr.bits
-    when (dcache.io.ldReq.data.valid && !addrq(PriorityEncoder(loads)).bits.value.valid) {
-      printf("LSQ: Loading valid data from D$ to address queue entry %d\n", UInt(PriorityEncoder(loads)));
-      switch (addrq(PriorityEncoder(loads)).bits.funct3) {
-        is (UInt(0x3)) {
-          addrq(PriorityEncoder(loads)).bits.value.bits := dcache.io.ldReq.data.bits
-        }
-        is (UInt(0x2)) {
-          addrq(PriorityEncoder(loads)).bits.value.bits :=
-            Cat(Fill(32,dcache.io.ldReq.data.bits(31)),
-              dcache.io.ldReq.data.bits(31,0))
-        }
-        is (UInt(0x6)) {
-          addrq(PriorityEncoder(loads)).bits.value.bits :=
-            Cat(Fill(32,UInt(0,width=1)),
-              dcache.io.ldReq.data.bits(31,0))
-        }
-        is (UInt(0x1)) {
-          addrq(PriorityEncoder(loads)).bits.value.bits :=
-            Cat(Fill(48,dcache.io.ldReq.data.bits(15)),
-              dcache.io.ldReq.data.bits(15,0))
-        }
-        is (UInt(0x5)) {
-          addrq(PriorityEncoder(loads)).bits.value.bits :=
-            Cat(Fill(48,UInt(0,width=1)),
-              dcache.io.ldReq.data.bits(15,0))
-        }
-        is (UInt(0x0)) {
-          addrq(PriorityEncoder(loads)).bits.value.bits :=
-            Cat(Fill(56,dcache.io.ldReq.data.bits(7)),
-              dcache.io.ldReq.data.bits(7,0))
-        }
-        is (UInt(0x4)) {
-          addrq(PriorityEncoder(loads)).bits.value.bits :=
-            Cat(Fill(56,UInt(0,width=1)),
-              dcache.io.ldReq.data.bits(7,0))
-        }
-      }
-      addrq(PriorityEncoder(loads)).bits.value.valid := Bool(true)
-    }
+    addrq(PriorityEncoder(loads)).bits.fired := Bool(true)
   } .otherwise {
     dcache.io.ldReq.addr.valid := Bool(false)
     dcache.io.ldReq.addr.bits := UInt(0xdead)
+    ldReqBuffer.io.enq.valid := Bool(false)
+    ldReqBuffer.io.enq.bits := UInt(0xdead)
+  }
+
+  when (dcache.io.ldReq.data.valid && !addrq(PriorityEncoder(firedloads)).bits.value.valid) {
+    printf("LSQ: Loading valid data from D$ to address queue entry %d\n", UInt(PriorityEncoder(firedloads)));
+    ldReqBuffer.io.deq.ready := Bool(true)
+    switch (addrq(PriorityEncoder(firedloads)).bits.funct3) {
+      is (UInt(0x3)) {
+        addrq(PriorityEncoder(firedloads)).bits.value.bits := dcache.io.ldReq.data.bits
+      }
+      is (UInt(0x2)) {
+        addrq(PriorityEncoder(firedloads)).bits.value.bits :=
+          Cat(Fill(32,dcache.io.ldReq.data.bits(31)),
+            dcache.io.ldReq.data.bits(31,0))
+      }
+      is (UInt(0x6)) {
+        addrq(PriorityEncoder(firedloads)).bits.value.bits :=
+          Cat(Fill(32,UInt(0,width=1)),
+            dcache.io.ldReq.data.bits(31,0))
+      }
+      is (UInt(0x1)) {
+        addrq(PriorityEncoder(firedloads)).bits.value.bits :=
+          Cat(Fill(48,dcache.io.ldReq.data.bits(15)),
+            dcache.io.ldReq.data.bits(15,0))
+      }
+      is (UInt(0x5)) {
+        addrq(PriorityEncoder(firedloads)).bits.value.bits :=
+          Cat(Fill(48,UInt(0,width=1)),
+            dcache.io.ldReq.data.bits(15,0))
+      }
+      is (UInt(0x0)) {
+      printf("Setting data\n");
+        addrq(PriorityEncoder(firedloads)).bits.value.bits :=
+          Cat(Fill(56,dcache.io.ldReq.data.bits(7)),
+            dcache.io.ldReq.data.bits(7,0))
+      }
+      is (UInt(0x4)) {
+        addrq(PriorityEncoder(firedloads)).bits.value.bits :=
+          Cat(Fill(56,UInt(0,width=1)),
+            dcache.io.ldReq.data.bits(7,0))
+      }
+    }
+    printf("Setting valid\n");
+    addrq(PriorityEncoder(firedloads)).bits.value.valid := Bool(true)
+  } .otherwise {
+    ldReqBuffer.io.deq.ready := Bool(false)
   }
 
   val CamStCommit = Module(new CAM(2, DEPTH, 6))
@@ -221,6 +242,7 @@ class LSQ extends Module {
         printf("LSQ: Invalidating load entry on address queue\n");
         addrq(i).bits.addr.valid := Bool(false)
         addrq(i).bits.value.valid := Bool(false)
+        addrq(i).bits.fired := Bool(false)
         addrq(i).valid := Bool(false)
       } .otherwise {
         for (j <- 0 until 2) {
