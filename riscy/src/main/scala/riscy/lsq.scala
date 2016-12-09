@@ -90,22 +90,24 @@ class LSQ extends Module {
   for ( i <- 0 until DEPTH) {
     for ( j <- 0 until 4) {
       when (WbCamAddr.io.hit(j)(i) && io.robWbin.entry_s1(j).valid
-              && io.robWbin.entry_s1(j).is_addr) {
+              && io.robWbin.entry_s1(j).is_addr && addrq(i).valid) {
         addrq(i).bits.addr.valid := Bool(true)
         addrq(i).bits.addr.bits := io.robWbin.entry_s1(j).data
       } .elsewhen (WbCamAddr.io.hit(j+4)(i) && io.robWbin.entry_s2(j).valid
-                    && io.robWbin.entry_s2(j).is_addr) {
+                    && io.robWbin.entry_s2(j).is_addr && addrq(i).valid) {
         addrq(i).bits.addr.valid := Bool(true)
         addrq(i).bits.addr.bits := io.robWbin.entry_s2(j).data
       }
     }
     for ( j <- 0 until 6) {
       when (WbCamValue.io.hit(j)(i) && io.robWbin.entry_s1(j).valid
-              && !io.robWbin.entry_s1(j).is_addr && addrq(i).bits.st_nld) {
+              && !io.robWbin.entry_s1(j).is_addr && addrq(i).bits.st_nld
+              && addrq(i).valid) {
         addrq(i).bits.value.valid := Bool(true)
         addrq(i).bits.value.bits := io.robWbin.entry_s1(j).data
       } .elsewhen (WbCamValue.io.hit(j+6)(i) && io.robWbin.entry_s2(j).valid
-                    && !io.robWbin.entry_s2(j).is_addr && addrq(i).bits.st_nld) {
+                    && !io.robWbin.entry_s2(j).is_addr && addrq(i).bits.st_nld
+                    && addrq(i).valid) {
         addrq(i).bits.value.valid := Bool(true)
         addrq(i).bits.value.bits := io.robWbin.entry_s2(j).data
       }
@@ -123,7 +125,7 @@ class LSQ extends Module {
       if (i != j) {
         when (addrq(i).valid && addrq(i).bits.addr.valid 
               && addrq(j).bits.addr.valid && CamAddrMatch.io.hit(j)(i)
-              && (addrq(i).bits.robLoc < addrq(j).bits.robLoc)) {
+              && (addrq(i).bits.robLoc > addrq(j).bits.robLoc)) {
           depMatrix(i).bits(j) := Bool(true)
         }
       }
