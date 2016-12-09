@@ -197,7 +197,7 @@ class LSQ extends Module {
     printf("Setting valid\n");
     addrq(PriorityEncoder(firedloads)).bits.value.valid := Bool(true)
   } .otherwise {
-  ldReqBuffer.io.deq.ready := Bool(false)
+    ldReqBuffer.io.deq.ready := Bool(false)
   }
 
   val CamStCommit = Module(new CAM(2, DEPTH, 6))
