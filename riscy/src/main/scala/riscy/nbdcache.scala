@@ -18,16 +18,18 @@ class NBDCache extends Module {
   val io = new Bundle {
     val stReq = Vec(2, new NBDCacheStReq)
     val ldReq = new NBDCacheLdReq
-    val memStAddrPort = Vec(2, Valid(UInt(OUTPUT,64).asOutput))
-    val memStData = Vec(2, UInt(OUTPUT,64))
-    val memStSize = Vec(2, UInt(OUTPUT,3))
-    val memLdAddrPort = Valid(UInt(OUTPUT,64)).asOutput
-    val memLdData = Valid(UInt(INPUT,8 * 64)).asInput
+    // In-module memory - so do not need it
+		//val memStAddrPort = Vec(2, Valid(UInt(OUTPUT,64).asOutput))
+    //val memStData = Vec(2, UInt(OUTPUT,64))
+    //val memStSize = Vec(2, UInt(OUTPUT,3))
+    //val memLdAddrPort = Valid(UInt(OUTPUT,64)).asOutput
+    //val memLdData = Valid(UInt(INPUT,8 * 64)).asInput
 		val ldStall = Bool(OUTPUT)
 		val stall = Bool(OUTPUT)
 
   }
 	
+	var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 2))
 	val missCount = Reg(init=UInt(0, width = 3))
 	val missAddr = Vec.fill(4) (Reg(outType = UInt(width = 64)))
 	val missCounter = new MultiCounter(4)
@@ -62,46 +64,47 @@ class NBDCache extends Module {
 	// Assigning st to mem
 	for (i <- 0 until 2) {
 		when (!io.stall) {
-	    io.memStAddrPort(i).valid := io.stReq(i).addr.valid
-	    io.memStAddrPort(i).bits := io.stReq(i).addr.bits
-	    io.memStData(i) := io.stReq(i).data
+	    memory.io.writePorts(i).valid := io.stReq(i).addr.valid
+	    memory.io.writePorts(i).bits := io.stReq(i).addr.bits
+	    memory.io.writeData(i) := io.stReq(i).data
 	    /*
 	     * size = 0x0 -> Store low byte
 	     * size = 0x1 -> Store low half-word
 	     * size = 0x2 -> Store low word
 	     * size = 0x3 -> Store entire double word
 	     */
-	    io.memStSize(i) := io.stReq(i).size
+	    memory.io.writeSize(i) := io.stReq(i).size
 		} .otherwise {
-			io.memStAddrPort(i).valid := Bool(false)
-			io.memStAddrPort(i).bits := io.stReq(i).addr.bits
-	    io.memStData(i) := io.stReq(i).data
+			memory.io.writePorts(i).valid := Bool(false)
+			memory.io.writePorts(i).bits := io.stReq(i).addr.bits
+	    memory.io.writeData(i) := io.stReq(i).data
 	    /*
 	     * size = 0x0 -> Store low byte
 	     * size = 0x1 -> Store low half-word
 	     * size = 0x2 -> Store low word
 	     * size = 0x3 -> Store entire double word
 	     */
-	    io.memStSize(i) := io.stReq(i).size
+	    memory.io.writeSize(i) := io.stReq(i).size
   	}
 	}
 	
 	// Assigning ld to mem
 	
 	// miss state definition
-	val s0_ready :: s0_miss :: s0_refill_init :: s0_refill_wait :: s0_refill_done :: Nil = Enum(UInt(), 5)
+	val s0_ready :: s0_miss :: s0_mem_init :: s0_mem_wait :: s0_mem_done :: Nil = Enum(UInt(), 5)
   val state_0 = Reg(init=s0_ready)
 
-	val s1_ready :: s1_miss :: s1_refill_init :: s1_refill_wait :: s1_refill_done :: Nil = Enum(UInt(), 5)
+	val s1_ready :: s1_miss :: s1_mem_init :: s1_mem_wait :: s1_mem_done :: Nil = Enum(UInt(), 5)
   val state_1 = Reg(init=s1_ready)
 
-	val s2_ready :: s2_miss :: s2_refill_init :: s2_refill_wait :: s2_refill_done :: Nil = Enum(UInt(), 5)
+	val s2_ready :: s2_miss :: s2_mem_init :: s2_mem_wait :: s2_mem_done :: Nil = Enum(UInt(), 5)
   val state_2 = Reg(init=s2_ready)
 
-	val s3_ready :: s3_miss :: s3_refill_init :: s3_refill_wait :: s3_refill_done :: Nil = Enum(UInt(), 5)
+	val s3_ready :: s3_miss :: s3_mem_init :: s3_mem_wait :: s3_mem_done :: Nil = Enum(UInt(), 5)
   val state_3 = Reg(init=s3_ready)
 
 	val incrMiss = Bool(false)
+
   when (!io.stall && io.ldReq.addr.valid && rand >= UInt(16384)) {
 		incrMiss := Bool(true)
 		switch (missCounter.value) {
@@ -122,14 +125,18 @@ class NBDCache extends Module {
 				state_3 := s3_miss
       }
 		}
+		memory.io.readPorts(0).valid := Bool(false)
+		memory.io.readPorts(0).bits := io.ldReq.addr.bits
+  	io.ldReq.data.bits := memory.io.readData(0).bits(63,0)
+  	io.ldReq.data.valid := Bool(false)
+	} .elsewhen (io.stall) {
 	} .otherwise {
 		incrMiss := Bool(false)
+		memory.io.readPorts(0).valid := io.ldReq.addr.valid
+		memory.io.readPorts(0).bits := io.ldReq.addr.bits
+		io.ldReq.data.bits := memory.io.readData(0).bits(63,0)
+  	io.ldReq.data.valid := memory.io.readData(0).valid
 	}	
-
-  io.memLdAddrPort.valid := io.ldReq.addr.valid
-  io.memLdAddrPort.bits := io.ldReq.addr.bits
-  io.ldReq.data.bits := io.memLdData.bits(63,0)
-  io.ldReq.data.valid := io.memLdData.valid
 }
 
 class NBDCacheTests(c: NBDCache) extends Tester(c) {
