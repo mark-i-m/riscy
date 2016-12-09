@@ -74,9 +74,9 @@ class Riscy(blackbox: Boolean = false) extends Module {
   issue.io.inst := alloc.io.allocROB
 
   //ROB to issue stage era
-	issue.io.era := rob.io.robEra
+  issue.io.era := rob.io.robEra
 	
-	// Hook up IssueStage and LSQ (Addr Q)
+  // Hook up IssueStage and LSQ (Addr Q)
   lsq.io.resEntry     := issue.io.addrBuf
   issue.io.addrBufLen  := lsq.io.currentLen
 
