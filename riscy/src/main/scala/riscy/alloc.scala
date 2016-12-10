@@ -15,6 +15,7 @@ class RiscyAlloc extends Module {
     // Input from the rotator and decode logic with 4 decoded instructions
     val inst = Vec.fill(4) { Valid(new DecodeIns()).flip }
     val pc = Vec.fill(4) {UInt(INPUT, 64)}
+    val bchPredTaken = Vec(4, Bool(INPUT))
 
     // Access the Remap table to find out what the current mappings are (so we
     // can rename)
@@ -61,6 +62,10 @@ class RiscyAlloc extends Module {
 
   val pipelinedPc = Vec.tabulate(4) {
     i => RegEnable(io.pc(i), !io.allocStall)
+  }
+
+  val pipelinedPred = Vec.tabulate(4) {
+    i => RegEnable(io.bchPredTaken(i), !io.allocStall)
   }
 
   // Do a simple addition to rename the instructions. Every instruction gets
@@ -131,6 +136,7 @@ class RiscyAlloc extends Module {
     robEntry.isJmp := pipelinedOpDecode(i).isJmp
     robEntry.isHalt := pipelinedOpDecode(i).isHalt
     robEntry.hasRd := pipelinedOpDecode(i).hasRd
+    robEntry.predTaken := pipelinedPred(i)
     robEntry.era := io.robEra
     
 		// Destination

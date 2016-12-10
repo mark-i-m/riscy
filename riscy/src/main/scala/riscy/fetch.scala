@@ -156,13 +156,7 @@ class Fetch extends Module {
     io.output.insts(i).bits := icache.io.resp.inst(i)
 
     // Branch prediction
-    when (io.output.insts(i).bits(6,0) === UInt(0x63) // Conditional branches
-          || io.output.insts(i).bits(6,0) === UInt(0x67) // JALR
-          || io.output.insts(i).bits(6,0) === UInt(0x6f)) { //JAL
-      io.output.predTaken(i) := io.isBranchTaken
-    } .otherwise {
-      io.output.predTaken(i) := Bool(false)
-    }
+    io.output.predTaken(i) := io.isBranchTaken
   }
 }
 

@@ -47,6 +47,8 @@ class ROBEntry extends DecodeIns {
   // From BP:
   // - was this branch predicted taken? 1 => T, 0 => NT
   val predTaken = Bool(OUTPUT)
+
+  // From Exec:
   val isMispredicted = Bool(OUTPUT)
 }
 

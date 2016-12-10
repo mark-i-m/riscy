@@ -63,6 +63,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
 
     if(blackbox) {
       alloc.io.pc(i) := fetch.io.output.pc(i)
+      alloc.io.bchPredTaken(i) := fetch.io.output.predTaken(i)
     }
   }
 
