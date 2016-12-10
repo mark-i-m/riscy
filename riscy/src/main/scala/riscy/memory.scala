@@ -121,6 +121,67 @@ class MemoryTests(c: BigMemory) extends Tester(c) {
   // Write address 0x0
   poke(c.io.writePorts(0).valid, true)
   poke(c.io.writePorts(0).bits, 0x0)
+  poke(c.io.writeSize(0), 0x0) // sb
+  poke(c.io.writeData(0), 0xDEADBEEF)
+
+  step(1)
+
+  poke(c.io.writePorts(0).valid, false)
+
+  // Read address 0x0
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0xEF)
+
+  // Read again
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0xEF)
+
+  // Write address 0x0
+  poke(c.io.writePorts(0).valid, true)
+  poke(c.io.writePorts(0).bits, 0x0)
+  poke(c.io.writeSize(0), 0x1) // sh
+  poke(c.io.writeData(0), 0xDEADBEEF)
+
+  step(1)
+
+  poke(c.io.writePorts(0).valid, false)
+
+
+  // Read address 0x0
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0xBEEF)
+
+  // Write address 0x0
+  poke(c.io.writePorts(0).valid, true)
+  poke(c.io.writePorts(0).bits, 0x0)
+  poke(c.io.writeSize(0), 0x2) // sw
   poke(c.io.writeData(0), 0xDEADBEEF)
 
   step(1)
@@ -140,18 +201,40 @@ class MemoryTests(c: BigMemory) extends Tester(c) {
   expect(c.io.readData(0).valid, true)
   expect(c.io.readData(0).bits, 0xDEADBEEF)
 
-  // Read again
+  // Write address 0x0
+  poke(c.io.writePorts(0).valid, true)
+  poke(c.io.writePorts(0).bits, 0x0)
+  poke(c.io.writeSize(0), 0x3) // sd
+  poke(c.io.writeData(0), 0xCAFEBABEDEADBEEFl)
+
+  step(1)
+
+  poke(c.io.writePorts(0).valid, false)
+
+  // Read address 0x0
   poke(c.io.readPorts(0).valid, true)
   poke(c.io.readPorts(0).bits, 0)
 
   step(1)
 
+  // Read address 0x1
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 4)
+
+  step(1)
+
   poke(c.io.readPorts(0).valid, false)
 
-  wait(3)
+  wait(2)
 
   expect(c.io.readData(0).valid, true)
   expect(c.io.readData(0).bits, 0xDEADBEEF)
+
+  step(1)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0xCAFEBABE)
+
 }
 
 class MemoryGenerator extends TestGenerator {
