@@ -107,6 +107,8 @@ class IqArbiter extends Module {
 	// pipeline the stall
 
 	val pipeStall = Reg (next = io.stall)
+
+
 	for (i <- 0 until 4) {
 		when (!pipeStall) {
 			io.allocIQ(i).inst.bits := io.inst(i).bits
@@ -148,7 +150,7 @@ class IqArbiter extends Module {
 
 			// Setting all values to false is stall is set
 			io.allocIQ(i).inst.bits := io.inst(i).bits
-			io.allocIQ(i).inst.valid := bool(false)
+			io.allocIQ(i).inst.valid := Bool(false)
 			io.allocIQ(i).iqNum := finalMin(0)
 			io.addrBuf(i).valid := Bool(false)
 			io.addrBuf(i).bits.st_nld := Bool(false)
@@ -158,6 +160,7 @@ class IqArbiter extends Module {
 			io.addrBuf(i).bits.rs1Val 		:= io.inst(i).bits.rs1Val
 			io.addrBuf(i).bits.rs2Rename 	:= io.inst(i).bits.rs2Rename
 			io.addrBuf(i).bits.rs2Val 		:= io.inst(i).bits.rs2Val
+		}
 	}
 }
 
