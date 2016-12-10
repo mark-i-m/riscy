@@ -24,7 +24,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // - Port 1 => Data/LSQ
   var memory = Module(new BigMemory(64, 1 << 10, 2, 2, 5)) // 64kB memory, 8 word cache lines, 5 cycle latency
 
-  //TODO val bp = Module(new BP)
+  val bp = Module(new BP)
   var fetch = Module(new Fetch)
   val decode = Array.fill(4)(Module(new DecodeSingle))
   val alloc = Module(new RiscyAlloc)
@@ -38,8 +38,8 @@ class Riscy(blackbox: Boolean = false) extends Module {
   memory.io.readPorts(0) := fetch.io.memReadPort
   fetch.io.memReadData := memory.io.readData(0)
 
-  // TODO: hook up BP and Fetch
-  //fetch <> bp
+  // Hook up BP and Fetch
+  fetch <> bp
 
   // branch misprediction signals from ROB to Fetch
   fetch.io.isBranchMispred := rob.io.mispredPC.valid

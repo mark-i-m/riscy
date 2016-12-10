@@ -18,14 +18,19 @@ class FetchOutput extends Bundle {
 class Fetch extends Module {
   val io = new Bundle {
     /* INPUTS */
+    // From BP
     val btbAddr = UInt(INPUT, 64)
     val rasAddr = UInt(INPUT, 64)
     val isBranchTaken = Bool(INPUT)
+
+    // From ROB
     val branchMispredTarget = UInt(INPUT, 64)
     val isBranchMispred = Bool(INPUT)
+
     // Is this instruction a return from a subroutine call?
     val isReturn = Bool(INPUT)
     val stall = Bool(INPUT)
+
     // Memory requests fullfilled from memory
     val memReadData = Valid(UInt(INPUT, 64 * 8)).asInput
 
