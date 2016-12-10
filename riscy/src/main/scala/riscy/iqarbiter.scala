@@ -100,46 +100,67 @@ class IqArbiter extends Module {
 		finalMin(3) := max1
 	}
 
-        for (i <- 0 until 3) {
+  for (i <- 0 until 3) {
 		minDiff(i) := io.iqLen(finalMin(i+1)) - io.iqLen(finalMin(i))
 	}
+	
+	// pipeline the stall
+
+	val pipeStall = Reg (next = io.stall)
+
 
 	for (i <- 0 until 4) {
-		io.allocIQ(i).inst.bits := io.inst(i).bits
-		io.allocIQ(i).inst.valid := io.inst(i).valid
-		
-		// Logic to issue instructions to different iqs
-		// if there is a stall signal set, top issue module
-		// should not issue any instructions to any iqs
-		when (UInt(i) <= minDiff(0)) {
-			io.allocIQ(i).iqNum := finalMin(0)
-		} .elsewhen (UInt(i) <= (minDiff(1) + minDiff(0) + UInt(1))) {
-			io.allocIQ(i).iqNum := finalMin(1)
-		} .elsewhen (UInt(i) <= (minDiff(2) + minDiff(1) + minDiff(0) + UInt(2))) {
-			io.allocIQ(i).iqNum := finalMin(2)
+		when (!pipeStall) {
+			io.allocIQ(i).inst.bits := io.inst(i).bits
+			io.allocIQ(i).inst.valid := io.inst(i).valid
+			
+			// Logic to issue instructions to different iqs
+			// if there is a stall signal set, top issue module
+			// should not issue any instructions to any iqs
+			when (UInt(i) <= minDiff(0)) {
+				io.allocIQ(i).iqNum := finalMin(0)
+			} .elsewhen (UInt(i) <= (minDiff(1) + minDiff(0) + UInt(1))) {
+				io.allocIQ(i).iqNum := finalMin(1)
+			} .elsewhen (UInt(i) <= (minDiff(2) + minDiff(1) + minDiff(0) + UInt(2))) {
+				io.allocIQ(i).iqNum := finalMin(2)
+			} .otherwise {
+				io.allocIQ(i).iqNum := finalMin(3)
+			}
+	
+			// Logic to generate the entry for LS Buffer
+			when ((io.inst(i).valid === Bool(true)) && 
+						(io.inst(i).bits.isLd === Bool(true))) {
+				io.addrBuf(i).valid := Bool(true)
+				io.addrBuf(i).bits.st_nld := Bool(false)
+			} .elsewhen ((io.inst(i).valid === Bool(true)) && 
+									 (io.inst(i).bits.isSt === Bool(true))) {
+				io.addrBuf(i).valid := Bool(true)
+				io.addrBuf(i).bits.st_nld := Bool(true)
+			} .otherwise {
+				io.addrBuf(i).valid := Bool(false)
+				io.addrBuf(i).bits.st_nld := Bool(false)
+			}
+			io.addrBuf(i).bits.robLoc 		:= io.inst(i).bits.tag
+			io.addrBuf(i).bits.funct3 		:= io.inst(i).bits.funct3
+			io.addrBuf(i).bits.rs1Rename 	:= io.inst(i).bits.rs1Rename
+			io.addrBuf(i).bits.rs1Val 		:= io.inst(i).bits.rs1Val
+			io.addrBuf(i).bits.rs2Rename 	:= io.inst(i).bits.rs2Rename
+			io.addrBuf(i).bits.rs2Val 		:= io.inst(i).bits.rs2Val
 		} .otherwise {
-			io.allocIQ(i).iqNum := finalMin(3)
-		}
 
-		// Logic to generate the entry for LS Buffer
-		when ((io.inst(i).valid === Bool(true)) && 
-					(io.inst(i).bits.isLd === Bool(true))) {
-			io.addrBuf(i).valid := Bool(true)
-			io.addrBuf(i).bits.st_nld := Bool(false)
-		} .elsewhen ((io.inst(i).valid === Bool(true)) && 
-								 (io.inst(i).bits.isSt === Bool(true))) {
-			io.addrBuf(i).valid := Bool(true)
-			io.addrBuf(i).bits.st_nld := Bool(true)
-		} .otherwise {
+			// Setting all values to false is stall is set
+			io.allocIQ(i).inst.bits := io.inst(i).bits
+			io.allocIQ(i).inst.valid := Bool(false)
+			io.allocIQ(i).iqNum := finalMin(0)
 			io.addrBuf(i).valid := Bool(false)
 			io.addrBuf(i).bits.st_nld := Bool(false)
+			io.addrBuf(i).bits.robLoc 		:= io.inst(i).bits.tag
+			io.addrBuf(i).bits.funct3 		:= io.inst(i).bits.funct3
+			io.addrBuf(i).bits.rs1Rename 	:= io.inst(i).bits.rs1Rename
+			io.addrBuf(i).bits.rs1Val 		:= io.inst(i).bits.rs1Val
+			io.addrBuf(i).bits.rs2Rename 	:= io.inst(i).bits.rs2Rename
+			io.addrBuf(i).bits.rs2Val 		:= io.inst(i).bits.rs2Val
 		}
-		io.addrBuf(i).bits.robLoc 		:= io.inst(i).bits.tag
-		io.addrBuf(i).bits.funct3 		:= io.inst(i).bits.funct3
-		io.addrBuf(i).bits.rs1Rename 	:= io.inst(i).bits.rs1Rename
-		io.addrBuf(i).bits.rs1Val 		:= io.inst(i).bits.rs1Val
-		io.addrBuf(i).bits.rs2Rename 	:= io.inst(i).bits.rs2Rename
-		io.addrBuf(i).bits.rs2Val 		:= io.inst(i).bits.rs2Val
 	}
 }
 
