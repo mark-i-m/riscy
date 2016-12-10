@@ -16,7 +16,7 @@ class IssueQueue extends Module {
 		val newEntry = Vec.fill(4) {Valid(new ROBEntry).asInput}
 		// Currently just assume that below signals contain insts
 		// issued in last 2 cycles as form of ROB entry
-		val issuedPrev2 = Vec.fill(8) {Valid(UInt(INPUT, 6)).asInput}
+		val issuedPrev2 = Vec.fill(8) {Valid((new IssuedPrev2Inst()).flip).asInput}
 		// Values from rob_wb with valid signal
 		val robWb = new RobWbStore(6).flip
 		val issuedEntry = Valid(new ROBEntry).asOutput
@@ -61,6 +61,7 @@ class IssueQueue extends Module {
 	// No back to back execultion is supported for LSQ dependent
 	// instructions which can be supported by following method
 	// update issuedPrev array to 10 bits as ROB_WB structure
+	// added support for not doing speculative wakeup when last issued was a load
 	
 	val isWokenUpRs1 = Vec.fill(16) {Vec.fill(9) {Bool()}}
 	for (j <- 0 to 15) {
@@ -69,7 +70,8 @@ class IssueQueue extends Module {
 			isWokenUpRs1(j)(i+1) := isWokenUpRs1(j)(i) || 
 													(io.issuedPrev2(i).valid === Bool(true) &&
 													 iqueue(j).bits.rs1Val.valid === Bool(false) &&
-					    						 iqueue(j).bits.rs1Rename === io.issuedPrev2(i).bits &&
+													 io.issuedPrev2(i).bits.isLd === Bool(false) &&
+					    						 iqueue(j).bits.rs1Rename === io.issuedPrev2(i).bits.tag &&
 													 iqueue(j).valid)
 		}
 	}
@@ -81,7 +83,8 @@ class IssueQueue extends Module {
 			isWokenUpRs2(j)(i+1) := isWokenUpRs2(j)(i) || 
 													(io.issuedPrev2(i).valid === Bool(true) && 
 													 iqueue(j).bits.rs2Val.valid === Bool(false) &&
-					    						 iqueue(j).bits.rs2Rename === io.issuedPrev2(i).bits &&
+													 io.issuedPrev2(i).bits.isLd === Bool(false) &&
+					    						 iqueue(j).bits.rs2Rename === io.issuedPrev2(i).bits.tag &&
 													 iqueue(j).valid)
 		}
 	}
@@ -147,8 +150,8 @@ class IssueQueue extends Module {
 	specCamRs2.io.compare_bits(0) := issuedPipelineBits.rs2Rename
 	
 	for (i <- 0 until 8) {
-		specCamRs1.io.input_bits(i) := issuedPrev2Pipeline(i).bits
-		specCamRs2.io.input_bits(i) := issuedPrev2Pipeline(i).bits
+		specCamRs1.io.input_bits(i) := issuedPrev2Pipeline(i).bits.tag
+		specCamRs2.io.input_bits(i) := issuedPrev2Pipeline(i).bits.tag
 	}
 
 	val specInfo = Valid(new SpeculativeIssue()) 
@@ -221,11 +224,11 @@ class IssueQueue extends Module {
 				iqueue(counter.value + isAssigned(i)) := io.newEntry(i)
 				isAssigned(i+1) := isAssigned(i) + UInt(1)
 				for (k <- 0 until 6) {
-					when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+					when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid && !io.robWb.entry_s1(k).is_addr) {
 						iqueue(counter.value + isAssigned(i)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
 						iqueue(counter.value + isAssigned(i)).bits.rs1Val.valid := Bool(true)
 					}
-					when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+					when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid && !io.robWb.entry_s1(k).is_addr) {
 						iqueue(counter.value + isAssigned(i)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 						iqueue(counter.value + isAssigned(i)).bits.rs2Val.valid := Bool(true)
 					} 	
@@ -241,11 +244,11 @@ class IssueQueue extends Module {
 					iqueue(counter.value + isAssigned(i)) := io.newEntry(i)
 					isAssigned(i+1) := isAssigned(i) + UInt(1)
 					for (k <- 0 until 6) {
-						when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+						when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid && !io.robWb.entry_s1(k).is_addr) {
 							iqueue(counter.value + isAssigned(i)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
 							iqueue(counter.value + isAssigned(i)).bits.rs1Val.valid := Bool(true)
 						}
-						when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+						when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid && !io.robWb.entry_s1(k).is_addr) {
 							iqueue(counter.value + isAssigned(i)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 							iqueue(counter.value + isAssigned(i)).bits.rs2Val.valid := Bool(true)
 						} 	
@@ -260,11 +263,11 @@ class IssueQueue extends Module {
 					iqueue(counter.value + isAssigned(i) - UInt(1)) := io.newEntry(i)
 					isAssigned(i+1) := isAssigned(i) + UInt(1)
 					for (k <- 0 until 6) {
-						when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+						when (wbCamRs1.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid && !io.robWb.entry_s1(k).is_addr) {
 							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs1Val.bits := io.robWb.entry_s1(k).data
 							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs1Val.valid := Bool(true)
 						}
-						when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid) {
+						when (wbCamRs2.io.hit(k)(16+i) && io.robWb.entry_s1(k).valid && !io.robWb.entry_s1(k).is_addr) {
 							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 							iqueue(counter.value + isAssigned(i) - UInt(1)).bits.rs2Val.valid := Bool(true)
 						} 	
@@ -315,11 +318,11 @@ class IssueQueue extends Module {
 							// from issued to last entry compare with next one 
 							// as they are shifted
 							for (k <- 0 until 6) {
-								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
+								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid && !io.robWb.entry_s1(k).is_addr) {
 									iqueue(j).bits.rs1Val.bits := io.robWb.entry_s1(k).data
 									iqueue(j).bits.rs1Val.valid := Bool(true)
 								}
-								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
+								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid && !io.robWb.entry_s1(k).is_addr) {
 									iqueue(j).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 									iqueue(j).bits.rs2Val.valid := Bool(true)
 								} 	
@@ -339,11 +342,11 @@ class IssueQueue extends Module {
 							// from issued to last entry compare with next one 
 							// as they are shifted
 							for (k <- 0 until 6) {
-								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
+								when (wbCamRs1.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid && !io.robWb.entry_s1(k).is_addr) {
 									iqueue(j).bits.rs1Val.bits := io.robWb.entry_s1(k).data
 									iqueue(j).bits.rs1Val.valid := Bool(true)
 								}
-								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid) {
+								when (wbCamRs2.io.hit(k)(j+1) && io.robWb.entry_s1(k).valid && iqueue(j+1).valid && !io.robWb.entry_s1(k).is_addr) {
 									iqueue(j).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 									iqueue(j).bits.rs2Val.valid := Bool(true)
 								} 	
@@ -355,11 +358,11 @@ class IssueQueue extends Module {
 				}
 				for (l <- 0 to i-1) {
 					for (k <- 0 until 6) {
-						when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
+						when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid && !io.robWb.entry_s1(k).is_addr) {
 							iqueue(l).bits.rs1Val.bits := io.robWb.entry_s1(k).data
 							iqueue(l).bits.rs1Val.valid := Bool(true)
 						}
-						when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
+						when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid && !io.robWb.entry_s1(k).is_addr) {
 							iqueue(l).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 							iqueue(l).bits.rs2Val.valid := Bool(true)
 						} 	
@@ -372,11 +375,11 @@ class IssueQueue extends Module {
 		// IQ entries
 		for (l <- 0 to 15) {
 			for (k <- 0 until 6) {
-				when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
+				when (wbCamRs1.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid && !io.robWb.entry_s1(k).is_addr) {
 					iqueue(l).bits.rs1Val.bits := io.robWb.entry_s1(k).data
 					iqueue(l).bits.rs1Val.valid := Bool(true)
 				}
-				when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid) {
+				when (wbCamRs2.io.hit(k)(l) && io.robWb.entry_s1(k).valid && iqueue(l).valid && !io.robWb.entry_s1(k).is_addr) {
 					iqueue(l).bits.rs2Val.bits := io.robWb.entry_s1(k).data
 					iqueue(l).bits.rs2Val.valid := Bool(true)
 				} 	
@@ -666,7 +669,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	
 	println("// Test3a")
 	
-	poke(c.io.issuedPrev2(0).bits,5)
+	poke(c.io.issuedPrev2(0).bits.tag,5)
 	poke(c.io.issuedPrev2(0).valid,1)
 	
 	for (i <- 1 to 7) {
@@ -879,7 +882,7 @@ class IssueQueueTests(c: IssueQueue) extends Tester(c) {
 	println("// Test5c")
 	
 	poke(c.io.issuedPrev2(7).valid,1)
-	poke(c.io.issuedPrev2(7).bits,1)
+	poke(c.io.issuedPrev2(7).bits.tag,1)
 	for (i <- 0 to 6) {
 		poke(c.io.issuedPrev2(i).valid,0)
 	}

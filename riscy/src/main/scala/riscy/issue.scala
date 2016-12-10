@@ -2,6 +2,10 @@ package riscy
 
 import Chisel._
 
+class IssuedPrev2Inst extends Bundle {
+	val tag = UInt(OUTPUT, 6)
+	val isLd = Bool(OUTPUT)
+}
 class Issue extends Module {
   val io = new Bundle {
     // ROB entries
@@ -107,6 +111,12 @@ class Issue extends Module {
   issuedInstTag(2)        := issueQ2.io.issuedEntry.bits.tag
   issuedInstTag(3)        := issueQ3.io.issuedEntry.bits.tag
 
+	val issuedInstIsLd = Vec.fill(4) {Bool()}
+  issuedInstIsLd(0)        := issueQ0.io.issuedEntry.bits.isLd
+  issuedInstIsLd(1)        := issueQ1.io.issuedEntry.bits.isLd
+  issuedInstIsLd(2)        := issueQ2.io.issuedEntry.bits.isLd
+  issuedInstIsLd(3)        := issueQ3.io.issuedEntry.bits.isLd
+
   val issuedInstValid = Vec.fill(4) {Bool()}
   issuedInstValid(0)      := issueQ0.io.issuedEntry.valid
   issuedInstValid(1)      := issueQ1.io.issuedEntry.valid
@@ -119,15 +129,20 @@ class Issue extends Module {
   val pipelinedIssuedInstValid = Vec.tabulate(4) {
     i => Reg(next = issuedInstValid(i))
   }
+	val pipelinedIssuedInstIsLd = Vec.tabulate(4) {
+    i => Reg(next = issuedInstIsLd(i))
+  }
 
-  val issuedPrev2 = Vec.fill(8) {Valid(UInt(width = 6))}
+  val issuedPrev2 	= Vec.fill(8) {Valid(new IssuedPrev2Inst())}
 
   for (i <- 0 until 4) {
-    issuedPrev2(i).bits  := issuedInstTag(i)
+    issuedPrev2(i).bits.tag  := issuedInstTag(i)
+		issuedPrev2(i).bits.isLd  := issuedInstIsLd(i)
     issuedPrev2(i).valid := issuedInstValid(i)
   }
   for (i <- 4 until 8) {
-    issuedPrev2(i).bits := pipelinedIssuedInstTag(i-4)
+    issuedPrev2(i).bits.tag := pipelinedIssuedInstTag(i-4)
+		issuedPrev2(i).bits.isLd := pipelinedIssuedInstIsLd(i-4)
     issuedPrev2(i).valid := pipelinedIssuedInstValid(i-4)
   }
 

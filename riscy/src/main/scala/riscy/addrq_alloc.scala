@@ -107,7 +107,7 @@ class AddrQueueAlloc extends Module {
       io.pos(1) := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
     }
     is (UInt(31)) {
-      io.pos(1) := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
+      io.pos(1) := UInt(0) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
     }
     is (UInt(0)) {
       io.pos(1) := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !io.validEntries(i+0+1) })
@@ -206,7 +206,7 @@ class AddrQueueAlloc extends Module {
       io.pos(2) := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
     }
     is (UInt(31)) {
-      io.pos(2) := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
+      io.pos(2) := UInt(0) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
     }
     is (UInt(0)) {
       io.pos(2) := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !io.validEntries(i+0+1) })
@@ -304,7 +304,7 @@ class AddrQueueAlloc extends Module {
       io.pos(3) := UInt(31) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
     }
     is (UInt(31)) {
-      io.pos(3) := UInt(3) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
+      io.pos(3) := UInt(0) + PriorityEncoder(Vec.tabulate(32-30-1) { i => !io.validEntries(i+30+1) })
     }
     is (UInt(0)) {
       io.pos(3) := UInt(1) + PriorityEncoder(Vec.tabulate(32-0-1) { i => !io.validEntries(i+0+1) })

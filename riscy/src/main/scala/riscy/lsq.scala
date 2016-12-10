@@ -73,17 +73,17 @@ class LSQ extends Module {
   pos := addrqAlloc.io.pos
 
   for (i <- 0 until 32) {
-    when (UInt(i) === pos(0)) {
-    addrq(i) := io.resEntry(0)
+    when (UInt(i) === pos(0) && io.resEntry(0).valid) {
+      addrq(i) := io.resEntry(0)
     }
-    when (UInt(i) === pos(1)) {
-    addrq(i) := io.resEntry(1)
+    when (UInt(i) === pos(1) && io.resEntry(1).valid) {
+      addrq(i) := io.resEntry(1)
     }
-    when (UInt(i) === pos(2)) {
-    addrq(i) := io.resEntry(2)
+    when (UInt(i) === pos(2) && io.resEntry(2).valid) {
+      addrq(i) := io.resEntry(2)
     }
-    when (UInt(i) === pos(3)) {
-    addrq(i) := io.resEntry(3)
+    when (UInt(i) === pos(3) && io.resEntry(3).valid) {
+      addrq(i) := io.resEntry(3)
     }
   }
 

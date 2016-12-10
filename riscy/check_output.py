@@ -18,6 +18,16 @@ The script will exit with a code 0 if pass.
 from sys import argv, exit
 import re
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    FAIL = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 # will contain final computed register state
 regs = {i : None for i in range(32)}
 
@@ -83,8 +93,10 @@ with open(okname, 'r') as ok:
             correct_stores.append((adr, val))
 
         elif len(line.strip()) > 0:
+            print(bcolors.FAIL)
             print("ERROR parsing .ok file")
             print("At line:\n\t%s" % line)
+            print(bcolors.ENDC)
             exit(1)
 
 # simple helpers to print stuff in hex
@@ -101,9 +113,11 @@ failed = False
 for i in range(32):
     if regs[i] != correct_regs[i]:
         failed = True
+        print(bcolors.FAIL)
         print("REG[%d]\n\tGOT %s\n\tEXPECTED %s" % 
                 (i, hex(regs[i]) if regs[i] is not None else "None",
                     hex(correct_regs[i]) if correct_regs[i] is not None else "None"))
+        print(bcolors.ENDC)
 
 # compare memory address
 if stores != correct_stores:
@@ -111,14 +125,22 @@ if stores != correct_stores:
 
     for i in range(min(len(correct_stores), len(stores))):
         if correct_stores[i] != stores[i]:
+            print(bcolors.FAIL)
             print("STORE#%d\n\tGOT %s\n\tEXPECTED %s" % \
                     (i, store_hex(stores[i]), store_hex(correct_stores[i])))
+            print(bcolors.ENDC)
 
+    print(bcolors.FAIL)
     print("\nENTIRE STORE SEQUENCE:\n\tGOT %s\n\tEXPECTED %s" % \
             (stores_hex(stores), stores_hex(correct_stores)))
+    print(bcolors.ENDC)
 
 if failed:
+    print(bcolors.FAIL)
     print("FAILED :(")
+    print(bcolors.ENDC)
     exit(1)
 
+print(bcolors.OKGREEN)
 print("PASS :D")
+print(bcolors.ENDC)

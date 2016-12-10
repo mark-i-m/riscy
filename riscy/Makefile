@@ -50,6 +50,7 @@ emulator.h Riscy.h Riscy.cpp: $(SCALA_FILES)
 
 riscy_emu: riscy_emu.cc emulator.h Riscy.h Riscy.cpp
 	g++ -ggdb -O0 -std=c++11 -o riscy_emu $^
+	date
 
 # Clean up!
 clean: 
