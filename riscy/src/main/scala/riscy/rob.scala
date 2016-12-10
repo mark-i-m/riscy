@@ -284,6 +284,7 @@ class ROB extends Module {
   //  /\ the previous instruction is not a mispredicted branch
   //  /\ \/ this is not a store
   //     \/ there are fewer than 2 stores already committing this cycle
+  //  /\ the previous instruction is not a halt
   //
   // NOTE: /\ is AND, \/ is OR
   //
@@ -297,7 +298,8 @@ class ROB extends Module {
       (if(i > 0) { couldCommit(i-1) } else { Bool(true) }) &&
       front(i).rdVal.valid &&
       (if(i > 0) { !front(i-1).isMispredicted } else { Bool(true) }) &&
-      (if(i < 2) { Bool(true) } else { !front(i).isSt || numStores(i) < UInt(2) })
+      (if(i < 2) { Bool(true) } else { !front(i).isSt || numStores(i) < UInt(2) }) &&
+      (if(i > 0) { !front(i-1).isHalt } else { Bool(true) })
 
     when(couldCommit(i)) {
       printf("Commit ROB%d\n", head.value + UInt(i))
