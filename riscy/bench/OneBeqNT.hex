@@ -1,2 +1,0 @@
-0020809300101263        beq r2 == r1, pc + 4, add r1 <- r1 + 1
-FFFFFFFFFFFFFFFF        halt

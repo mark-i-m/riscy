@@ -1,2 +1,2 @@
-0010809300101263        beq r1 == r1, pc + 4, add r1 <- r1 + 1
+0010809300108263        beq r1 == r1, pc + 4, add r1 <- r1 + 1
 FFFFFFFFFFFFFFFF        halt
