@@ -18,6 +18,14 @@ class Stall extends Module {
 
   io.fetchStall := io.allocStall
   io.allocStall := io.arbiterStallReq || io.robStallReq
+
+  when(io.arbiterStallReq) {
+    printf("ARBITER STALL")
+  }
+
+  when(io.arbiterStallReq) {
+    printf("ROB STALL")
+  }
 }
 
 class StallTests(c: Stall) extends Tester(c) {
