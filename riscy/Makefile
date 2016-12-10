@@ -4,8 +4,8 @@ MODULES = Fetch ICache DecodeSingle OpDecode Alloc ROB
 # Backend
 MODULES += IssueQueue IqArbiter LSQ ALU RobWriteback Execute Stall
 # Util
-MODULES += HelloModule MultiCounter CAM RegFile Memory DCache AddrQueueAlloc
-
+MODULES += HelloModule MultiCounter CAM RegFile Memory DCache AddrQueueAlloc 
+MODULES += NBDCache 
 ###############################################################################
 # Some configurations
 TOP = ..
@@ -50,6 +50,7 @@ emulator.h Riscy.h Riscy.cpp: $(SCALA_FILES)
 
 riscy_emu: riscy_emu.cc emulator.h Riscy.h Riscy.cpp
 	g++ -ggdb -O0 -std=c++11 -o riscy_emu $^
+	date
 
 # Clean up!
 clean: 

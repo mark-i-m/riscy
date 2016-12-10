@@ -10,7 +10,11 @@ class IssuedInst extends Bundle {
 class AddrBufEntry extends Bundle {
 	val robLoc = UInt(OUTPUT, 6)
 	val st_nld = Bool(OUTPUT)
-        val funct3 = UInt(OUTPUT,3)
+	val funct3 = UInt(OUTPUT,3)
+	val rs1Rename = UInt(OUTPUT, 6)
+  val rs2Rename = UInt(OUTPUT, 6)
+  val rs1Val = Valid(UInt(OUTPUT, 64))
+  val rs2Val = Valid(UInt(OUTPUT, 64))	
 }
 
 class IqArbiter extends Module {
@@ -118,22 +122,24 @@ class IqArbiter extends Module {
 		}
 
 		// Logic to generate the entry for LS Buffer
-		when (io.inst(i).bits.op === UInt(0x03)) {
+		when ((io.inst(i).valid === Bool(true)) && 
+					(io.inst(i).bits.isLd === Bool(true))) {
 			io.addrBuf(i).valid := Bool(true)
-			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
 			io.addrBuf(i).bits.st_nld := Bool(false)
-		} .elsewhen (io.inst(i).bits.op === UInt(0x0b)) {
+		} .elsewhen ((io.inst(i).valid === Bool(true)) && 
+								 (io.inst(i).bits.isSt === Bool(true))) {
 			io.addrBuf(i).valid := Bool(true)
-			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
 			io.addrBuf(i).bits.st_nld := Bool(true)
 		} .otherwise {
 			io.addrBuf(i).valid := Bool(false)
-			io.addrBuf(i).bits.robLoc := io.inst(i).bits.tag
-			io.addrBuf(i).bits.funct3 := io.inst(i).bits.funct3
 			io.addrBuf(i).bits.st_nld := Bool(false)
 		}
+		io.addrBuf(i).bits.robLoc 		:= io.inst(i).bits.tag
+		io.addrBuf(i).bits.funct3 		:= io.inst(i).bits.funct3
+		io.addrBuf(i).bits.rs1Rename 	:= io.inst(i).bits.rs1Rename
+		io.addrBuf(i).bits.rs1Val 		:= io.inst(i).bits.rs1Val
+		io.addrBuf(i).bits.rs2Rename 	:= io.inst(i).bits.rs2Rename
+		io.addrBuf(i).bits.rs2Val 		:= io.inst(i).bits.rs2Val
 	}
 }
 
@@ -273,10 +279,10 @@ class IqArbiterTests(c: IqArbiter) extends Tester(c) {
 	poke(c.io.inst(1).valid, 1)
 	poke(c.io.inst(2).valid, 1)
 	poke(c.io.inst(3).valid, 1)
-	poke(c.io.inst(0).bits.op, 0x03)
-	poke(c.io.inst(1).bits.op, 0x0b)
-	poke(c.io.inst(2).bits.op, 0x03)
-	poke(c.io.inst(3).bits.op, 0x4)
+	poke(c.io.inst(0).bits.isLd, 1)
+	poke(c.io.inst(1).bits.isSt, 1)
+	poke(c.io.inst(2).bits.isLd, 1)
+	poke(c.io.inst(3).bits.isSt, 0)
   	poke(c.io.iqLen(0), 0x9)
 	poke(c.io.iqLen(1), 0x6)
   	poke(c.io.iqLen(2), 0x2)
