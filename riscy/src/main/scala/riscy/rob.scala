@@ -33,10 +33,13 @@ class ROBEntry extends DecodeIns {
 
   // From OpDecode:
   // - does this instruction have a dest reg
+  // - is this instruction a memory op
   // - is this instruction a jump
   val hasRd = Bool(OUTPUT)
   val isSt = Bool(OUTPUT)
   val isLd = Bool(OUTPUT)
+  val isBch = Bool(OUTPUT)
+  val isJmp = Bool(OUTPUT)
 
   // Purely for emulation purposes
   val isHalt = Bool(OUTPUT)
@@ -243,10 +246,14 @@ class ROB extends Module {
   // 
   // We should writeback values to the ROB iff
   //  - the WB signal is valid AND
-  //  - the WB signal is not the address of a load
+  //  - the WB signal is not the address of a load unless it is a st or jmp/bch
   /////////////////////////////////////////////////////////////////////////////
   for(i <- 0 until 6) {
-    when(io.wbValues(i).valid && (!io.wbValues(i).is_addr || rob(io.wbValues(i).operand).isSt)) {
+    when(io.wbValues(i).valid && 
+      (!io.wbValues(i).is_addr || 
+        rob(io.wbValues(i).operand).isSt ||
+        rob(io.wbValues(i).operand).isJmp ||
+        rob(io.wbValues(i).operand).isBch)) {
       robW(io.wbValues(i).operand).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
       robW(io.wbValues(i).operand).bits := rob(io.wbValues(i).operand)

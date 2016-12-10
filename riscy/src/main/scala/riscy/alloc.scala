@@ -127,6 +127,8 @@ class RiscyAlloc extends Module {
     robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
     robEntry.isSt := pipelinedOpDecode(i).isSt
     robEntry.isLd := pipelinedOpDecode(i).isLd
+    robEntry.isBch := pipelinedOpDecode(i).isBch
+    robEntry.isJmp := pipelinedOpDecode(i).isJmp
     robEntry.isHalt := pipelinedOpDecode(i).isHalt
     robEntry.hasRd := pipelinedOpDecode(i).hasRd
     robEntry.era := io.robEra
