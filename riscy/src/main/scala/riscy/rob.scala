@@ -364,7 +364,8 @@ class ROB extends Module {
   remap.io.reset.bits.bits  := UInt(0)
 
   when(io.mispredPC.valid) {
-    printf("MISPREDICT\n")
+    printf("MISPREDICT\n\tPC: %x\n\tCorrect Target: %x\n",
+      io.mispredPC.bits, io.mispredTarget)
   }
 
   // Write to the register file
