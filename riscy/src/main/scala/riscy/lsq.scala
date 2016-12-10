@@ -24,6 +24,7 @@ class LSQ extends Module {
     val memStSize = Vec(2, UInt(OUTPUT,3))
     val memLdAddrPort = Valid(UInt(OUTPUT,64)).asOutput
     val memLdData = Valid(UInt(INPUT,8 * 64)).asInput
+    val robEra = UInt(INPUT, 7)
   }
 
   // The Data Cache
@@ -148,7 +149,7 @@ class LSQ extends Module {
   // Queue to buffer loads in-flight to memory
   val ldReqBuffer = Module(new Queue(UInt(width=5),32))
 
-  when (isLoad.orR) {
+  when (isLoad.orR && addrq(PriorityEncoder(loads)).bits.era === io.robEra) {
     ldReqBuffer.io.enq.valid := Bool(true)
     ldReqBuffer.io.enq.bits := UInt(PriorityEncoder(loads))
 
@@ -164,7 +165,7 @@ class LSQ extends Module {
 
   val ldValid = Bits(width=32)
   when (dcache.io.ldReq.data.valid && !addrq(PriorityEncoder(firedloads)).bits.value.valid) {
-    printf("LSQ: Loading valid data from D$ to address queue entry %d\n", ldReqBuffer.io.deq.bits);
+    printf("LSQ: Loading valid data from D$ to address queue entry %d\n", ldReqBuffer.io.deq.bits)
     ldReqBuffer.io.deq.ready := Bool(true)
     ldValid := UIntToOH(ldReqBuffer.io.deq.bits)
 
@@ -193,7 +194,7 @@ class LSQ extends Module {
             dcache.io.ldReq.data.bits(15,0))
       }
       is (UInt(0x0)) {
-      printf("Setting data\n");
+      printf("Setting data\n")
         addrq(PriorityEncoder(ldValid)).bits.value.bits :=
           Cat(Fill(56,dcache.io.ldReq.data.bits(7)),
             dcache.io.ldReq.data.bits(7,0))
@@ -204,7 +205,7 @@ class LSQ extends Module {
             dcache.io.ldReq.data.bits(7,0))
       }
     }
-    printf("Setting valid\n");
+    printf("Setting valid\n")
     addrq(PriorityEncoder(ldValid)).bits.value.valid := Bool(true)
   } .otherwise {
     ldReqBuffer.io.deq.ready := Bool(false)
@@ -248,7 +249,7 @@ class LSQ extends Module {
       }
       when (!addrq(i).bits.st_nld) {
         ldIssueRow(i) := Bool(true)
-        printf("LSQ: Invalidating load entry on address queue\n");
+        printf("LSQ: Invalidating load entry on address queue\n")
         addrq(i).bits.addr.valid := Bool(false)
         addrq(i).bits.value.valid := Bool(false)
         addrq(i).bits.fired := Bool(false)
@@ -262,12 +263,14 @@ class LSQ extends Module {
       when (addrq(i).bits.ready && addrq(i).bits.st_nld
             && io.stCommit(j).valid && CamStCommit.io.hit(j)(i)) {
         printf("LSQ: St dispatch on %d\n", UInt(j))
-        printf("LSQ: St dispatch addr %d\n", addrq(i).bits.addr.bits)
-        printf("LSQ: St dispatch value %d\n", addrq(i).bits.value.bits)
-        printf("LSQ: Invalidating store entry on address queue\n");
+        printf("LSQ: Invalidating store entry on address queue\n")
         addrq(i).bits.addr.valid := Bool(false)
         addrq(i).valid := Bool(false)
-        stCommitRow(j)(i) := Bool(true)
+        when (addrq(i).bits.era === io.robEra) {
+          stCommitRow(j)(i) := Bool(true)
+        } .otherwise {
+          stCommitRow(j)(i) := Bool(false)
+        }
       } .otherwise {
         stCommitRow(j)(i) := Bool(false)
       }
@@ -277,7 +280,7 @@ class LSQ extends Module {
   for (i <- 0 until 2) {
     stCommitSet(i) := Cat(Array.tabulate(32) { stCommitRow(i)(_) }).orR
     when (stCommitSet(i)) {
-      printf("LSQ: Storing to D$ on port %d\n", UInt(i));
+      printf("LSQ: Storing to D$ on port %d\n", UInt(i))
       dcache.io.stReq(i).addr.valid := Bool(true)
       dcache.io.stReq(i).addr.bits := addrq(PriorityEncoder(stCommitRow(i))).bits.addr.bits
       dcache.io.stReq(i).data := addrq(PriorityEncoder(stCommitRow(i))).bits.value.bits
@@ -294,19 +297,22 @@ class LSQ extends Module {
   val numLoads = PopCount(Array.tabulate(32) { ldIssueRow(_) })
 
   when (ldIssueSet && numLoads === UInt(2)) {
-    printf("LSQ: Sending two completed loads to ROB WB: %d and %d\n",addrq(ldSelect.io.pos(0)).bits.robLoc,addrq(ldSelect.io.pos(1)).bits.robLoc);
+    printf("LSQ: Sending two completed loads to ROB WB: %d and %d, Era: %d and %d\n",
+            addrq(ldSelect.io.pos(0)).bits.robLoc, addrq(ldSelect.io.pos(1)).bits.robLoc,
+            addrq(ldSelect.io.pos(0)).bits.era, addrq(ldSelect.io.pos(1)).bits.era)
     for (i <- 0 until 2) {
       io.robWbOut.entry(i).data := addrq(ldSelect.io.pos(i)).bits.value.bits
       io.robWbOut.entry(i).is_addr := Bool(false)
       io.robWbOut.entry(i).operand := addrq(ldSelect.io.pos(i)).bits.robLoc
-      io.robWbOut.entry(i).valid := Bool(true)
+      io.robWbOut.entry(i).valid := addrq(ldSelect.io.pos(i)).bits.era === io.robEra
     }
   } .elsewhen (ldIssueSet && numLoads === UInt(1)) {
-    printf("LSQ: Sending one completed load to ROB WB: %d\n", addrq(ldSelect.io.pos(0)).bits.robLoc);
+    printf("LSQ: Sending one completed load to ROB WB: %d and Era: %d\n",
+            addrq(ldSelect.io.pos(0)).bits.robLoc, addrq(ldSelect.io.pos(0)).bits.robLoc)
     io.robWbOut.entry(0).data := addrq(ldSelect.io.pos(0)).bits.value.bits
     io.robWbOut.entry(0).is_addr := Bool(false)
     io.robWbOut.entry(0).operand := addrq(ldSelect.io.pos(0)).bits.robLoc
-    io.robWbOut.entry(0).valid := Bool(true)
+    io.robWbOut.entry(0).valid := addrq(ldSelect.io.pos(0)).bits.era === io.robEra
     // Second entry is not valid
     io.robWbOut.entry(1).data := addrq(ldSelect.io.pos(1)).bits.value.bits
     io.robWbOut.entry(1).is_addr := Bool(false)
@@ -318,6 +324,12 @@ class LSQ extends Module {
       io.robWbOut.entry(i).is_addr := Bool(false)
       io.robWbOut.entry(i).operand := UInt(0x0)
       io.robWbOut.entry(i).valid := Bool(false)
+    }
+  }
+
+  for (i <- 0 until DEPTH) {
+    when(addrq(i).valid && (addrq(i).bits.era =/= io.robEra)) {
+      addrq(i).valid := Bool(false)
     }
   }
 }
