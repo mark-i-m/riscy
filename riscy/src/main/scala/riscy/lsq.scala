@@ -259,7 +259,8 @@ class LSQ extends Module {
     }
     for (j <- 0 until 2) {
       //when (addrq(i).bits.rs2Val.valid || CamStCommit.io.hit(j)(i)) {
-      when (addrq(i).bits.ready && addrq(i).bits.st_nld && CamStCommit.io.hit(j)(i)) {
+      when (addrq(i).bits.ready && addrq(i).bits.st_nld
+            && io.stCommit(j).valid && CamStCommit.io.hit(j)(i)) {
         printf("LSQ: St dispatch on %d\n", UInt(j))
         printf("LSQ: St dispatch addr %d\n", addrq(i).bits.addr.bits)
         printf("LSQ: St dispatch value %d\n", addrq(i).bits.value.bits)
