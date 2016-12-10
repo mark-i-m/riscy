@@ -54,7 +54,7 @@ class ICache extends Module {
 
     // Interface with memory
     val memReadPort = Valid(UInt(OUTPUT, 64)).asOutput
-    val memReadData = Valid(UInt(INPUT, 64 * 8)).asInput
+    val memReadData = Valid(UInt(INPUT, 160 * 8)).asInput
   }
   require(isPow2(IcParams.nSets) && isPow2(IcParams.nWays))
 
