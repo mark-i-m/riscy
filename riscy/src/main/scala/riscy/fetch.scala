@@ -27,7 +27,8 @@ class Fetch extends Module {
     val isReturn = Bool(INPUT)
     val stall = Bool(INPUT)
     // Memory requests fullfilled from memory
-    val memReadData = Valid(UInt(INPUT, 64 * 8)).asInput
+    val memReadData = Valid(UInt(INPUT, IcParams.cache_line_width *
+                                        (IcParams.prefetch_buffer_len + 1))).asInput
 
     /* OUTPUTS */
     // Instructions and PC to be passed to the decode stage
