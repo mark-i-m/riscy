@@ -11,8 +11,9 @@ import Chisel._
 // 2. Four instruction valid bits: Fetch.io.instValid(i)
 
 class FetchOutput extends Bundle {
-  val insts = Vec.fill(4) { Valid(UInt(OUTPUT, 32)) }
-  val pc = Vec.fill(4) { UInt(OUTPUT, 64) }
+  val insts = Vec(4, Valid(UInt(OUTPUT, 32)))
+  val pc = Vec(4, UInt(OUTPUT, 64))
+  val predTaken = Vec(4, Bool(OUTPUT))
 }
 
 class Fetch extends Module {
@@ -153,6 +154,15 @@ class Fetch extends Module {
 
   for (i <- 0 until 4) {
     io.output.insts(i).bits := icache.io.resp.inst(i)
+
+    // Branch prediction
+    when (io.output.insts(i).bits(6,0) === UInt(0x63) // Conditional branches
+          || io.output.insts(i).bits(6,0) === UInt(0x67) // JALR
+          || io.output.insts(i).bits(6,0) === UInt(0x6f)) { //JAL
+      io.output.predTaken(i) := io.isBranchTaken
+    } .otherwise {
+      io.output.predTaken(i) := Bool(false)
+    }
   }
 }
 
