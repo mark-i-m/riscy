@@ -106,11 +106,11 @@ class IqArbiter extends Module {
 	
 	// pipeline the stall
 
-	val pipeStall = Reg (next = io.stall)
+	//val pipeStall = Reg (next = io.stall)
 
 
 	for (i <- 0 until 4) {
-		when (!pipeStall) {
+		when (!io.stall) {
 			io.allocIQ(i).inst.bits := io.inst(i).bits
 			io.allocIQ(i).inst.valid := io.inst(i).valid
 			
