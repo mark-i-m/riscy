@@ -6,6 +6,7 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
   val io = new Bundle {
     val readPorts = Vec.fill(numRPorts) { Valid(UInt(INPUT, 64)).asInput }
     val readData = Vec.fill(numRPorts) { Valid(UInt(OUTPUT, lineBytes*8)).asOutput }
+    val readCancel = Vec.fill(numRPorts) { Valid(UInt(INPUT, 64)).asInput }
 
     val writePorts = Vec.fill(numWPorts) { Valid(UInt(INPUT, 64)).asInput }
     val writeData = Vec.fill(numWPorts) { UInt(INPUT, 64).asInput }
@@ -15,6 +16,9 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
   println("Creating BigMemory of size " + ((lineBytes * numLines) >> 10) + " kB")
 
   val memBank = Mem(UInt(width = 8), numLines * lineBytes)
+
+  // Need the ability to cancel reads
+  val cancelLatch = Vec.fill(numRPorts) { Reg(Valid(UInt(width = 64))) }
 
   // Read ports
   for(i <- 0 until numRPorts) {
@@ -39,7 +43,15 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
       data := UInt(0) // Please chisel with a default value
     }
 
-    io.readData(i).valid := reqDelayed.valid
+    // Assumes that we will never cancel two different reads at the same time
+    // from the same port
+    when(io.readCancel(i).valid) {
+      cancelLatch(i).valid := io.readCancel(i).valid
+      cancelLatch(i).bits := io.readCancel(i).bits
+    }
+
+    io.readData(i).valid := reqDelayed.valid && 
+      (reqDelayed.bits =/= cancelLatch(i).bits || !cancelLatch(i).valid)
     io.readData(i).bits := data
   }
 
@@ -217,7 +229,7 @@ class MemoryTests(c: BigMemory) extends Tester(c) {
 
   step(1)
 
-  // Read address 0x1
+  // Read address 0x4
   poke(c.io.readPorts(0).valid, true)
   poke(c.io.readPorts(0).bits, 4)
 
@@ -234,6 +246,29 @@ class MemoryTests(c: BigMemory) extends Tester(c) {
 
   expect(c.io.readData(0).valid, true)
   expect(c.io.readData(0).bits, 0xCAFEBABE)
+
+  // Read address 0x0 and 0x1 but cancel the read for 0x0
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 4)
+
+  poke(c.io.readCancel(0).valid, true)
+  poke(c.io.readCancel(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+  poke(c.io.readCancel(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0xCAFEBABE)
+
 
 }
 
