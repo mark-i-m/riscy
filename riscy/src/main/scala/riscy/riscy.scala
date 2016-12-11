@@ -37,6 +37,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // Hook up ICache and Memory
   memory.io.readPorts(0) := fetch.io.memReadPort
   fetch.io.memReadData := memory.io.readData(0)
+  fetch.io.memReadCancel := memory.io.readCancel(0)
 
   // Hook up BP and Fetch
   fetch <> bp
