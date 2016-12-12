@@ -128,12 +128,13 @@ class LSQ extends Module {
   for (i <- 0 until DEPTH) {
     for (j <- 0 until DEPTH) {
       if (i != j) {
-        when (addrq(i).valid && addrq(i).bits.addr.valid 
+        when (addrq(i).valid && addrq(j).valid && addrq(i).bits.addr.valid
               && addrq(j).bits.addr.valid && CamAddrMatch.io.hit(j)(i)
               && (addrq(i).bits.robLoc > addrq(j).bits.robLoc)) {
           depMatrix(i).bits(j) := Bool(true)
 
-          when (addrq(j).bits.st_nld && addrq(j).bits.value.valid) {
+          when (addrq(j).bits.st_nld && !addrq(i).bits.st_nld
+                && addrq(j).bits.value.valid) {
             addrq(i).bits.value.valid := Bool(true)
             addrq(i).bits.value.bits := addrq(j).bits.value.bits
           }
@@ -360,7 +361,7 @@ class LSQTests(c: LSQ) extends Tester(c) {
   // Reserve two entries from the arbiter
   poke(c.io.resEntry(0).bits.robLoc, 7)
   poke(c.io.resEntry(0).bits.rs1Rename, 11)
-  poke(c.io.resEntry(0).bits.rs2Rename, 13)
+  poke(c.io.resEntry(0).bits.st_nld, 0)
   poke(c.io.resEntry(1).bits.st_nld, 0)
   poke(c.io.resEntry(1).bits.robLoc, 8)
   poke(c.io.resEntry(1).bits.rs1Rename, 14)
@@ -371,7 +372,7 @@ class LSQTests(c: LSQ) extends Tester(c) {
   // Cycle 2
 
   // Verify entries have been correctly stored
-  expect(c.addrq(1).bits.st_nld, 1)
+  expect(c.addrq(1).bits.st_nld, 0)
   expect(c.addrq(1).valid, 1)
   expect(c.addrq(2).bits.st_nld, 0)
   expect(c.addrq(2).valid, 1)
@@ -379,6 +380,7 @@ class LSQTests(c: LSQ) extends Tester(c) {
   expect(c.io.currentLen, 3)
 
   // Reserve four entries
+  poke(c.io.resEntry(0).bits.st_nld, 1)
   poke(c.io.resEntry(2).bits.st_nld, 0)
   poke(c.io.resEntry(2).bits.rs1Rename, 15)
   poke(c.io.resEntry(3).bits.st_nld, 1)
