@@ -43,15 +43,19 @@ class BigMemory(lineBytes: Int, numLines: Int, numRPorts: Int, numWPorts: Int, l
       data := UInt(0) // Please chisel with a default value
     }
 
+    val shouldCancel = reqDelayed.bits === cancelLatch(i).bits && cancelLatch(i).valid
+
     // Assumes that we will never cancel two different reads at the same time
     // from the same port
     when(io.readCancel(i).valid) {
       cancelLatch(i).valid := io.readCancel(i).valid
       cancelLatch(i).bits := io.readCancel(i).bits
+    } .elsewhen (shouldCancel) {
+      cancelLatch(i).valid := Bool(false)
+      cancelLatch(i).bits := UInt(0)
     }
 
-    io.readData(i).valid := reqDelayed.valid && 
-      (reqDelayed.bits =/= cancelLatch(i).bits || !cancelLatch(i).valid)
+    io.readData(i).valid := reqDelayed.valid && !shouldCancel
     io.readData(i).bits := data
   }
 
@@ -269,6 +273,27 @@ class MemoryTests(c: BigMemory) extends Tester(c) {
   expect(c.io.readData(0).valid, true)
   expect(c.io.readData(0).bits, 0xCAFEBABE)
 
+  // Cancel an addr but then request it again
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, true)
+  poke(c.io.readPorts(0).bits, 0)
+
+  poke(c.io.readCancel(0).valid, true)
+  poke(c.io.readCancel(0).bits, 0)
+
+  step(1)
+
+  poke(c.io.readPorts(0).valid, false)
+  poke(c.io.readCancel(0).valid, false)
+
+  wait(3)
+
+  expect(c.io.readData(0).valid, true)
+  expect(c.io.readData(0).bits, 0xDEADBEEF)
 
 }
 
