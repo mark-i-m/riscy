@@ -1,0 +1,8 @@
+0010001300003023        sd r0 -> 0x00[r0]
+0010001300100013        add r0 <- r0 + 1 (x2)                   Waste time, so that we get a chance to see the
+0010001300100013        add r0 <- r0 + 1 (x2)                   store go to memory before halting.
+0010001300100013        add r0 <- r0 + 1 (x2)                   
+0010001300100013        add r0 <- r0 + 1 (x2)                   
+0010001300100013        add r0 <- r0 + 1 (x2)                   
+0010001300100013        add r0 <- r0 + 1 (x2)                   
+FFFFFFFFFFFFFFFF        halt
