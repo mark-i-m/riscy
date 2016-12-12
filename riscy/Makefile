@@ -9,7 +9,7 @@ MODULES += NBDCache
 ###############################################################################
 # Some configurations
 TOP = ..
-SBT ?= java -Xmx4G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
+SBT ?= java -Xmx8G -Xss8M -XX:MaxPermSize=256M -jar $(TOP)/sbt-launch.jar
 
 ###############################################################################
 # Rules for running benchmarks and unit tests
