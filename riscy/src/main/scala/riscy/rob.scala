@@ -106,14 +106,14 @@ class ROB extends Module {
     // Otherwise, it would be possible for a structure to fill up and requests
     // a stall while at the same time, the commit stage is stalled because
     // fetch or LSQ is stalled and won't accept a mispredict or stCommit flag.
-    
+
     // Purely for emulation
     val halt = Bool(OUTPUT)
   }
 
   // Purely for emulation purposes
   // halt when the "halt" instruction commits
-  val halt = Reg(init = Bool(false)) 
+  val halt = Reg(init = Bool(false))
   io.halt := halt
 
   // The register remap table
@@ -174,6 +174,13 @@ class ROB extends Module {
   io.robFirst := head.value + (UInt(64) - free)
   io.robFree  := free
 
+  val wbShouldHappen = Array.fill(6)(Bool());
+  val wbOverlaps: Array[Array[Bool]] = Array.tabulate(8) { i =>
+    Array.tabulate(6) { j =>
+      wbShouldHappen(j) && io.wbValues(j).operand === io.robPorts(i)
+    }
+  }
+
   for(i <- 0 until 8) {
     remap.io.rPorts(i) := io.remapPorts(i)
     io.remapMapping(i) := remap.io.rValues(i)
@@ -181,7 +188,13 @@ class ROB extends Module {
     rf.io.rPorts(i) := io.rfPorts(i)
     io.rfValues(i) := rf.io.rValues(i)
 
-    io.robDest(i) := rob(io.robPorts(i)).rdVal
+    io.robDest(i) := PriorityMux(Array.tabulate(6) { j =>
+      val wbValid = Valid(UInt(width = 64))
+      wbValid.valid := Bool(true)
+      wbValid.bits := io.wbValues(j).data
+
+      wbOverlaps(i)(j) -> wbValid
+    } :+ (Bool(true), rob(io.robPorts(i)).rdVal))
   }
 
   when(!io.robStallReq) {
@@ -198,25 +211,25 @@ class ROB extends Module {
       when(UInt(i) === io.robFirst) {
         robW(i) := io.allocROB(0)
         when(io.allocROB(0).valid) {
-          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i),
             io.allocROB(0).bits.pc, io.allocROB(0).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(1)) {
         robW(i) := io.allocROB(1)
         when(io.allocROB(1).valid) {
-          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i),
             io.allocROB(1).bits.pc, io.allocROB(1).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(2)) {
         robW(i) := io.allocROB(2)
         when(io.allocROB(2).valid) {
-          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i),
             io.allocROB(2).bits.pc, io.allocROB(2).bits.op)
         }
       } .elsewhen(UInt(i) === io.robFirst + UInt(3)) {
         robW(i) := io.allocROB(3)
         when(io.allocROB(3).valid) {
-          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i), 
+          printf("NEW ROB ENTRY #%d PC: %x, op: %x\n", UInt(i),
             io.allocROB(3).bits.pc, io.allocROB(3).bits.op)
         }
       } .otherwise {
@@ -251,11 +264,12 @@ class ROB extends Module {
   //  - the WB signal is not the address of a load unless it is a st or jmp/bch
   /////////////////////////////////////////////////////////////////////////////
   for(i <- 0 until 6) {
-    when(io.wbValues(i).valid && 
-      (!io.wbValues(i).is_addr || 
+    wbShouldHappen(i) := io.wbValues(i).valid && 
+        (!io.wbValues(i).is_addr || 
         rob(io.wbValues(i).operand).isSt ||
         rob(io.wbValues(i).operand).isJmp ||
-        rob(io.wbValues(i).operand).isBch)) {
+        rob(io.wbValues(i).operand).isBch)
+    when(wbShouldHappen(i)) {
       robW(io.wbValues(i).operand).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
       robW(io.wbValues(i).operand).bits := rob(io.wbValues(i).operand)
@@ -573,8 +587,8 @@ class ROBTests(c: ROB) extends Tester(c) {
     ports foreach { port => poke(c.io.wbValues(port).valid, false) }
 
   def expectStCommit(st: Array[(Boolean, Int)]) =
-    for(i <- 0 until 4) { 
-      expect(c.io.stCommit(i).valid, st(i)._1) 
+    for(i <- 0 until 4) {
+      expect(c.io.stCommit(i).valid, st(i)._1)
       if(st(i)._1) { expect(c.io.stCommit(i).bits, st(i)._2) }
     }
 

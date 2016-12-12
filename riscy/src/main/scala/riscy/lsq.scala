@@ -15,7 +15,7 @@ class LSQ extends Module {
     val resEntry = Vec.fill(4) { Valid(new AddrBufEntry).flip }
     val robWbin = new RobWbStore(6).flip
     val stCommit = Vec(2, Valid(UInt(INPUT, 6)).asInput)
-    val currentLen = UInt(OUTPUT, 4)
+    val currentLen = UInt(OUTPUT, 5)
     val robWbOut = new RobWbInput(2).flip
     val ldAddr = Valid(UInt(OUTPUT, 64))
     val ldValue = UInt(INPUT, 64)
