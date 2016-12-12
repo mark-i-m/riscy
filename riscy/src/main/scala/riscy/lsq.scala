@@ -15,7 +15,7 @@ class LSQ extends Module {
     val resEntry = Vec.fill(4) { Valid(new AddrBufEntry).flip }
     val robWbin = new RobWbStore(6).flip
     val stCommit = Vec(2, Valid(UInt(INPUT, 6)).asInput)
-    val currentLen = UInt(OUTPUT, 4)
+    val currentLen = UInt(OUTPUT, 5)
     val robWbOut = new RobWbInput(2).flip
     val ldAddr = Valid(UInt(OUTPUT, 64))
     val ldValue = UInt(INPUT, 64)
@@ -259,7 +259,8 @@ class LSQ extends Module {
     }
     for (j <- 0 until 2) {
       //when (addrq(i).bits.rs2Val.valid || CamStCommit.io.hit(j)(i)) {
-      when (addrq(i).bits.ready && addrq(i).bits.st_nld && CamStCommit.io.hit(j)(i)) {
+      when (addrq(i).bits.ready && addrq(i).bits.st_nld
+            && io.stCommit(j).valid && CamStCommit.io.hit(j)(i)) {
         printf("LSQ: St dispatch on %d\n", UInt(j))
         printf("LSQ: St dispatch addr %d\n", addrq(i).bits.addr.bits)
         printf("LSQ: St dispatch value %d\n", addrq(i).bits.value.bits)
