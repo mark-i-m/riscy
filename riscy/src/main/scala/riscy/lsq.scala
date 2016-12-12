@@ -132,6 +132,11 @@ class LSQ extends Module {
               && addrq(j).bits.addr.valid && CamAddrMatch.io.hit(j)(i)
               && (addrq(i).bits.robLoc > addrq(j).bits.robLoc)) {
           depMatrix(i).bits(j) := Bool(true)
+
+          when (addrq(j).bits.st_nld && addrq(j).bits.value.valid) {
+            addrq(i).bits.value.valid := Bool(true)
+            addrq(i).bits.value.bits := addrq(j).bits.value.bits
+          }
         }
       }
     }
@@ -163,7 +168,8 @@ class LSQ extends Module {
   }
 
   val ldValid = Bits(width=32)
-  when (dcache.io.ldReq.data.valid && !addrq(PriorityEncoder(firedloads)).bits.value.valid) {
+  when (dcache.io.ldReq.data.valid && addrq(PriorityEncoder(firedloads)).valid
+        && !addrq(PriorityEncoder(firedloads)).bits.value.valid) {
     printf("LSQ: Loading valid data from D$ to address queue entry %d\n", ldReqBuffer.io.deq.bits);
     ldReqBuffer.io.deq.ready := Bool(true)
     ldValid := UIntToOH(ldReqBuffer.io.deq.bits)
@@ -341,7 +347,6 @@ class LSQTests(c: LSQ) extends Tester(c) {
   // First entry should be reserved
   expect(c.addrq(0).bits.st_nld, 1)
   expect(c.addrq(0).bits.robLoc, 6)
-  //expect(c.addrq(0).bits.rs1Rename, 10)
   expect(c.addrq(0).bits.rs2Rename, 12)
   expect(c.addrq(0).valid, 1)
 
@@ -353,7 +358,7 @@ class LSQTests(c: LSQ) extends Tester(c) {
   expect(c.io.currentLen, 1)
 
   // Reserve two entries from the arbiter
-  poke(c.io.resEntry(0).bits.robLoc, 4)
+  poke(c.io.resEntry(0).bits.robLoc, 7)
   poke(c.io.resEntry(0).bits.rs1Rename, 11)
   poke(c.io.resEntry(0).bits.rs2Rename, 13)
   poke(c.io.resEntry(1).bits.st_nld, 0)
@@ -394,7 +399,6 @@ class LSQTests(c: LSQ) extends Tester(c) {
   poke(c.io.robWbin.entry_s1(2).valid, true)
   poke(c.io.robWbin.entry_s1(2).data, 0x10000)
   expect(c.WbCamAddr.io.hit(2)(0), true)
-  //expect(c.addrq(0).bits.addr.valid, false)
   expect(c.WbCamAddr.io.hit(7)(0), false)
   expect(c.depMatrix(1).bits(0), false)
 
@@ -419,15 +423,10 @@ class LSQTests(c: LSQ) extends Tester(c) {
   //expect(c.addrq(0).bits.addr.valid, true)
   expect(c.addrq(0).bits.addr.bits, 0x10000)
 
-  //
+  poke(c.io.robWbin.entry_s1(2).valid, false)
   expect(c.WbCamAddr.io.hit(2)(0), true)
-  poke(c.io.robWbin.entry_s2(3).operand, 12)
-  poke(c.io.robWbin.entry_s2(3).is_addr, false)
-  poke(c.io.robWbin.entry_s2(3).valid, true)
-  poke(c.io.robWbin.entry_s2(3).data, 0xff)
-  expect(c.WbCamValue.io.hit(9)(0), true)
   //expect(c.addrq(0).bits.value.valid, false)
-  poke(c.io.robWbin.entry_s1(1).operand, 4)
+  poke(c.io.robWbin.entry_s1(1).operand, 7)
   poke(c.io.robWbin.entry_s1(1).is_addr, true)
   poke(c.io.robWbin.entry_s1(1).valid, true)
   poke(c.io.robWbin.entry_s1(1).data, 0x10000)
@@ -440,15 +439,27 @@ class LSQTests(c: LSQ) extends Tester(c) {
   poke(c.io.resEntry(3).valid, 0)
 
   step(1)
-  expect(c.addrq(0).bits.value.bits, 0xff)
   expect(c.addrq(1).bits.addr.bits, 0x10000)
-  expect(c.addrq(0).bits.value.valid, true)
+  expect(c.addrq(1).bits.addr.valid, true)
+  expect(c.depMatrix(1).bits(0), false)
+  poke(c.io.robWbin.entry_s1(1).valid, false)
+  poke(c.io.robWbin.entry_s2(3).operand, 12)
+  poke(c.io.robWbin.entry_s2(3).is_addr, false)
+  poke(c.io.robWbin.entry_s2(3).valid, true)
+  poke(c.io.robWbin.entry_s2(3).data, 0xff)
+  expect(c.WbCamValue.io.hit(9)(0), true)
   step(1)
   // Cycle 4
+  poke(c.io.robWbin.entry_s2(3).valid, false)
 
   //expect(c.addrq(0).bits.value.valid, true)
   //expect(c.addrq(0).bits.ready, true)
-  expect(c.depMatrix(1).bits(0), false)
+  expect(c.addrq(0).bits.value.bits, 0xff)
+  expect(c.addrq(0).bits.value.valid, true)
+  expect(c.depMatrix(1).bits(0), true)
+  step(1)
+  expect(c.addrq(1).bits.value.bits, 0xff)
+  expect(c.addrq(1).bits.value.valid, true)
 
   poke(c.io.stCommit(0).valid, true)
   poke(c.io.stCommit(0).bits, 6)
