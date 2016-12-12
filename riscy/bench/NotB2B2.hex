@@ -1,0 +1,7 @@
+0010001300210113                    add r1 <- r1 + 1, add r0 <- r0 + 1  Cycle 0
+0003181930108093                    add r2 <- r2 + 2, add r3 <- r3 + 3
+0042021300100013                    add r0 <- r0 + 1, add r4 <- r4 + 4  Cycle 1
+0003181930108093                    add r2 <- r2 + 2, add r3 <- r3 + 3
+0042021300100013                    add r0 <- r0 + 1, add r4 <- r4 + 4  Cycle 2
+0003181930108093                    add r2 <- r2 + 2, add r3 <- r3 + 3
+FFFFFFFF00210113                    add r1 <- r1 + 1, halt              Cycle 3
