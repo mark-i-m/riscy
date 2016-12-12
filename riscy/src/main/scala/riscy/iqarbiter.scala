@@ -252,6 +252,7 @@ class IqArbiter extends Module {
       io.addrBuf(i).bits.rs1Val       := io.inst(i).bits.rs1Val
       io.addrBuf(i).bits.rs2Rename    := io.inst(i).bits.rs2Rename
       io.addrBuf(i).bits.rs2Val       := io.inst(i).bits.rs2Val
+			io.addrBuf(i).bits.era          := io.inst(i).bits.era
     } .otherwise {
       io.allocIQ(i).inst.bits := io.inst(i).bits
       io.allocIQ(i).iqNum := finalMin(i)
