@@ -10,6 +10,10 @@ class Execute extends Module {
     // Speculation info related to bypassing, given by IQ
     val specIssue = Vec(4, Valid(new SpeculativeIssue).asInput)
 
+    // The current era according to ROB. This will be used for discarding
+    // output from instructions with mismatching eras.
+    val rob_era = UInt(INPUT, 7)
+
     // Stored values for 2 cycles which can be used for bypass
     val rob_wb_store = new RobWbStore(6) // OUTPUT
 
@@ -22,6 +26,7 @@ class Execute extends Module {
 
   val alu = Array.fill(4)(Module(new ALU(64)))
   val rob_writeback = Module(new RobWriteback(6))
+  rob_writeback.io.rob_era := io.rob_era
 
   // Hook up ALUs with issued instructions
   for(i <- 0 until 4) {
@@ -49,6 +54,7 @@ class Execute extends Module {
     rob_writeback.io.input.entry(i).is_addr               := alu(i).io.is_out_addr
     rob_writeback.io.input.entry(i).operand               := io.issued_inst(i).bits.tag
     rob_writeback.io.input.entry(i).valid                 := io.issued_inst(i).valid
+    rob_writeback.io.input.entry(i).era                   := io.issued_inst(i).bits.era
     rob_writeback.io.input.entry(i).is_branch_taken.valid := alu(i).io.is_branch
     rob_writeback.io.input.entry(i).is_branch_taken.bits  := alu(i).io.cmp_out
     rob_writeback.io.input.entry(i).branch_target         := alu(i).io.out

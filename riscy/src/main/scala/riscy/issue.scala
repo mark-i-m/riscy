@@ -20,6 +20,9 @@ class Issue extends Module {
 
     // Addrress buf entry and load store info
     val addrBuf = Vec.fill(4) {Valid (new AddrBufEntry)} // Output
+
+		// era for misspeculation handling
+		val era = UInt(INPUT, 7)
   }
 
   val arbiter = Module (new IqArbiter())
@@ -85,6 +88,11 @@ class Issue extends Module {
   issueQ1.io.robWb            := io.robWb
   issueQ2.io.robWb            := io.robWb
   issueQ3.io.robWb            := io.robWb
+
+	issueQ0.io.era         := io.era
+  issueQ1.io.era         := io.era
+  issueQ2.io.era         := io.era
+  issueQ3.io.era         := io.era
 
   // Collecting issued inst from all issue queues
   io.issuedEntry(0)       := issueQ0.io.issuedEntry

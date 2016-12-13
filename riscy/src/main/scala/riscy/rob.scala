@@ -21,12 +21,25 @@ class ROBEntry extends DecodeIns {
   val pc = UInt(OUTPUT, 64)
   val tag = UInt(OUTPUT, 6)
 
+  // Distinguishes instructions in the same ROB entry with the same PC but with
+  // different mispeculation eras. i.e. what if an instruction on the correct
+  // taken branch ends up in the same ROB position as it was in before.
+  //
+  // 7b is overkill, but it makes it easy to prove correctness. Ideally, we
+  // could make it 2 or 3 bits, but then we would need to check that we don't
+  // reuse an era number while there are still active instructions from that
+  // era.
+  val era = UInt(OUTPUT, 7)
+
   // From OpDecode:
   // - does this instruction have a dest reg
+  // - is this instruction a memory op
   // - is this instruction a jump
   val hasRd = Bool(OUTPUT)
   val isSt = Bool(OUTPUT)
   val isLd = Bool(OUTPUT)
+  val isBch = Bool(OUTPUT)
+  val isJmp = Bool(OUTPUT)
 
   // Purely for emulation purposes
   val isHalt = Bool(OUTPUT)
@@ -34,6 +47,8 @@ class ROBEntry extends DecodeIns {
   // From BP:
   // - was this branch predicted taken? 1 => T, 0 => NT
   val predTaken = Bool(OUTPUT)
+
+  // From Exec:
   val isMispredicted = Bool(OUTPUT)
 }
 
@@ -53,6 +68,7 @@ class ROB extends Module {
     val robDest = Vec.fill(8) { Valid(UInt(OUTPUT, 64)).asOutput }
     val robFree = UInt(OUTPUT, 7) // How many free entries
     val robFirst = UInt(OUTPUT, 6) // Index of the first free entry
+    val robEra = UInt(OUTPUT, 7) // Current mispeculation era
 
     val allocRemap = Vec.fill(4) { Valid(new AllocRemap()).flip }
     val allocROB = Vec.fill(4) { Valid(new ROBEntry()).flip }
@@ -127,10 +143,19 @@ class ROB extends Module {
   var freeInc = UInt()
   val free = Reg(init = UInt(64), next = freeInc)
 
+  // Era number
+  // - Every time there is a mispeculation, we start a new era
+  // - Incoming instructions get the new era number
+  // - On commit, need to check that the era number of the writtenback
+  //   instructions matches the current era. Otherwise, we might writeback to
+  //   flushed instructions.
+  var era = new MultiCounter(128)
+  io.robEra := era.value
+
   when(io.mispredPC.valid) {
     freeInc := UInt(64)
     head.reset
-    //era.inc(1) // TODO enable this when we merge mispec
+    era.inc(1)
   } .elsewhen (!io.robStallReq) {
     freeInc := free + headInc - tailInc
     head.inc(headInc)
@@ -233,12 +258,17 @@ class ROB extends Module {
 
   /////////////////////////////////////////////////////////////////////////////
   // Writeback logic
+  // 
+  // We should writeback values to the ROB iff
+  //  - the WB signal is valid AND
+  //  - the WB signal is not the address of a load unless it is a st or jmp/bch
   /////////////////////////////////////////////////////////////////////////////
-  // TODO: How to ignore flushed instructions? In all likelihood, the ROB entry
-  // number will not match, so they will be ignored, but this case is not
-  // guaranteed, so how to handle?
   for(i <- 0 until 6) {
-    wbShouldHappen(i) := io.wbValues(i).valid && (!io.wbValues(i).is_addr || rob(io.wbValues(i).operand).isSt)
+    wbShouldHappen(i) := io.wbValues(i).valid && 
+        (!io.wbValues(i).is_addr || 
+        rob(io.wbValues(i).operand).isSt ||
+        rob(io.wbValues(i).operand).isJmp ||
+        rob(io.wbValues(i).operand).isBch)
     when(wbShouldHappen(i)) {
       robW(io.wbValues(i).operand).valid := Bool(true)
       // The ROB entry stays the same, but the rdVal changes
@@ -320,12 +350,23 @@ class ROB extends Module {
     }
   }
 
+  // Want the first and second stores to exit through the first and second
+  // stCommit ports
+  val isSt = Vec.tabulate(4) { i => front(i).isSt && couldCommit(i) }
+  val firstSt = PriorityMux(Array.tabulate(4) { i => isSt(i) -> UInt(i) })
+  val isStNf = Vec.tabulate(4) { i => isSt(i) && UInt(i) =/= firstSt }
+  val secondSt = PriorityMux(Array.tabulate(4) { i => isStNf(i) -> UInt(i) })
+
   // If the head of the ROB is a store, tell the L/SQ to actually write to
   // memory now that the store has committed.
-  for(i <- 0 until 4) {
-    io.stCommit(i).valid := rob(head.value + UInt(i)).isSt && couldCommit(i)
-    io.stCommit(i).bits  := rob(head.value + UInt(i)).tag
-  }
+  //for(i <- 0 until 4) {
+  //  io.stCommit(i).valid := front(i).isSt && couldCommit(i)
+  //  io.stCommit(i).bits  := front(i).tag
+  //}
+  io.stCommit(0).valid := isSt(firstSt)
+  io.stCommit(0).bits  := front(firstSt).tag
+  io.stCommit(1).valid := isSt(secondSt)
+  io.stCommit(1).bits  := front(secondSt).tag
 
   // If the head of the ROB is a mispredicted branch...
   val mispredFlags = Vec.tabulate(4) {
@@ -348,7 +389,8 @@ class ROB extends Module {
   remap.io.reset.bits.bits  := UInt(0)
 
   when(io.mispredPC.valid) {
-    printf("MISPREDICT\n")
+    printf("MISPREDICT\n\tPC: %x\n\tCorrect Target: %x\n",
+      io.mispredPC.bits, io.mispredTarget)
   }
 
   // Write to the register file

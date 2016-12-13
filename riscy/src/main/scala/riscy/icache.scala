@@ -47,10 +47,8 @@ class ICache extends Module {
   val io = new Bundle {
     // Address to be requested
     val req = new ICacheReq
-    // Use this to invalidate any request issued 1 cycle ago
-    val s1_kill = Bool(INPUT)
-    // Use this to invalidate any request issued 2 cycles ago
-    val s2_kill = Bool(INPUT)
+    // Use this to invalidate any requests previously issued
+    val kill = Bool(INPUT)
 
     // Gives four valid instructions if possible. Valid bits are unset if four
     // valid instructions could not be found due to boundary issues.
@@ -60,6 +58,7 @@ class ICache extends Module {
     val memReadPort = Valid(UInt(OUTPUT, IcParams.addr_width)).asOutput
     val memReadData = Valid(UInt(INPUT, IcParams.cache_line_width *
                                         (IcParams.prefetch_buffer_len + 1))).asInput
+    val memCancelPort = Valid(UInt(OUTPUT, IcParams.addr_width)).asOutput
   }
   require(isPow2(IcParams.nSets) && isPow2(IcParams.nWays))
 
@@ -113,8 +112,8 @@ class ICache extends Module {
   // Time starts now!
   // We can say we got a "hit" if any of the tags matched in either the cache
   // tag array or the prefetch buffer.
-  s1_hit := s1_valid && (s1_any_tag_hit || s1_any_prefetch_tag_hit) && !io.s1_kill
-  s1_miss := s1_valid && (!s1_any_tag_hit && !s1_any_prefetch_tag_hit) && !io.s1_kill
+  s1_hit := s1_valid && (s1_any_tag_hit || s1_any_prefetch_tag_hit) && !io.kill
+  s1_miss := s1_valid && (!s1_any_tag_hit && !s1_any_prefetch_tag_hit) && !io.kill
   rdy := state === s_ready && !s1_miss
 
   // The final output will be either from the data array or the prefetch buffer
@@ -129,9 +128,9 @@ class ICache extends Module {
   io.resp.idle := (s2_hit) || (!s2_miss && !stall && state === s_ready)
   io.resp.addr := s2_vaddr
 
+  val s0_valid = Mux(rdy && !stall, io.req.valid, s1_valid && !io.kill)
   // These s0_* values represent the addresses to be checked in this cycle
-  val s0_valid = Mux(io.req.valid && rdy && !stall, io.req.valid, s1_valid)
-  val s0_vaddr = Mux(io.req.valid && rdy && !stall, io.req.addr, s1_vaddr)
+  val s0_vaddr = Mux(rdy && !stall, io.req.addr, s1_vaddr)
   val s0_idx = s0_vaddr(IcParams.offset_bits+IcParams.index_bits-1,
                         IcParams.offset_bits)
 
@@ -162,7 +161,7 @@ class ICache extends Module {
 
   // Seems like we are waiting for refill and the memory has responded. Update
   // the tag and data arrays.
-  when (state === s_refill_wait && io.memReadData.valid) {
+  when (state === s_refill_wait && io.memReadData.valid && !io.kill) {
     // Our cache line replacement policy is random replacement
     tag_array.write(refill_idx, Vec.fill(IcParams.nWays)(refill_tag),
                     Vec.tabulate(IcParams.nWays)(replace_way === Bits(_)))
@@ -185,12 +184,21 @@ class ICache extends Module {
                            state === s_refill_done
 
   // Initiate a memory request if we encountered a miss
-  when(state === s_refill_init) {
+  when(state === s_refill_init && !io.kill) {
     io.memReadPort.valid := Bool(true)
     io.memReadPort.bits  := refill_addr
   } .otherwise {
     io.memReadPort.valid := Bool(false)
     io.memReadPort.bits  := UInt(0)
+  }
+
+  // Cancel a memory request if kill was requested
+  when(state === s_refill_wait && io.kill) {
+    io.memCancelPort.valid := Bool(true)
+    io.memCancelPort.bits  := refill_addr
+  } .otherwise {
+    io.memCancelPort.valid := Bool(false)
+    io.memCancelPort.bits  := UInt(0)
   }
 
   // Perform tag array match
@@ -213,15 +221,15 @@ class ICache extends Module {
                                  !refill_in_progress)
   }
   s1_any_prefetch_tag_hit := s1_prefetch_tag_hit.reduceLeft(_||_)
-  s1_prefetch_hit  := s1_valid && s1_any_prefetch_tag_hit && !io.s1_kill
+  s1_prefetch_hit  := s1_valid && s1_any_prefetch_tag_hit && !io.kill
 
   // Perform prefetch data match in parallel
   s1_prefetch_out  := Mux1H(s1_prefetch_tag_hit, prefetch_line)
 
   // Perform updates useful for next cycle
-  s2_hit              := s1_hit && !stall && !io.s2_kill
-  s2_prefetch_hit     := s1_prefetch_hit && !stall && !io.s2_kill
-  s2_miss             := s1_miss && !stall && !io.s2_kill
+  s2_hit              := s1_hit && !stall && !io.kill
+  s2_prefetch_hit     := s1_prefetch_hit && !stall && !io.kill
+  s2_miss             := s1_miss && !stall && !io.kill
   s2_tag_hit          := s1_tag_hit
   s2_prefetch_tag_hit := s1_prefetch_tag_hit
   s2_vaddr            := s1_vaddr
@@ -294,10 +302,15 @@ class ICache extends Module {
     is (s_request) {
     }
     is (s_refill_init) {
-      state := s_refill_wait
+      when (io.kill) { 
+        state := s_ready
+      } .otherwise {
+        state := s_refill_wait
+      }
     }
     is (s_refill_wait) {
-      when (io.memReadData.valid) { state := s_refill_done }
+      when (io.memReadData.valid && !io.kill) { state := s_refill_done }
+      when (io.kill) { state := s_ready }
     }
     is (s_refill_done) {
       state := s_ready
@@ -441,8 +454,8 @@ class ICacheTests(c: ICache) extends Tester(c) {
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 164)
   peek(c.io.resp.inst)
-  // Kill request issued 2 cycles ago
-  poke(c.io.s2_kill, true)
+  // Kill requests issued before 
+  poke(c.io.kill, true)
   poke(c.io.req.addr, 4)
   step(1)
 
@@ -452,30 +465,25 @@ class ICacheTests(c: ICache) extends Tester(c) {
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 168)
   peek(c.io.resp.inst)
-  poke(c.io.s2_kill, false)
-  // Kill request for addr 4 issued 1 cycle ago
-  poke(c.io.s1_kill, true)
+  poke(c.io.kill, false)
   poke(c.io.req.addr, 8)
   step(1)
 
-  // Cycle 54 - Response for addr 4 should be invalidated because of our kill
-  // request
-  expect(c.io.resp.valid, false)
+  // Cycle 54 - Response for addr 4 should be valid and a hit
+  expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 4)
   peek(c.io.resp.inst)
-  poke(c.io.s2_kill, false)
-  poke(c.io.s1_kill, false)
   poke(c.io.req.addr, 12)
   step(1)
 
-  // Verify that everything proceeds as normal once all kill requests have been
-  // reset. Cycle 55 - Response for addr 8 should be received correctly
+  // Cycle 55 - Verify that we receive a response for addr 8
   expect(c.io.resp.valid, true)
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 8)
   peek(c.io.resp.inst)
-  poke(c.io.req.addr, 16)
+  // Request address which will generate a refill request
+  poke(c.io.req.addr, 1000)
   step(1)
 
   // Cycle 56 - Response for addr 12 should be received correctly
@@ -483,6 +491,78 @@ class ICacheTests(c: ICache) extends Tester(c) {
   expect(c.io.resp.idle, true)
   expect(c.io.resp.addr, 12)
   peek(c.io.resp.inst)
+  // Issue request for an address that will be a hit
+  poke(c.io.req.addr, 0)
+  step(1)
+
+  // Cycle 57 - No response should be available for addr 1000. Verify that
+  // refill request is not made if kill is issued
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
+  // Should be in refill_init state
+  expect(c.state, 2)
+  // Issue kill request. 
+  poke(c.io.kill, true)
+  expect(c.io.memReadPort.valid, false)
+  // Verify that we don't issue a cancel request either
+  expect(c.io.memCancelPort.valid, false)
+  step(1)
+
+  // Cycle 58 - Should be ready to accept one request
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, true)
+  expect(c.state, 0)
+  poke(c.io.kill, false)
+  // Pick address which will generate another refill request
+  poke(c.io.req.addr, 2000)
+  step(1)
+
+  // Cycle 59 - Should be ready to accept one more request
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, true)
+  poke(c.io.req.addr, 0)
+  step(1)
+
+  // Cycle 60 - Icache should generate a refill request
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
+  // Should be in refill_init state
+  expect(c.state, 2)
+  expect(c.io.memReadPort.valid, true)
+  expect(c.io.memReadPort.bits, 2000)
+  step(1)
+
+  // Cycle 61 - Icache will be waiting for mem response. Verify that it
+  // responds to kill requests even in this state and cancels any previously
+  // issued refill requests.
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, false)
+  // Should be in refill_wait state
+  expect(c.state, 3)
+  // Issue kill request. 
+  poke(c.io.kill, true)
+  expect(c.io.memCancelPort.valid, true)
+  expect(c.io.memCancelPort.bits, 2000)
+  step(1)
+
+  // Cycle 62 - Icache should be able to take a request
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, true)
+  poke(c.io.kill, false)
+  poke(c.io.req.addr, 0)
+  step(1)
+
+  // Cycle 63 - Icache should be able to take another request
+  expect(c.io.resp.valid, false)
+  expect(c.io.resp.idle, true)
+  poke(c.io.req.addr, 4)
+  step(1)
+
+  // Cycle 64 - Should be a hit
+  expect(c.io.resp.valid, true)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 0)
+  step(1)
   /*
    * Testcases to be added:
    * 1. Increment PC by 4W. Verify that we refill every other instruction and

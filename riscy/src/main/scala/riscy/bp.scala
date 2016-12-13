@@ -58,3 +58,17 @@ class BHT(nbht: Int) {
 class BTB(nbtb: Int) {
   // TODO: how to implement this? Is this a huge CAM?
 }
+
+// TODO: write a branch predictor!
+// For now, always predict not taken!
+class BP extends Module {
+  val io = new Bundle {
+    val btbAddr = UInt(OUTPUT, 64)
+    val rasAddr = UInt(OUTPUT, 64)
+    val isBranchTaken = Bool(OUTPUT)
+  }
+
+  io.isBranchTaken := Bool(false)
+  io.btbAddr := UInt(0)
+  io.rasAddr := UInt(0)
+}

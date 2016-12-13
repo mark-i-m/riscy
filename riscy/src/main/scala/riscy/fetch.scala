@@ -11,21 +11,27 @@ import Chisel._
 // 2. Four instruction valid bits: Fetch.io.instValid(i)
 
 class FetchOutput extends Bundle {
-  val insts = Vec.fill(4) { Valid(UInt(OUTPUT, 32)) }
-  val pc = Vec.fill(4) { UInt(OUTPUT, 64) }
+  val insts = Vec(4, Valid(UInt(OUTPUT, 32)))
+  val pc = Vec(4, UInt(OUTPUT, 64))
+  val predTaken = Vec(4, Bool(OUTPUT))
 }
 
 class Fetch extends Module {
   val io = new Bundle {
     /* INPUTS */
+    // From BP
     val btbAddr = UInt(INPUT, 64)
     val rasAddr = UInt(INPUT, 64)
     val isBranchTaken = Bool(INPUT)
+
+    // From ROB
     val branchMispredTarget = UInt(INPUT, 64)
     val isBranchMispred = Bool(INPUT)
+
     // Is this instruction a return from a subroutine call?
     val isReturn = Bool(INPUT)
     val stall = Bool(INPUT)
+
     // Memory requests fullfilled from memory
     val memReadData = Valid(UInt(INPUT, IcParams.cache_line_width *
                                         (IcParams.prefetch_buffer_len + 1))).asInput
@@ -35,6 +41,8 @@ class Fetch extends Module {
     val output = (new FetchOutput).asOutput
     // Memory requests outgoing to memory
     val memReadPort = Valid(UInt(OUTPUT, 64)).asOutput
+    // Memory requests to be cancelled by memory
+    val memCancelPort = Valid(UInt(OUTPUT, 64)).asOutput
   }
   val icache = Module(new ICache())
   icache.io.resp.stall := io.stall
@@ -70,9 +78,28 @@ class Fetch extends Module {
   val icache_ready = icache.io.resp.idle || icache.io.resp.valid
 
   // Shift in a new address only is the cache is ready to accept the old address
-  when (icache_ready) {
+  //
+  val reqValid = Wire(Bool())
+  when (io.isBranchMispred) {
+    // The Icache is busy processing our previous requests. But we hit a
+    // misprediction. So all our previous requests need to be invalidated.
     fetchAddr := addr
     prevFetchAddr := fetchAddr
+    icache.io.kill := Bool(true)
+    // We will send a valid request in the next cycle. There is basically a one
+    // cycle bubble when we are notified of a misprediction.
+    reqValid := Bool(false)
+
+  } .elsewhen (icache_ready) {
+    fetchAddr := addr
+    prevFetchAddr := fetchAddr
+    icache.io.kill := Bool(false)
+    reqValid := Bool(true)
+
+  } .otherwise {
+    // Let the Icache continue peacefully.
+    icache.io.kill := Bool(false)
+    reqValid := Bool(true)
   }
 
   // Send out the address to Icache.
@@ -81,11 +108,12 @@ class Fetch extends Module {
   // generated a miss 2 cycles ago and drops the one which was issued 1 cycle
   // ago.
   icache.io.req.addr := Mux(icache_ready, fetchAddr, prevFetchAddr)
-  icache.io.req.valid := Bool(true)
+  icache.io.req.valid := reqValid
 
   // Hook up I$ to memory
   icache.io.memReadData := io.memReadData
   io.memReadPort := icache.io.memReadPort
+  io.memCancelPort := icache.io.memCancelPort
 
   val nextPC = UInt(width = 64)
   val nextPCOffset = UInt(width = 5)
@@ -95,7 +123,7 @@ class Fetch extends Module {
   nextPC := addr + Mux(io.stall, UInt(0), nextPCOffset)
 
   // Increment PC
-  when ((io.stall === Bool(false)) && icache_ready) {
+  when (!io.stall && (icache_ready || io.isBranchMispred)) {
     PC := nextPC
     printf("Current PC: %x, Next PC: %x\n", PC, nextPC)
   }
@@ -149,6 +177,9 @@ class Fetch extends Module {
 
   for (i <- 0 until 4) {
     io.output.insts(i).bits := icache.io.resp.inst(i)
+
+    // Branch prediction
+    io.output.predTaken(i) := io.isBranchTaken
   }
 }
 
@@ -271,14 +302,159 @@ class FetchTests(c: Fetch) extends Tester(c) {
   expect_all_inst_validity(c, true)
   peek_regs(c)
   step(1)
+  /*
 
   // Cycle 9 - Another hit
+  // Cycle 8 - This should be a miss since the 0x20 requested 2 cycles ago
+  // doesn't exist in cache. Memory request should be generated
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x30)
+  expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, true)
+  expect(c.io.memReadPort.bits, 0x20)
+  peek_regs(c)
+  step(1)
+
+  // Cycle 9 - Icache will now wait for response
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x30)
+  expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, false)
+  peek_regs(c)
+  // Memory fullfills I$ request
+  poke(c.io.memReadData.valid, true)
+  poke(c.io.memReadData.bits, 0x20)
+  peek(c.icache.state)
+  step(1)
+
+  // Cycle 10 - Icache will refill tag and data arrays
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x30)
+  expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, false)
+  peek_regs(c)
+  step(1)
+
+  // Cycle 11 - Icache has filled response. Will now perform match.
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x30)
+  expect_all_inst_validity(c, false)
+  step(1)
+
+  // Cycle 12 - Icache delivers a hit.
+  expect(c.icache.io.resp.valid, true)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.resp.addr, 0x20)
+  expect_all_inst_validity(c, true)
+  expect(c.io.memReadPort.valid, false)
+  peek_regs(c)
+
+  // Simulate branch misprediction. The requested addr should be invalid in
+  // this cycle
+  poke(c.io.isBranchMispred, true)
+  poke(c.io.branchMispredTarget, 0x20)
+  expect(c.icache.io.req.valid, false)
+  step(1)
+
+  // Cycle 13 - Icache response should be invalidated. And the correct request
+  // should be sent to Icache
+  poke(c.io.isBranchMispred, false)
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, true)
+  expect_all_inst_validity(c, false)
+  expect(c.icache.io.req.addr, 0x20)
+  expect(c.icache.io.req.valid, true)
+  peek_regs(c)
+  step(1)
+
+  // Cycle 14 - Icache response should remain invalid. The correct incremented
+  // request should be sent to Icache.
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, true)
+  expect_all_inst_validity(c, false)
+  expect(c.icache.io.req.addr, 0x30)
+  peek_regs(c)
+  step(1)
+
+  // Cycle 15 - Icache should generate a hit.
+  expect(c.icache.io.resp.valid, true)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.resp.addr, 0x20)
+  expect(c.icache.io.req.addr, 0x40)
+  expect_all_inst_validity(c, true)
+  expect(c.io.memReadPort.valid, false)
+  peek_regs(c)
+  step(1)
+
+  // Cycle 16 - Icache should generate another hit.
   expect(c.icache.io.resp.valid, true)
   expect(c.icache.io.resp.idle, true)
   expect(c.icache.io.resp.addr, 0x30)
   expect(c.icache.io.req.addr, 0x50)
   expect_all_inst_validity(c, true)
+  expect(c.io.memReadPort.valid, false)
   peek_regs(c)
+  step(1)
+
+  // Cycle 17 - Icache should generate a miss since the requested addr 0x40 is
+  // not present, and should also issue refill request
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x50)
+  expect_all_inst_validity(c, false)
+  expect(c.io.memReadPort.valid, true)
+  expect(c.io.memReadPort.bits, 0x40)
+  peek_regs(c)
+  step(1)
+
+  // Cycle 18 - Icache should be waiting for memory response.
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, false)
+  expect(c.icache.io.req.addr, 0x50)
+  expect_all_inst_validity(c, false)
+  peek_regs(c)
+
+  // Simulate branch misprediction. The requested addr should be invalid in
+  // this cycle
+  poke(c.io.isBranchMispred, true)
+  poke(c.io.branchMispredTarget, 0x0)
+  expect(c.icache.io.req.valid, false)
+  step(1)
+
+  // Cycle 19 - Icache response should be invalidated. And the correct request
+  // should be sent to Icache
+  poke(c.io.isBranchMispred, false)
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, true)
+  expect_all_inst_validity(c, false)
+  expect(c.icache.io.req.addr, 0x0)
+  expect(c.icache.io.req.valid, true)
+  peek_regs(c)
+  step(1)
+
+  // Cycle 20 - Icache response should remain invalid. The correct incremented
+  // request should be sent to Icache.
+  expect(c.icache.io.resp.valid, false)
+  expect(c.icache.io.resp.idle, true)
+  expect_all_inst_validity(c, false)
+  expect(c.icache.io.req.addr, 0x10)
+  peek_regs(c)
+  step(1)
+
+  // Cycle 21 - Icache should generate a hit.
+  expect(c.icache.io.resp.valid, true)
+  expect(c.icache.io.resp.idle, true)
+  expect(c.icache.io.resp.addr, 0x0)
+  expect(c.icache.io.req.addr, 0x20)
+  expect_all_inst_validity(c, true)
+  expect(c.io.memReadPort.valid, false)
+  peek_regs(c)
+  step(1)
+  */
 } 
 
 class FetchGenerator extends TestGenerator {

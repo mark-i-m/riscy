@@ -24,7 +24,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // - Port 1 => Data/LSQ
   var memory = Module(new BigMemory(160, 1 << 10, 2, 2, 5)) // 160kB memory, 160B cache lines, 5 cycle latency
 
-  //TODO val bp = Module(new BP)
+  val bp = Module(new BP)
   var fetch = Module(new Fetch)
   val decode = Array.fill(4)(Module(new DecodeSingle))
   val alloc = Module(new RiscyAlloc)
@@ -36,10 +36,11 @@ class Riscy(blackbox: Boolean = false) extends Module {
 
   // Hook up ICache and Memory
   memory.io.readPorts(0) := fetch.io.memReadPort
+  memory.io.readCancel(0) := fetch.io.memCancelPort
   fetch.io.memReadData := memory.io.readData(0)
 
-  // TODO: hook up BP and Fetch
-  //fetch <> bp
+  // Hook up BP and Fetch
+  fetch <> bp
 
   // branch misprediction signals from ROB to Fetch
   fetch.io.isBranchMispred := rob.io.mispredPC.valid
@@ -63,6 +64,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
 
     if(blackbox) {
       alloc.io.pc(i) := fetch.io.output.pc(i)
+      alloc.io.bchPredTaken(i) := fetch.io.output.predTaken(i)
     }
   }
 
@@ -73,11 +75,15 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // ROB entries come directly from Alloc
   issue.io.inst := alloc.io.allocROB
 
+  //ROB to issue stage era
+  issue.io.era := rob.io.robEra
+	
   // Hook up IssueStage and LSQ (Addr Q)
   lsq.io.resEntry     := issue.io.addrBuf
   issue.io.addrBufLen  := lsq.io.currentLen
 
   // Hook up Exec and ROB
+  exec.io.rob_era := rob.io.robEra
   for(i <- 0 until 6) {
     rob.io.wbValues(i) := exec.io.rob_wb_output.entry(i)
   }
