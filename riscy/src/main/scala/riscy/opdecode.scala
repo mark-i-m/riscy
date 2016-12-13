@@ -130,6 +130,38 @@ class RiscyOpDecode extends Module {
       io.opInfo.hasImmU   := UInt(0)
       io.opInfo.hasImmJ   := UInt(0)
     }
+
+    when (io.op(6,2) === UInt(0x08)) {
+      io.opInfo.isSt := UInt(1)
+    } .otherwise {
+      io.opInfo.isSt := UInt(0)
+    }
+
+    when (io.op(6,2) === UInt(0x00)) {
+      io.opInfo.isLd := UInt(1)
+    } .otherwise {
+      io.opInfo.isLd := UInt(0)
+    }
+
+    // BEQ, BNE BLT BGE BLTU BGEU
+    when (io.op(6,2) === UInt(0x18)) {
+      io.opInfo.isBch := UInt(1)
+    } .otherwise {
+      io.opInfo.isBch := UInt(0)
+    }
+
+    when (io.op(6,2) === UInt(0x19) ||
+          io.op(6,2) === UInt(0x1B)) {
+      io.opInfo.isJmp := UInt(1)
+    } .otherwise {
+      io.opInfo.isJmp := UInt(0)
+    }
+
+    when (io.op === UInt(0x7F)) {
+      io.opInfo.isHalt := Bool(true)
+    } .otherwise {
+      io.opInfo.isHalt := Bool(false)
+    }
   } .otherwise {
     io.opInfo.hasRs1    := UInt(0)
     io.opInfo.hasRs2    := UInt(0)
@@ -141,38 +173,11 @@ class RiscyOpDecode extends Module {
     io.opInfo.hasImmB   := UInt(0)
     io.opInfo.hasImmU   := UInt(0)
     io.opInfo.hasImmJ   := UInt(0)
-  }
-
-  when (io.op(6,2) === UInt(0x08)) {
-    io.opInfo.isSt := UInt(1)
-  } .otherwise {
-    io.opInfo.isSt := UInt(0)
-  }
-
-  when (io.op(6,2) === UInt(0x00)) {
-    io.opInfo.isLd := UInt(1)
-  } .otherwise {
-    io.opInfo.isLd := UInt(0)
-  }
-
-  // BEQ, BNE BLT BGE BLTU BGEU
-  when (io.op(6,2) === UInt(0x18)) {
-    io.opInfo.isBch := UInt(1)
-  } .otherwise {
-    io.opInfo.isBch := UInt(0)
-  }
-
-  when (io.op(6,2) === UInt(0x19) ||
-        io.op(6,2) === UInt(0x1B)) {
-    io.opInfo.isJmp := UInt(1)
-  } .otherwise {
-    io.opInfo.isJmp := UInt(0)
-  }
-
-  when (io.op === UInt(0x7F)) {
-    io.opInfo.isHalt := Bool(true)
-  } .otherwise {
-    io.opInfo.isHalt := Bool(false)
+    io.opInfo.isLd      := UInt(0)
+    io.opInfo.isSt      := UInt(0)
+    io.opInfo.isJmp     := UInt(0)
+    io.opInfo.isBch     := UInt(0)
+    io.opInfo.isHalt    := UInt(0)
   }
 }
 
