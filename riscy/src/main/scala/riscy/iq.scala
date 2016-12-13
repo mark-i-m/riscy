@@ -92,7 +92,7 @@ class IssueQueue extends Module {
 	// Added era checking so that dead instructions go out of queue
 	val wakeUpRs1 = Vec.fill(16) {Bool()}
 	for (j <- 0 to 15) {
-		when (iqueue(j).bits.era =/= io.era) {
+		when (iqueue(j).bits.era =/= io.era && iqueue(j).valid) {
 			wakeUpRs1(j) := Bool(true) 
 		} .elsewhen (isWokenUpRs1(j)(8) === Bool(true)) {
 			wakeUpRs1(j) := Bool(true)
@@ -104,7 +104,7 @@ class IssueQueue extends Module {
 
 	val wakeUpRs2 = Vec.fill(16) {Bool()}
 	for (j <- 0 to 15) {
-		when (iqueue(j).bits.era =/= io.era) {
+		when (iqueue(j).bits.era =/= io.era && iqueue(j).valid) {
 			wakeUpRs2(j) := Bool(true) 
 		} .elsewhen (isWokenUpRs2(j)(8) === Bool(true)) {
 			wakeUpRs2(j) := Bool(true)
