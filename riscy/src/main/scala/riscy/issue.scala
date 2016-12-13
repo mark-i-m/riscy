@@ -15,6 +15,7 @@ class Issue extends Module {
     val robWb = new RobWbStore(6).flip // Input
     val addrBufLen = UInt(INPUT, 5)
     val stall = Bool(OUTPUT)
+		val in_stall = Bool(INPUT)
     val issuedEntry = Vec.fill(4) {Valid(new ROBEntry).asOutput}
 		val specIssue = Vec.fill(4) {Valid(new SpeculativeIssue).asOutput}
 
@@ -42,6 +43,7 @@ class Issue extends Module {
   val allocatedInst        = arbiter.io.allocIQ
   io.addrBuf             	:= arbiter.io.addrBuf
   io.stall                := arbiter.io.stall
+	arbiter.io.in_stall			:= io.in_stall
 
   // calculating instructions per issue queue
   for (i <- 0 until 4) {

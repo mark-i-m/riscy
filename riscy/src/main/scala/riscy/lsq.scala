@@ -272,6 +272,7 @@ class LSQ extends Module {
         printf("LSQ: St dispatch on %d\n", UInt(j))
         printf("LSQ: Invalidating store entry on address queue\n")
         addrq(i).bits.addr.valid := Bool(false)
+        addrq(i).bits.value.valid := Bool(false)
         addrq(i).valid := Bool(false)
         when (addrq(i).bits.era === io.robEra) {
           stCommitRow(j)(i) := Bool(true)
