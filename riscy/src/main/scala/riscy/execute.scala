@@ -54,6 +54,7 @@ class Execute extends Module {
     rob_writeback.io.input.entry(i).is_addr               := alu(i).io.is_out_addr
     rob_writeback.io.input.entry(i).operand               := io.issued_inst(i).bits.tag
     rob_writeback.io.input.entry(i).valid                 := io.issued_inst(i).valid
+    rob_writeback.io.input.entry(i).era                   := io.issued_inst(i).bits.era
     rob_writeback.io.input.entry(i).is_branch_taken.valid := alu(i).io.is_branch
     rob_writeback.io.input.entry(i).is_branch_taken.bits  := alu(i).io.cmp_out
     rob_writeback.io.input.entry(i).branch_target         := alu(i).io.out
