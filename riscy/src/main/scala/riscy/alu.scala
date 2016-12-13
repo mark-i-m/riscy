@@ -386,8 +386,7 @@ class ALU(xLen : Int) extends Module {
     A2_IMM_S  -> immS_ext.asUInt,
     A2_IMM_B  -> immB_ext.asUInt,
     A2_IMM_J  -> immJ_ext.asUInt,
-    A2_IMM_U  -> Cat(Cat(Fill(32, immU_ext(19)), immU_ext.asUInt()(19,0)),
-                     Fill(12, UInt(0)))
+    A2_IMM_U  -> immU_ext.asUInt
   ))
 
   // ADD, SUB - Use an adder to derive results
@@ -1645,7 +1644,7 @@ class ALUTests(c: ALU) extends Tester(c) {
 
   // 116. Test LUI instruction
   set_instruction("LUI")
-  poke(c.io.inst.immU, 10)
+  poke(c.io.inst.immU, 10 << 12)
   step(1)
   expect(c.io.out, 10 << 12)
   expect(c.io.is_branch, false)
@@ -1654,7 +1653,7 @@ class ALUTests(c: ALU) extends Tester(c) {
   // 117. Test AUIPC instruction
   set_instruction("AUIPC")
   poke(c.io.PC, 1000)
-  poke(c.io.inst.immU, 10)
+  poke(c.io.inst.immU, 10 << 12)
   step(1)
   expect(c.io.out, 1000 + (10 << 12))
   expect(c.io.is_branch, false)
@@ -2029,14 +2028,14 @@ class ALUTests(c: ALU) extends Tester(c) {
   set_instruction("LUI")
   poke(c.io.inst.immU, 0x80000)
   step(1)
-  expect(c.io.out, 0xffffffff80000000L)
+  expect(c.io.out, 0x80000)
 
   // 164. Test AUIPC instruction - Sign-extension testcase
   set_instruction("AUIPC")
   poke(c.io.PC, 1000)
   poke(c.io.inst.immU, 0x80000)
   step(1)
-  expect(c.io.out, 0xffffffff800003e8L)
+  expect(c.io.out, 0x803e8)
 
   def set_rob_wb_store(cycles : Int, index : Int, data : Int) = {
     if (cycles == 0) {
