@@ -51,6 +51,8 @@ Specs:
 - Commit
     - 4-wide commit
 
+A diagram of the whole pipeline can be found in the `doc` directory.
+
 Our implementation was originally going to be based off of the rocket-chip
 implementation from [UC Berkeley](https://github.com/ucb-bar/rocket-chip). We
 ended up not doing this because the rocket core is not commented at all -> very
