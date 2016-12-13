@@ -320,12 +320,23 @@ class ROB extends Module {
     }
   }
 
+  // Want the first and second stores to exit through the first and second
+  // stCommit ports
+  val isSt = Vec.tabulate(4) { i => front(i).isSt && couldCommit(i) }
+  val firstSt = PriorityMux(Array.tabulate(4) { i => isSt(i) -> UInt(i) })
+  val isStNf = Vec.tabulate(4) { i => isSt(i) && UInt(i) =/= firstSt }
+  val secondSt = PriorityMux(Array.tabulate(4) { i => isStNf(i) -> UInt(i) })
+
   // If the head of the ROB is a store, tell the L/SQ to actually write to
   // memory now that the store has committed.
-  for(i <- 0 until 4) {
-    io.stCommit(i).valid := rob(head.value + UInt(i)).isSt && couldCommit(i)
-    io.stCommit(i).bits  := rob(head.value + UInt(i)).tag
-  }
+  //for(i <- 0 until 4) {
+  //  io.stCommit(i).valid := front(i).isSt && couldCommit(i)
+  //  io.stCommit(i).bits  := front(i).tag
+  //}
+  io.stCommit(0).valid := isSt(firstSt)
+  io.stCommit(0).bits  := front(firstSt).tag
+  io.stCommit(1).valid := isSt(secondSt)
+  io.stCommit(1).bits  := front(secondSt).tag
 
   // If the head of the ROB is a mispredicted branch...
   val mispredFlags = Vec.tabulate(4) {
