@@ -15,6 +15,7 @@ class RiscyAlloc extends Module {
     // Input from the rotator and decode logic with 4 decoded instructions
     val inst = Vec.fill(4) { Valid(new DecodeIns()).flip }
     val pc = Vec.fill(4) {UInt(INPUT, 64)}
+    val bchPredTaken = Vec(4, Bool(INPUT))
 
     // Access the Remap table to find out what the current mappings are (so we
     // can rename)
@@ -30,6 +31,7 @@ class RiscyAlloc extends Module {
     val robDest = Vec.fill(8) { Valid(UInt(INPUT, 64)).asInput }
     val robFree = UInt(INPUT, 6) // How many free entries TODO: do we even need this? -MM
     val robFirst = UInt(INPUT, 6) // Index of the first free entry
+    val robEra = UInt(INPUT, 7) // What misspeculation era are we in?
 
     // Outputs to the Remap table and the ROB with the correct values to update
     // for this cycle. 
@@ -60,6 +62,10 @@ class RiscyAlloc extends Module {
 
   val pipelinedPc = Vec.tabulate(4) {
     i => RegEnable(io.pc(i), !io.allocStall)
+  }
+
+  val pipelinedPred = Vec.tabulate(4) {
+    i => RegEnable(io.bchPredTaken(i), !io.allocStall)
   }
 
   // Do a simple addition to rename the instructions. Every instruction gets
@@ -126,10 +132,14 @@ class RiscyAlloc extends Module {
     robEntry.funct7 := Mux(pipelinedOpDecode(i).hasRs2, pipelinedInst(i).bits.funct7, UInt(0, 7))
     robEntry.isSt := pipelinedOpDecode(i).isSt
     robEntry.isLd := pipelinedOpDecode(i).isLd
+    robEntry.isBch := pipelinedOpDecode(i).isBch
+    robEntry.isJmp := pipelinedOpDecode(i).isJmp
     robEntry.isHalt := pipelinedOpDecode(i).isHalt
     robEntry.hasRd := pipelinedOpDecode(i).hasRd
-
-    // Destination
+    robEntry.predTaken := pipelinedPred(i)
+    robEntry.era := io.robEra
+    
+		// Destination
     robEntry.rd := pipelinedInst(i).bits.rd
 
     // Immediates

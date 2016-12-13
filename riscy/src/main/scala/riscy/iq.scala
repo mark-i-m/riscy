@@ -22,6 +22,7 @@ class IssueQueue extends Module {
 		val issuedEntry = Valid(new ROBEntry).asOutput
 		val currentLen = UInt(OUTPUT, 5)
 		val specIssue = Valid(new SpeculativeIssue).asOutput
+		val era = UInt(INPUT, 7)
 	}
 
 	//val eachEntry = Module ( new ShiftRegPP(() => new  ROBEntry))
@@ -88,9 +89,12 @@ class IssueQueue extends Module {
 		}
 	}
 
+	// Added era checking so that dead instructions go out of queue
 	val wakeUpRs1 = Vec.fill(16) {Bool()}
 	for (j <- 0 to 15) {
-		when (isWokenUpRs1(j)(8) === Bool(true)) {
+		when (iqueue(j).bits.era =/= io.era) {
+			wakeUpRs1(j) := Bool(true) 
+		} .elsewhen (isWokenUpRs1(j)(8) === Bool(true)) {
 			wakeUpRs1(j) := Bool(true)
 		} .otherwise {
 			wakeUpRs1(j) := iqueue(j).bits.rs1Val.valid
@@ -100,7 +104,9 @@ class IssueQueue extends Module {
 
 	val wakeUpRs2 = Vec.fill(16) {Bool()}
 	for (j <- 0 to 15) {
-		when (isWokenUpRs2(j)(8) === Bool(true)) {
+		when (iqueue(j).bits.era =/= io.era) {
+			wakeUpRs2(j) := Bool(true) 
+		} .elsewhen (isWokenUpRs2(j)(8) === Bool(true)) {
 			wakeUpRs2(j) := Bool(true)
 		} .otherwise {
 			wakeUpRs2(j) := iqueue(j).bits.rs2Val.valid
@@ -135,6 +141,7 @@ class IssueQueue extends Module {
 	io.issuedEntry.valid := Reg(next = issuedPipelineValid)
  
 	// Logic to provide speculative location to execute
+	// Check last two instructions and provide info to WB with location to look at
 	val issuedPrev2Pipeline = Vec.tabulate(8) { i => Reg(next = io.issuedPrev2(i)) }
 	val specCamRs1 = Module (new CAM(1, 8, 6))
 	val specCamRs2 = Module (new CAM(1, 8, 6))
