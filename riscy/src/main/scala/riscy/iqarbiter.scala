@@ -28,6 +28,7 @@ class IqArbiter extends Module {
     // Addrress buf entry and load store info
     val addrBuf = Vec.fill(4) {Valid (new AddrBufEntry)}
     val stall = Bool(OUTPUT)
+		val in_stall = Bool(INPUT)
   }
 
   // Logic to generate initial stalls in design
@@ -228,7 +229,7 @@ class IqArbiter extends Module {
   }
 
   for (i <- 0 until 4) {
-    when (!io.stall) {
+    when (!io.stall && !io.in_stall) {
       io.allocIQ(i).inst.bits := io.inst(i).bits
       io.allocIQ(i).iqNum := finalMin(i)
       io.allocIQ(i).inst.valid := io.inst(i).valid

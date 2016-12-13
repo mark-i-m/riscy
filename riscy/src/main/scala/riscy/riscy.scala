@@ -115,8 +115,9 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // Hook up stalling logic
   fetch.io.stall      := stall.io.fetchStall
   alloc.io.allocStall := stall.io.allocStall
-
-  stall.io.robStallReq := rob.io.robStallReq
+  issue.io.in_stall 	:= stall.io.issueStall
+  
+	stall.io.robStallReq := rob.io.robStallReq
   stall.io.arbiterStallReq := issue.io.stall
 }
 
