@@ -1,1 +1,0 @@
-Simple Data Parallel Loop -- Simple Data PArallel Loop Float/Double Conversion
