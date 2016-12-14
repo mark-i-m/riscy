@@ -316,7 +316,7 @@ class LSQ extends Module {
     }
   } .elsewhen (ldIssueSet && numLoads === UInt(1)) {
     printf("LSQ: Sending one completed load to ROB WB: %d and Era: %d\n",
-            addrq(ldSelect.io.pos(0)).bits.robLoc, addrq(ldSelect.io.pos(0)).bits.robLoc)
+            addrq(ldSelect.io.pos(0)).bits.robLoc, io.robEra)
     io.robWbOut.entry(0).data := addrq(ldSelect.io.pos(0)).bits.value.bits
     io.robWbOut.entry(0).is_addr := Bool(false)
     io.robWbOut.entry(0).operand := addrq(ldSelect.io.pos(0)).bits.robLoc
