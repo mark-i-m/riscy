@@ -1,1 +1,0 @@
-Cache resident Linked List Traversal
