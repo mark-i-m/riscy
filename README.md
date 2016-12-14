@@ -23,61 +23,25 @@ We made a number of hugely simplifying assumptions in order to finish on time:
 - Only implementing the [RISCV RV64I
   instructions](https://riscv.org/specifications/), excluding memory fences.
 
-Specs:
-- 4-wide pipeline
-- Out of Order execute, in-order commit
-- Fetch
-    - Blocking I$
-    - TODO: size? associativity?
-    - TODO: branch predictor?
-- Renaming
-    - ROB based
-    - 64 entry ROB
-- Issue/FUs
-    - 4-wide issue
-    - 4 issue queues of 16 entries, each feeding a single ALU
-    - Load balancing arbiter selects which issue queue to insert an instruction into
-- Load/Store Queue
-    - 32 entry LSQ
-    - Non-speculative memory disambiguation
-    - Loads can issue out of order between stores
-    - Stores only happen when they commit
-    - TODO: D$
-- Writeback
-    - Processor supports back-to-back execution of dependent instructions
-    - Writeback structure (a.k.a ROB WB or more affectionately, `FooPP`) is
-      designed to avoid the massive tangle of wires created by broadcast-based
-      writeback among 4 ALUs and a LSQ.
-- Commit
-    - 4-wide commit
+Better documentation can be found in `doc/doc.tex`. To render: `pdflatex
+doc.tex` in `doc`.
 
 A diagram of the whole pipeline can be found in the `doc` directory.
 
-Our implementation was originally going to be based off of the rocket-chip
-implementation from [UC Berkeley](https://github.com/ucb-bar/rocket-chip). We
-ended up not doing this because the rocket core is not commented at all -> very
-hard to understand.
-
 Our implementation is entirely contained in the `riscy` subdirectory of this
-repository, and the rocket core implementation was kept mostly for reference.
+repository.
 
-To build:
+To build and run module-level tests:
 ```
 $ cd riscy
 $ make test
 ```
 
-Note that by "build", we mean generate, compile, and run C++ from the Chisel.
-This C++ includes an extensive module-level test suite. You will need about 4GB
-to compile (thanks to g++).
-
-To run top-level tests (running some simple programs through the processor end-to-end):
+To build and run top-level tests/benchmarks with the whole pipeline (this takes
+a huge amount of memory [more than ~6GB]):
 ```
 $ cd riscy
-$ make <bench>.hex.bench
+$ make check
 ```
 
-where `<bench>` is the name of the benchmark in the `bench` directory.
-Unfortunately, because of the lack of OS support by our processor, we cannot
-run real RISCV programs, even though we implement enough of the ISA to actually
-run most programs.
+Note that by "build", we mean generate, compile, and run C++ from the Chisel.
