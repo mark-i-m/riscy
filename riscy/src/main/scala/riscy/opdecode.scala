@@ -21,6 +21,8 @@ class OpDecode extends Bundle {
   val hasImmJ   = Bool(OUTPUT)
   val isLd      = Bool(OUTPUT)
   val isSt      = Bool(OUTPUT)
+  val isBch     = Bool(OUTPUT)
+  val isJmp     = Bool(OUTPUT)
 
   // This signal is for emulation purposes
   val isHalt = Bool(OUTPUT)
@@ -141,6 +143,20 @@ class RiscyOpDecode extends Module {
       io.opInfo.isLd := UInt(0)
     }
 
+    // BEQ, BNE BLT BGE BLTU BGEU
+    when (io.op(6,2) === UInt(0x18)) {
+      io.opInfo.isBch := UInt(1)
+    } .otherwise {
+      io.opInfo.isBch := UInt(0)
+    }
+
+    when (io.op(6,2) === UInt(0x19) ||
+          io.op(6,2) === UInt(0x1B)) {
+      io.opInfo.isJmp := UInt(1)
+    } .otherwise {
+      io.opInfo.isJmp := UInt(0)
+    }
+
     when (io.op === UInt(0x7F)) {
       io.opInfo.isHalt := Bool(true)
     } .otherwise {
@@ -159,6 +175,8 @@ class RiscyOpDecode extends Module {
     io.opInfo.hasImmJ   := UInt(0)
     io.opInfo.isLd      := UInt(0)
     io.opInfo.isSt      := UInt(0)
+    io.opInfo.isJmp     := UInt(0)
+    io.opInfo.isBch     := UInt(0)
     io.opInfo.isHalt    := UInt(0)
   }
 }

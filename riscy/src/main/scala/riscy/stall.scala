@@ -14,11 +14,13 @@ class Stall extends Module {
     // Signals that a stage should stall
     val fetchStall = Bool(OUTPUT)
     val allocStall = Bool(OUTPUT)
+		val issueStall = Bool(OUTPUT)
   }
 
   io.fetchStall := io.allocStall
   io.allocStall := io.arbiterStallReq || io.robStallReq
-
+  io.issueStall := io.robStallReq
+	
   when(io.arbiterStallReq) {
     printf("ARBITER STALL")
   }

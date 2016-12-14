@@ -15,11 +15,15 @@ class Issue extends Module {
     val robWb = new RobWbStore(6).flip // Input
     val addrBufLen = UInt(INPUT, 5)
     val stall = Bool(OUTPUT)
+		val in_stall = Bool(INPUT)
     val issuedEntry = Vec.fill(4) {Valid(new ROBEntry).asOutput}
 		val specIssue = Vec.fill(4) {Valid(new SpeculativeIssue).asOutput}
 
     // Addrress buf entry and load store info
     val addrBuf = Vec.fill(4) {Valid (new AddrBufEntry)} // Output
+
+		// era for misspeculation handling
+		val era = UInt(INPUT, 7)
   }
 
   val arbiter = Module (new IqArbiter())
@@ -39,6 +43,7 @@ class Issue extends Module {
   val allocatedInst        = arbiter.io.allocIQ
   io.addrBuf             	:= arbiter.io.addrBuf
   io.stall                := arbiter.io.stall
+	arbiter.io.in_stall			:= io.in_stall
 
   // calculating instructions per issue queue
   for (i <- 0 until 4) {
@@ -85,6 +90,11 @@ class Issue extends Module {
   issueQ1.io.robWb            := io.robWb
   issueQ2.io.robWb            := io.robWb
   issueQ3.io.robWb            := io.robWb
+
+	issueQ0.io.era         := io.era
+  issueQ1.io.era         := io.era
+  issueQ2.io.era         := io.era
+  issueQ3.io.era         := io.era
 
   // Collecting issued inst from all issue queues
   io.issuedEntry(0)       := issueQ0.io.issuedEntry

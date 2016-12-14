@@ -13,6 +13,9 @@ class RobWbEntry extends Bundle {
   val operand = Bits(INPUT, width=6)
   // Indicates whether the data value is valid
   val valid = Bool(INPUT)
+  // Indicates the era of the executed instruction
+  val era = UInt(INPUT, 7)
+
   // Indicates whether the branch was taken. Valid only if the instruction
   // executed by the ALU was a branch. If valid, the `bits` attribute will
   // indicate whether the branch was taken.
@@ -54,6 +57,9 @@ class RobWbStore(numEntries: Int) extends Bundle {
 class RobWriteback(numEntries : Int) extends Module {
   val io = new Bundle {
     val stall = Bits(INPUT, width=1)
+    // Input from the ROB. Fill be used to filter inputs from misspeculative
+    // executions.
+    val rob_era = UInt(INPUT, 7)
     // Takes in the input data values and valid bits to be stored in the
     // current cycle
     val input = new RobWbInput(numEntries)
@@ -141,7 +147,9 @@ class RobWriteback(numEntries : Int) extends Module {
       data_s1(i)                  := io.input.entry(i).data
       is_addr_s1(i)               := io.input.entry(i).is_addr
       operand_s1(i)               := io.input.entry(i).operand
-      valid_s1(i)                 := io.input.entry(i).valid
+      // Filter out inputs from instructions with invalid era. 
+      valid_s1(i)                 := (io.input.entry(i).valid &&
+                                      io.input.entry(i).era === io.rob_era)
       is_branch_taken_valid_s1(i) := io.input.entry(i).is_branch_taken.valid
       is_branch_taken_bits_s1(i)  := io.input.entry(i).is_branch_taken.bits
       branch_target_s1(i)         := io.input.entry(i).branch_target
@@ -178,6 +186,11 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
       expect(c.io.output.entry(i).operand, values(i))
     }
   }
+  def expect_s1_valid(c : RobWriteback, values : List[Boolean]) = {
+    for (i <- 0 until 6) {
+      expect(c.io.store.entry_s1(i).valid, values(i))
+    }
+  }
   def poke_input_valid(c : RobWriteback, values : List[Boolean]) = {
     for (i <- 0 until 6) {
       poke(c.io.input.entry(i).valid, values(i))
@@ -198,15 +211,24 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
       poke(c.io.input.entry(i).operand, values(i))
     }
   }
+  def poke_input_era(c : RobWriteback, values : List[Int]) = {
+    for (i <- 0 until 6) {
+      poke(c.io.input.entry(i).era, values(i))
+    }
+  }
 
   // For now assume that there will be no stalling
   poke(c.io.stall, false)
+  val robEra = 2
+  val mismatchEra = 1
+  poke(c.io.rob_era, robEra)
 
   // Cycle 0: Add some input data values to be stored
   poke_input_valid(c, List.fill(6)(true))
   poke_input_data(c, List.range(0, 6))
   poke_input_is_addr(c, List.fill(6)(false))
   poke_input_operand(c, List.range(0, 6))
+  poke_input_era(c, List.fill(6)(robEra))
   // Initially we expect output valid bits to be unset
   expect_output_valid(c, List.fill(6)(false))
   step(1)
@@ -218,6 +240,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   poke_input_data(c, List.range(6, 12))
   poke_input_is_addr(c, List(false, true, true, true, true, true))
   poke_input_operand(c, List.range(6, 12))
+  poke_input_era(c, List.fill(6)(robEra))
   step(1)
 
   // Cycle 2: The values stored in the cycle #0 should now be available.
@@ -230,6 +253,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   poke_input_data(c, List.range(12, 18))
   poke_input_is_addr(c, List.fill(6)(true))
   poke_input_operand(c, List.range(12, 18))
+  poke_input_era(c, List.fill(6)(robEra))
   step(1)
 
   // Cycle 3: The values stored in cycle #1 should now be available. Entry #0
@@ -243,6 +267,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   poke_input_data(c, List.range(18, 24))
   poke_input_is_addr(c, List.fill(6)(true))
   poke_input_operand(c, List.range(18, 24))
+  poke_input_era(c, List.fill(6)(robEra))
   // Stall the ROB writeback. Verify that new values are not reported
   poke(c.io.stall, true)
   step(1)
@@ -252,6 +277,39 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   expect_output_data(c, List.range(6, 12))
   expect_output_is_addr(c, List(false, true, true, true, true, true))
   expect_output_operand(c, List.range(6, 12))
+  // Unstall the ROB
+  poke(c.io.stall, false)
+  // Poke some new data
+  poke_input_valid(c, List.fill(6)(true))
+  poke_input_data(c, List.range(18, 24))
+  poke_input_is_addr(c, List.fill(6)(true))
+  poke_input_operand(c, List.range(18, 24))
+  // Add some data with mismatching eras
+  poke_input_era(c, List(mismatchEra, robEra, mismatchEra, robEra, robEra, robEra))
+  step(1)
+
+  // Cycle 5: Values stored in cycle #2 should be available.
+  expect_output_valid(c, List.fill(6)(true))
+  expect_output_data(c, List.range(12, 18))
+  expect_output_is_addr(c, List.fill(6)(true))
+  expect_output_operand(c, List.range(12, 18))
+  // Verify that the stored values from cycle #4 with mismatching eras are
+  // marked invalid.
+  expect_s1_valid(c, List(false, true, false, true, true, true))
+  // Poke some new data
+  poke_input_valid(c, List.fill(6)(true))
+  poke_input_data(c, List.range(24, 30))
+  poke_input_is_addr(c, List.fill(6)(true))
+  poke_input_operand(c, List.range(24, 30))
+  poke_input_era(c, List.fill(6)(robEra))
+  step(1)
+
+  // Cycle 6: Values requested in cycle #4 should be available
+  // Check that data with mismatching era is ignored
+  expect_output_valid(c, List(false, true, false, true, true, true))
+  expect_output_data(c, List.range(18, 24))
+  expect_output_is_addr(c, List.fill(6)(true))
+  expect_output_operand(c, List.range(18, 24))
 }
 
 class RobWritebackGenerator extends TestGenerator {
