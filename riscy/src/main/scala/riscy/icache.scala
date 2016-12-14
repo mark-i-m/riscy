@@ -227,12 +227,14 @@ class ICache extends Module {
   s1_prefetch_out  := Mux1H(s1_prefetch_tag_hit, prefetch_line)
 
   // Perform updates useful for next cycle
-  s2_hit              := s1_hit && !stall && !io.kill
-  s2_prefetch_hit     := s1_prefetch_hit && !stall && !io.kill
-  s2_miss             := s1_miss && !stall && !io.kill
-  s2_tag_hit          := s1_tag_hit
-  s2_prefetch_tag_hit := s1_prefetch_tag_hit
-  s2_vaddr            := s1_vaddr
+  when(!stall) {
+    s2_hit              := s1_hit && !io.kill
+    s2_prefetch_hit     := s1_prefetch_hit && !io.kill
+    s2_miss             := s1_miss && !io.kill
+    s2_tag_hit          := s1_tag_hit
+    s2_prefetch_tag_hit := s1_prefetch_tag_hit
+    s2_vaddr            := s1_vaddr
+  }
 
   // Need to rotate data array output here
   for (i <- 0 until IcParams.nWays) {
@@ -441,9 +443,10 @@ class ICacheTests(c: ICache) extends Tester(c) {
   poke(c.io.req.addr, 168)
   step(1)
 
-  // Cycle 51 - Should not get a valid response since Icache is stalled
-  expect(c.io.resp.valid, false)
-  expect(c.io.resp.idle, false)
+  // Cycle 51 - The response should be held since Icache is stalled
+  expect(c.io.resp.valid, true)
+  expect(c.io.resp.idle, true)
+  expect(c.io.resp.addr, 160)
   peek(c.io.resp.inst)
   // Unstall and verify that the previous response wasn't lost
   poke(c.io.resp.stall, false)
