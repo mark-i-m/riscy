@@ -93,6 +93,8 @@ class Riscy(blackbox: Boolean = false) extends Module {
   lsq.io.robWbin := exec.io.rob_wb_store
   exec.io.lsq_input <> lsq.io.robWbOut
 
+  lsq.io.robEra := rob.io.robEra
+
   // Issue and Exec
   exec.io.issued_inst := issue.io.issuedEntry
   exec.io.specIssue   := issue.io.specIssue

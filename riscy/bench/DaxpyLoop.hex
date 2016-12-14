@@ -3,7 +3,7 @@
 000122030000a183        lw x3, 0x0(x1),    lw x4, 0x0(x2)
 0050a023004182b3        add x5, x3, x4,    sw x5, 0x0(x1)
 0041011300408093        addi x1, x1, 4,    addi x2, x2, 4
-fe6392e300183913        addi x7, x7, 1,    bne x7 != x6, pc -0x1C
+fe6392e300183913        addi x7, x7, 1,    branch x7 != x6, pc -0x1C
 0000001300000013        nop                     nop
 0000001300000013        nop                     nop
 0000001300000013        nop                     nop
