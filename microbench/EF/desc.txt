@@ -1,1 +1,0 @@
-Floating-point Execution -- 8 Independent instructions per Iteration
