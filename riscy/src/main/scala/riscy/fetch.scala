@@ -142,25 +142,25 @@ class Fetch extends Module {
   /* Figure out which instructions are valid if we fetched close to a cache
    * line boundary */
   when (icache.io.resp.valid && (addr(4,0) === UInt(20))) {
-    io.output.insts(0).valid := Bool(true)
-    io.output.insts(1).valid := Bool(true)
-    io.output.insts(2).valid := Bool(true)
+    io.output.insts(0).valid := Bool(true) && !io.isBranchMispred
+    io.output.insts(1).valid := Bool(true) && !io.isBranchMispred
+    io.output.insts(2).valid := Bool(true) && !io.isBranchMispred
     io.output.insts(3).valid := Bool(false)
   } .elsewhen (icache.io.resp.valid && (addr(4,0) === UInt(24))) {
-    io.output.insts(0).valid := Bool(true)
-    io.output.insts(1).valid := Bool(true)
+    io.output.insts(0).valid := Bool(true) && !io.isBranchMispred
+    io.output.insts(1).valid := Bool(true) && !io.isBranchMispred
     io.output.insts(2).valid := Bool(false)
     io.output.insts(3).valid := Bool(false)
   } .elsewhen (icache.io.resp.valid && (addr(4,0) === UInt(28))) {
-    io.output.insts(0).valid := Bool(true)
+    io.output.insts(0).valid := Bool(true) && !io.isBranchMispred
     io.output.insts(1).valid := Bool(false)
     io.output.insts(2).valid := Bool(false)
     io.output.insts(3).valid := Bool(false)
   } .elsewhen (icache.io.resp.valid) {
-    io.output.insts(0).valid := Bool(true)
-    io.output.insts(1).valid := Bool(true)
-    io.output.insts(2).valid := Bool(true)
-    io.output.insts(3).valid := Bool(true)
+    io.output.insts(0).valid := Bool(true) && !io.isBranchMispred
+    io.output.insts(1).valid := Bool(true) && !io.isBranchMispred
+    io.output.insts(2).valid := Bool(true) && !io.isBranchMispred
+    io.output.insts(3).valid := Bool(true) && !io.isBranchMispred
   } .otherwise {
     io.output.insts(0).valid := Bool(false)
     io.output.insts(1).valid := Bool(false)

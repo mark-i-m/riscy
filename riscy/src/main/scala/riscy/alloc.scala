@@ -40,6 +40,9 @@ class RiscyAlloc extends Module {
 
     // Should alloc stall?
     val allocStall = Bool(INPUT)
+
+    // Has a branch been mispredicted
+    val mispredicted = Bool(INPUT)
   }
 
   // For each instruction, determine what resources/registers it needs.
@@ -66,6 +69,12 @@ class RiscyAlloc extends Module {
 
   val pipelinedPred = Vec.tabulate(4) {
     i => RegEnable(io.bchPredTaken(i), !io.allocStall)
+  }
+
+  for(i <- 0 until 4) {
+    when(io.mispredicted) {
+      pipelinedInst(i).valid := Bool(false)
+    }
   }
 
   // Do a simple addition to rename the instructions. Every instruction gets
@@ -120,7 +129,7 @@ class RiscyAlloc extends Module {
   // Now, hook up the ouputs
   for (i <- 0 until 4) {
     // Valid bits for ROB: each valid instruction results in a valid ROB entry
-    io.allocROB(i).valid := pipelinedInst(i).valid
+    io.allocROB(i).valid := pipelinedInst(i).valid && !io.mispredicted
 
     val robEntry = io.allocROB(i).bits // convenience
 

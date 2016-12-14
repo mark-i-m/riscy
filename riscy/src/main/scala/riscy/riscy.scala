@@ -70,6 +70,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
 
   // Hook up all signals between Allocation and ROB
   alloc <> rob
+  alloc.mispredicted := rob.io.mispredPC.valid
 
   // Hook up Allocation and IssueStage
   // ROB entries come directly from Alloc
