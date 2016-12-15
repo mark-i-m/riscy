@@ -227,6 +227,7 @@ class RiscyAlloc extends Module {
     // - the value of the remap entry is the ROB entry number
     io.allocRemap(i).valid := pipelinedOpDecode(i).hasRd &&
       pipelinedInst(i).valid &&
+      !io.mispredicted &&
       io.allocRemap
         .slice(i+1, io.allocRemap.size)
         .foldLeft(Bool(true)) {
