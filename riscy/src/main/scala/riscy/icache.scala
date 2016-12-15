@@ -82,7 +82,7 @@ class ICache extends Module {
   val s1_any_tag_hit = Wire(Bool())
   val s1_hit = Wire(Bool())
   val s1_miss = Wire(Bool())
-  val s1_dout = Vec(IcParams.nWays, Reg(UInt(width = IcParams.cache_line_width)))
+  val s1_dout = Wire(Vec(IcParams.nWays, Bits(width = IcParams.cache_line_width)))
 
   // output signals - Two cycle latency
   val s2_hit = Reg(init=Bool(false))
@@ -212,11 +212,7 @@ class ICache extends Module {
   s1_any_tag_hit := s1_tag_hit.reduceLeft(_||_)
 
   // Perform data array match in parallel
-  when (!stall) {
-    s1_dout := data_array.read(s0_idx, s0_valid && !refill_in_progress)
-  } .otherwise {
-    s1_dout := s1_dout
-  }
+  s1_dout := data_array.read(s0_idx, s0_valid && !refill_in_progress)
 
   // Also perform tag match against prefetch buffer tags in parallel
   for (i <- 0 until IcParams.prefetch_buffer_len) {
@@ -241,33 +237,37 @@ class ICache extends Module {
   }
 
   // Need to rotate data array output here
-  for (i <- 0 until IcParams.nWays) {
-    switch (s1_offset) {
-      is (Bits(0)) {
-        s2_dout(i) := s1_dout(i)(127, 0)
-      }
-      is (Bits(4)) {
-        s2_dout(i) := s1_dout(i)(159, 32)
-      }
-      is (Bits(8)) {
-        s2_dout(i) := s1_dout(i)(191, 64)
-      }
-      is (Bits(12)) {
-        s2_dout(i) := s1_dout(i)(223, 96)
-      }
-      is (Bits(16)) {
-        s2_dout(i) := s1_dout(i)(255, 128)
-      }
-      is (Bits(20)) {
-        s2_dout(i) := Cat(Bits(0), s1_dout(i)(255, 160))
-      }
-      is (Bits(24)) {
-        s2_dout(i) := Cat(Bits(0), s1_dout(i)(255, 192))
-      }
-      is (Bits(28)) {
-        s2_dout(i) := Cat(Bits(0), s1_dout(i)(255, 224))
+  when (!stall) {
+    for (i <- 0 until IcParams.nWays) {
+      switch (s1_offset) {
+        is (Bits(0)) {
+          s2_dout(i) := s1_dout(i)(127, 0)
+        }
+        is (Bits(4)) {
+          s2_dout(i) := s1_dout(i)(159, 32)
+        }
+        is (Bits(8)) {
+          s2_dout(i) := s1_dout(i)(191, 64)
+        }
+        is (Bits(12)) {
+          s2_dout(i) := s1_dout(i)(223, 96)
+        }
+        is (Bits(16)) {
+          s2_dout(i) := s1_dout(i)(255, 128)
+        }
+        is (Bits(20)) {
+          s2_dout(i) := Cat(Bits(0), s1_dout(i)(255, 160))
+        }
+        is (Bits(24)) {
+          s2_dout(i) := Cat(Bits(0), s1_dout(i)(255, 192))
+        }
+        is (Bits(28)) {
+          s2_dout(i) := Cat(Bits(0), s1_dout(i)(255, 224))
+        }
       }
     }
+  } .otherwise {
+    s2_dout := s2_dout
   }
   // Rotate prefetch buffer output
   when (!stall) {
