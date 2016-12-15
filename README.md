@@ -1,4 +1,4 @@
-Project Riscy [![Build Status](https://travis-ci.com/mark-i-m/rocketchip.svg?token=z7ydGWURgxF6b4fcVtfN&branch=master)](https://travis-ci.com/mark-i-m/rocketchip)
+Project Riscy [![Build Status](https://travis-ci.com/mark-i-m/riscy.svg?token=z7ydGWURgxF6b4fcVtfN&branch=master)](https://travis-ci.com/mark-i-m/rocketchip)
 =============
 
 - Karan Bavishi
