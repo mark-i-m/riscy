@@ -125,7 +125,7 @@ class ICache extends Module {
   // The Icache is deemed idle if it saw a hit or didn't see a miss.
   // This is basically useful for the first few cycles where we will have
   // neither a hit nor a miss.
-  io.resp.idle := (s2_hit) || (!s2_miss && !stall && state === s_ready)
+  io.resp.idle := (s2_hit) || (!s2_miss && state === s_ready)
   io.resp.addr := s2_vaddr
 
   val s0_valid = Mux(rdy && !stall, io.req.valid, s1_valid && !io.kill)
@@ -293,8 +293,13 @@ class ICache extends Module {
     }
   }
 
-  s1_valid := s0_valid
-  s1_vaddr := s0_vaddr
+  when (!stall) {
+    s1_valid := s0_valid
+    s1_vaddr := s0_vaddr
+  } .otherwise {
+    s1_valid := s1_valid
+    s1_vaddr := s1_vaddr
+  }
 
   // control state machine
   switch (state) {
