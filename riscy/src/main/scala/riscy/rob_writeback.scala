@@ -75,6 +75,7 @@ class RobWriteback(numEntries : Int) extends Module {
   val is_addr_s1 = Vec(numEntries, Reg(init=Bool(false)))
   val operand_s1 = Vec(numEntries, Reg(UInt(width=6)))
   val valid_s1 = Vec(numEntries, Reg(init=Bool(false)))
+  val era_s1 = Vec(numEntries, Reg(UInt(width=7)))
   val is_branch_taken_valid_s1 = Vec(numEntries, Reg(init=Bool(false)))
   val is_branch_taken_bits_s1 = Vec(numEntries, Reg(init=Bool(false)))
   val branch_target_s1 = Vec(numEntries, Reg(UInt(width=64)))
@@ -86,6 +87,7 @@ class RobWriteback(numEntries : Int) extends Module {
   val is_addr_s2 = Vec(numEntries, Reg(init=Bool(false)))
   val operand_s2 = Vec(numEntries, Reg(UInt(width=6)))
   val valid_s2 = Vec(numEntries, Reg(init=Bool(false)))
+  val era_s2 = Vec(numEntries, Reg(UInt(width=7)))
   val is_branch_taken_valid_s2 = Vec(numEntries, Reg(init=Bool(false)))
   val is_branch_taken_bits_s2 = Vec(numEntries, Reg(init=Bool(false)))
   val branch_target_s2 = Vec(numEntries, Reg(UInt(width=64)))
@@ -98,6 +100,7 @@ class RobWriteback(numEntries : Int) extends Module {
     io.store.entry_s1(i).is_addr               := is_addr_s1(i)
     io.store.entry_s1(i).operand               := operand_s1(i)
     io.store.entry_s1(i).valid                 := valid_s1(i)
+    io.store.entry_s1(i).era                   := era_s1(i)
     io.store.entry_s1(i).is_branch_taken.valid := is_branch_taken_valid_s1(i)
     io.store.entry_s1(i).is_branch_taken.bits  := is_branch_taken_bits_s1(i)
     io.store.entry_s1(i).branch_target         := branch_target_s1(i)
@@ -122,6 +125,7 @@ class RobWriteback(numEntries : Int) extends Module {
     io.output.entry(i).is_addr               := is_addr_s2(i)
     io.output.entry(i).operand               := operand_s2(i)
     io.output.entry(i).valid                 := valid_s2(i)
+    io.output.entry(i).era                   := era_s2(i)
     io.output.entry(i).is_branch_taken.valid := is_branch_taken_valid_s2(i)
     io.output.entry(i).is_branch_taken.bits  := is_branch_taken_bits_s2(i)
     io.output.entry(i).branch_target         := branch_target_s2(i)
@@ -136,6 +140,7 @@ class RobWriteback(numEntries : Int) extends Module {
     is_addr_s2               := is_addr_s1
     operand_s2               := operand_s1
     valid_s2                 := valid_s1
+    era_s2                   := era_s1
     is_branch_taken_valid_s2 := is_branch_taken_valid_s1
     is_branch_taken_bits_s2  := is_branch_taken_bits_s1
     branch_target_s2         := branch_target_s1
@@ -150,6 +155,7 @@ class RobWriteback(numEntries : Int) extends Module {
       // Filter out inputs from instructions with invalid era. 
       valid_s1(i)                 := (io.input.entry(i).valid &&
                                       io.input.entry(i).era === io.rob_era)
+      era_s1(i)                   := io.input.entry(i).era
       is_branch_taken_valid_s1(i) := io.input.entry(i).is_branch_taken.valid
       is_branch_taken_bits_s1(i)  := io.input.entry(i).is_branch_taken.bits
       branch_target_s1(i)         := io.input.entry(i).branch_target
@@ -184,6 +190,11 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   def expect_output_operand(c : RobWriteback, values : List[Int]) = {
     for (i <- 0 until 6) {
       expect(c.io.output.entry(i).operand, values(i))
+    }
+  }
+  def expect_output_era(c : RobWriteback, values : List[Int]) = {
+    for (i <- 0 until 6) {
+      expect(c.io.output.entry(i).era, values(i))
     }
   }
   def expect_s1_valid(c : RobWriteback, values : List[Boolean]) = {
@@ -248,6 +259,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   expect_output_data(c, List.range(0, 6))
   expect_output_is_addr(c, List.fill(6)(false))
   expect_output_operand(c, List.range(0, 6))
+  expect_output_era(c, List.fill(6)(robEra))
   // Also add some new data values to be stored.
   poke_input_valid(c, List.fill(6)(true))
   poke_input_data(c, List.range(12, 18))
@@ -262,6 +274,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   expect_output_data(c, List.range(6, 12))
   expect_output_is_addr(c, List(false, true, true, true, true, true))
   expect_output_operand(c, List.range(6, 12))
+  expect_output_era(c, List.fill(6)(robEra))
   // Also add some new data values to be stored.
   poke_input_valid(c, List.fill(6)(true))
   poke_input_data(c, List.range(18, 24))
@@ -277,6 +290,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   expect_output_data(c, List.range(6, 12))
   expect_output_is_addr(c, List(false, true, true, true, true, true))
   expect_output_operand(c, List.range(6, 12))
+  expect_output_era(c, List.fill(6)(robEra))
   // Unstall the ROB
   poke(c.io.stall, false)
   // Poke some new data
@@ -293,6 +307,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   expect_output_data(c, List.range(12, 18))
   expect_output_is_addr(c, List.fill(6)(true))
   expect_output_operand(c, List.range(12, 18))
+  expect_output_era(c, List.fill(6)(robEra))
   // Verify that the stored values from cycle #4 with mismatching eras are
   // marked invalid.
   expect_s1_valid(c, List(false, true, false, true, true, true))
@@ -310,6 +325,7 @@ class RobWritebackTests(c: RobWriteback) extends Tester(c) {
   expect_output_data(c, List.range(18, 24))
   expect_output_is_addr(c, List.fill(6)(true))
   expect_output_operand(c, List.range(18, 24))
+  expect_output_era(c, List(mismatchEra, robEra, mismatchEra, robEra, robEra, robEra))
 }
 
 class RobWritebackGenerator extends TestGenerator {
