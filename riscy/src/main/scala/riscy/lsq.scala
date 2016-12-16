@@ -486,11 +486,13 @@ class LSQTests(c: LSQ) extends Tester(c) {
   poke(c.io.stCommit(0).valid, true)
   poke(c.io.stCommit(0).bits, 6)
   expect(c.CamStCommit.io.hit(0)(0), true)
+  expect(c.dcache.io.stReq(0).addr.valid, true)
+  expect(c.dcache.io.stReq(0).addr.bits, 0x10000)
+  expect(c.dcache.io.stReq(0).addr.valid, true)
+  expect(c.dcache.io.stReq(0).addr.bits, 0x10000)
 
   step(1)
   expect(c.depMatrix(1).bits(0), false)
-  expect(c.dcache.io.stReq(0).addr.valid, true)
-  expect(c.dcache.io.stReq(0).addr.bits, 0x10000)
 }
 
 class LSQGenerator extends TestGenerator {
