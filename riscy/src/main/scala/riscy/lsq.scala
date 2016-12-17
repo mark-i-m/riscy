@@ -244,7 +244,6 @@ class LSQ extends Module {
         dispatch(i) := Bool(true)
       }
     } .otherwise {
-      addrq(i).bits.ready := Bool(false)
       dispatch(i) := Bool(false)
     }
 
@@ -255,12 +254,15 @@ class LSQ extends Module {
         depMatrix(k).bits(i) := Bool(false)
       }
       when (!addrq(i).bits.st_nld) {
-        ldIssueRow(i) := Bool(true)
-        printf("LSQ: Invalidating load entry on address queue\n")
-        addrq(i).bits.addr.valid := Bool(false)
-        addrq(i).bits.value.valid := Bool(false)
-        addrq(i).bits.fired := Bool(false)
-        addrq(i).valid := Bool(false)
+        when (addrq(i).bits.ready) {
+          printf("LSQ: Invalidating load entry on address queue entry %d\n", UInt(i))
+          ldIssueRow(i) := Bool(true)
+          addrq(i).bits.addr.valid := Bool(false)
+          addrq(i).bits.value.valid := Bool(false)
+          addrq(i).bits.fired := Bool(false)
+          addrq(i).valid := Bool(false)
+          addrq(i).bits.ready := Bool(false)
+        }
       }
     } .otherwise {
       ldIssueRow(i) := Bool(false)
@@ -273,6 +275,7 @@ class LSQ extends Module {
         printf("LSQ: Invalidating store entry on address queue\n")
         addrq(i).bits.addr.valid := Bool(false)
         addrq(i).bits.value.valid := Bool(false)
+        addrq(i).bits.ready := Bool(false)
         addrq(i).valid := Bool(false)
         when (addrq(i).bits.era === io.robEra) {
           stCommitRow(j)(i) := Bool(true)
@@ -313,25 +316,29 @@ class LSQ extends Module {
       io.robWbOut.entry(i).is_addr := Bool(false)
       io.robWbOut.entry(i).operand := addrq(ldSelect.io.pos(i)).bits.robLoc
       io.robWbOut.entry(i).valid := addrq(ldSelect.io.pos(i)).bits.era === io.robEra
+      io.robWbOut.entry(i).era := addrq(ldSelect.io.pos(i)).bits.era
     }
   } .elsewhen (ldIssueSet && numLoads === UInt(1)) {
     printf("LSQ: Sending one completed load to ROB WB: %d and Era: %d\n",
-            addrq(ldSelect.io.pos(0)).bits.robLoc, addrq(ldSelect.io.pos(0)).bits.robLoc)
+            addrq(ldSelect.io.pos(0)).bits.robLoc, io.robEra)
     io.robWbOut.entry(0).data := addrq(ldSelect.io.pos(0)).bits.value.bits
     io.robWbOut.entry(0).is_addr := Bool(false)
     io.robWbOut.entry(0).operand := addrq(ldSelect.io.pos(0)).bits.robLoc
     io.robWbOut.entry(0).valid := addrq(ldSelect.io.pos(0)).bits.era === io.robEra
+    io.robWbOut.entry(0).era := addrq(ldSelect.io.pos(0)).bits.era
     // Second entry is not valid
     io.robWbOut.entry(1).data := addrq(ldSelect.io.pos(1)).bits.value.bits
     io.robWbOut.entry(1).is_addr := Bool(false)
     io.robWbOut.entry(1).operand := addrq(ldSelect.io.pos(1)).bits.robLoc
     io.robWbOut.entry(1).valid := Bool(false)
+    io.robWbOut.entry(1).era := addrq(ldSelect.io.pos(1)).bits.era
   } .otherwise {
     for (i <- 0 until 2) {
       io.robWbOut.entry(i).data := UInt(0xdead)
       io.robWbOut.entry(i).is_addr := Bool(false)
       io.robWbOut.entry(i).operand := UInt(0x0)
       io.robWbOut.entry(i).valid := Bool(false)
+      io.robWbOut.entry(i).era := UInt(0x0)
     }
   }
 
@@ -479,11 +486,13 @@ class LSQTests(c: LSQ) extends Tester(c) {
   poke(c.io.stCommit(0).valid, true)
   poke(c.io.stCommit(0).bits, 6)
   expect(c.CamStCommit.io.hit(0)(0), true)
+  expect(c.dcache.io.stReq(0).addr.valid, true)
+  expect(c.dcache.io.stReq(0).addr.bits, 0x10000)
+  expect(c.dcache.io.stReq(0).addr.valid, true)
+  expect(c.dcache.io.stReq(0).addr.bits, 0x10000)
 
   step(1)
   expect(c.depMatrix(1).bits(0), false)
-  expect(c.dcache.io.stReq(0).addr.valid, true)
-  expect(c.dcache.io.stReq(0).addr.bits, 0x10000)
 }
 
 class LSQGenerator extends TestGenerator {

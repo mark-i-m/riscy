@@ -1,0 +1,7 @@
+0000001301000093    li x1, 0x10     nop
+0000001300000013    nop             nop
+0000001300110113    addi x2, x2, 1  nop
+0000001300000013    nop             nop
+0000001300000013    nop             nop
+fe2092e300000013    nop             bne x1, x2, -0x1c
+ffffffffffffffff    halt            halt

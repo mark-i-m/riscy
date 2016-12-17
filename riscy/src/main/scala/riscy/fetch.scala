@@ -141,7 +141,12 @@ class Fetch extends Module {
 
   /* Figure out which instructions are valid if we fetched close to a cache
    * line boundary */
-  when (icache.io.resp.valid && (addr(4,0) === UInt(20))) {
+  when (io.isBranchMispred) {
+    io.output.insts(0).valid := Bool(false)
+    io.output.insts(1).valid := Bool(false)
+    io.output.insts(2).valid := Bool(false)
+    io.output.insts(3).valid := Bool(false)
+  } .elsewhen (icache.io.resp.valid && (addr(4,0) === UInt(20))) {
     io.output.insts(0).valid := Bool(true)
     io.output.insts(1).valid := Bool(true)
     io.output.insts(2).valid := Bool(true)
@@ -346,6 +351,7 @@ class FetchTests(c: Fetch) extends Tester(c) {
   poke(c.io.isBranchMispred, true)
   poke(c.io.branchMispredTarget, 0x20)
   expect(c.icache.io.req.valid, false)
+  expect_all_inst_validity(c, false)
   step(1)
 
   // Cycle 13 - Icache response should be invalidated. And the correct request
