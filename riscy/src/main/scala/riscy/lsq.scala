@@ -3,27 +3,32 @@ package riscy
 import Chisel._
 import scala.language.reflectiveCalls
 
+// Contents of an entry in the L/S Unit's buffer
 class LSQEntry extends AddrBufEntry {
-  val addr = Valid(UInt(OUTPUT, 32))
-  val value = Valid(UInt(OUTPUT, 64))
-  val fired = Bool(OUTPUT)
-  val ready  = Bool(OUTPUT) // Entry populated or not
+  val addr = Valid(UInt(OUTPUT, 32)) // Memory address to be accessed
+  val value = Valid(UInt(OUTPUT, 64)) // Data to stores or from loads
+  val fired = Bool(OUTPUT)  // Has a load been dispatched to memory?
+  val ready  = Bool(OUTPUT) // Is the buffer entry populated?
 }
 
 class LSQ extends Module {
   val io = new Bundle {
+    /* Entries reserved by the arbiter */
     val resEntry = Vec.fill(4) { Valid(new AddrBufEntry).flip }
-    val robWbin = new RobWbStore(6).flip
-    val stCommit = Vec(2, Valid(UInt(INPUT, 6)).asInput)
-    val currentLen = UInt(OUTPUT, 5)
-    val robWbOut = new RobWbInput(2).flip
-    val ldAddr = Valid(UInt(OUTPUT, 64))
-    val ldValue = UInt(INPUT, 64)
+
+    val robWbin = new RobWbStore(6).flip // Inputs from ROB WB aka FooPP
+    val stCommit = Vec(2, Valid(UInt(INPUT, 6)).asInput) // From ROB
+    val currentLen = UInt(OUTPUT, 5)  // Feedback to Arbiter
+    val robWbOut = new RobWbInput(2).flip // Output to ROB WB aka FooPP
+
+    /* Interface to DCache */
     val memStAddrPort = Vec(2, Valid(UInt(OUTPUT,64).asOutput))
     val memStData = Vec(2, UInt(OUTPUT,64))
     val memStSize = Vec(2, UInt(OUTPUT,3))
     val memLdAddrPort = Valid(UInt(OUTPUT,64)).asOutput
     val memLdData = Valid(UInt(INPUT,8 * 64)).asInput
+
+    /* Current speculation era input from ROB */
     val robEra = UInt(INPUT, 7)
   }
 
@@ -37,6 +42,7 @@ class LSQ extends Module {
   io.memLdAddrPort := dcache.io.memLdAddrPort
   dcache.io.memLdData := io.memLdData
 
+  /* Dependency matrix structure to ensure correct ordering of memory operations */
   val depMatrix = Vec.tabulate(32) { i => Reg(Valid(Vec.fill(32) { Bool() } )) }
   val depRow = Vec.tabulate(32) { i => Cat(Array.tabulate(32) { depMatrix(i).bits(_) }) }
 
@@ -47,7 +53,7 @@ class LSQ extends Module {
 
   io.currentLen := PopCount(Array.tabulate(32) { addrq(_).valid })
 
-  val DEPTH = 32
+  val DEPTH = 32 // The buffer has 32 entries
   val WbCamAddr = Module(new CAM(8, DEPTH, 6))
   val WbCamValue = Module(new CAM(12, DEPTH, 6))
 
