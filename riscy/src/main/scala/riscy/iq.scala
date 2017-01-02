@@ -71,6 +71,7 @@ class IssueQueue extends Module {
 													(io.issuedPrev2(i).valid === Bool(true) &&
 													 iqueue(j).bits.rs1Val.valid === Bool(false) &&
 													 io.issuedPrev2(i).bits.isLd === Bool(false) &&
+													 io.issuedPrev2(i).bits.isSt === Bool(false) &&
 					    						 iqueue(j).bits.rs1Rename === io.issuedPrev2(i).bits.tag &&
 													 iqueue(j).valid)
 		}
@@ -84,6 +85,7 @@ class IssueQueue extends Module {
 													(io.issuedPrev2(i).valid === Bool(true) && 
 													 iqueue(j).bits.rs2Val.valid === Bool(false) &&
 													 io.issuedPrev2(i).bits.isLd === Bool(false) &&
+													 io.issuedPrev2(i).bits.isSt === Bool(false) &&
 					    						 iqueue(j).bits.rs2Rename === io.issuedPrev2(i).bits.tag &&
 													 iqueue(j).valid)
 		}

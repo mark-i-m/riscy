@@ -5,6 +5,7 @@ import Chisel._
 class IssuedPrev2Inst extends Bundle {
 	val tag = UInt(OUTPUT, 6)
 	val isLd = Bool(OUTPUT)
+	val isSt = Bool(OUTPUT)
 }
 class Issue extends Module {
   val io = new Bundle {
@@ -117,6 +118,12 @@ class Issue extends Module {
   issuedInstIsLd(2)        := issueQ2.io.issuedEntry.bits.isLd
   issuedInstIsLd(3)        := issueQ3.io.issuedEntry.bits.isLd
 
+	val issuedInstIsSt = Vec.fill(4) {Bool()}
+  issuedInstIsSt(0)        := issueQ0.io.issuedEntry.bits.isSt
+  issuedInstIsSt(1)        := issueQ1.io.issuedEntry.bits.isSt
+  issuedInstIsSt(2)        := issueQ2.io.issuedEntry.bits.isSt
+  issuedInstIsSt(3)        := issueQ3.io.issuedEntry.bits.isSt
+
   val issuedInstValid = Vec.fill(4) {Bool()}
   issuedInstValid(0)      := issueQ0.io.issuedEntry.valid
   issuedInstValid(1)      := issueQ1.io.issuedEntry.valid
@@ -132,17 +139,22 @@ class Issue extends Module {
 	val pipelinedIssuedInstIsLd = Vec.tabulate(4) {
     i => Reg(next = issuedInstIsLd(i))
   }
+	val pipelinedIssuedInstIsSt = Vec.tabulate(4) {
+    i => Reg(next = issuedInstIsSt(i))
+  }
 
   val issuedPrev2 	= Vec.fill(8) {Valid(new IssuedPrev2Inst())}
 
   for (i <- 0 until 4) {
     issuedPrev2(i).bits.tag  := issuedInstTag(i)
 		issuedPrev2(i).bits.isLd  := issuedInstIsLd(i)
+		issuedPrev2(i).bits.isSt  := issuedInstIsSt(i)
     issuedPrev2(i).valid := issuedInstValid(i)
   }
   for (i <- 4 until 8) {
     issuedPrev2(i).bits.tag := pipelinedIssuedInstTag(i-4)
 		issuedPrev2(i).bits.isLd := pipelinedIssuedInstIsLd(i-4)
+		issuedPrev2(i).bits.isSt := pipelinedIssuedInstIsSt(i-4)
     issuedPrev2(i).valid := pipelinedIssuedInstValid(i-4)
   }
 
