@@ -70,6 +70,7 @@ class Riscy(blackbox: Boolean = false) extends Module {
 
   // Hook up all signals between Allocation and ROB
   alloc <> rob
+  alloc.io.mispredicted := rob.io.mispredPC.valid
 
   // Hook up Allocation and IssueStage
   // ROB entries come directly from Alloc
@@ -91,6 +92,8 @@ class Riscy(blackbox: Boolean = false) extends Module {
   // LSQ and Exec
   lsq.io.robWbin := exec.io.rob_wb_store
   exec.io.lsq_input <> lsq.io.robWbOut
+
+  lsq.io.robEra := rob.io.robEra
 
   // Issue and Exec
   exec.io.issued_inst := issue.io.issuedEntry

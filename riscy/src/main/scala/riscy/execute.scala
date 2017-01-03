@@ -68,6 +68,7 @@ class Execute extends Module {
     rob_writeback.io.input.entry(4+i).is_addr := io.lsq_input.entry(i).is_addr
     rob_writeback.io.input.entry(4+i).operand := io.lsq_input.entry(i).operand
     rob_writeback.io.input.entry(4+i).valid   := io.lsq_input.entry(i).valid
+    rob_writeback.io.input.entry(4+i).era     := io.lsq_input.entry(i).era
   }
 
   // Hookup the output of ROB writeback structure to the outside world
